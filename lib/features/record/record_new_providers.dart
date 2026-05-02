@@ -13,6 +13,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/repository/providers.dart';
 import '../../domain/entity/transaction_entry.dart';
+import '../budget/budget_providers.dart';
+import '../settings/settings_providers.dart';
+import '../stats/stats_range_providers.dart';
 import 'record_providers.dart';
 
 part 'record_new_providers.g.dart';
@@ -35,9 +38,11 @@ class RecordFormData {
     this.editingEntryId,
     this.isTransfer = false,
     this.attachmentPaths = const <String>[],
+    this.categoryParentKey,
   });
 
   final String selectedParentKey;
+  final String? categoryParentKey;
   final String expression;
   final double? amount;
   final String? categoryId;
@@ -74,6 +79,7 @@ class RecordFormData {
     String? Function()? editingEntryId,
     bool? isTransfer,
     List<String>? attachmentPaths,
+    String? Function()? categoryParentKey,
   }) {
     return RecordFormData(
       selectedParentKey: selectedParentKey ?? this.selectedParentKey,
@@ -88,12 +94,14 @@ class RecordFormData {
       editingEntryId: editingEntryId != null ? editingEntryId() : this.editingEntryId,
       isTransfer: isTransfer ?? this.isTransfer,
       attachmentPaths: attachmentPaths ?? this.attachmentPaths,
+      categoryParentKey: categoryParentKey != null ? categoryParentKey() : this.categoryParentKey,
     );
   }
 
   String get inferredType {
     if (isTransfer) return 'transfer';
-    return selectedParentKey == 'income' ? 'income' : 'expense';
+    final effectiveParent = categoryParentKey ?? selectedParentKey;
+    return effectiveParent == 'income' ? 'income' : 'expense';
   }
 }
 
@@ -131,6 +139,7 @@ class RecordForm extends _$RecordForm {
     state = state.copyWith(
       selectedParentKey: parentKey,
       categoryId: () => null,
+      categoryParentKey: () => null,
     );
   }
 
@@ -184,8 +193,28 @@ class RecordForm extends _$RecordForm {
     state = state.copyWith(currency: state.currency == 'CNY' ? 'USD' : 'CNY');
   }
 
-  void setCategory(String? id) =>
-      state = state.copyWith(categoryId: () => id);
+  /// Step 8.2：直接设置当前选中的币种 code。供币种下拉选择器调用。
+  void setCurrency(String code) {
+    state = state.copyWith(currency: code);
+  }
+
+  /// Step 8.2：把表单的 currency 字段填为当前账本的默认币种。
+  ///
+  /// 新建模式开页时调用一次（FAB → reset → initDefaultCurrency）。
+  /// `preloadFromEntry` 路径不调，编辑/复制使用 entry 自带的 currency。
+  /// 已设置非 'CNY' 时不再覆盖（避免 reset 后的中途覆写争用）。
+  Future<void> initDefaultCurrency() async {
+    if (state.currency != 'CNY') return;
+    final ledgerCurrency =
+        await ref.read(currentLedgerDefaultCurrencyProvider.future);
+    state = state.copyWith(currency: ledgerCurrency);
+  }
+
+  void setCategory(String? id, {String? parentKey}) =>
+      state = state.copyWith(
+        categoryId: () => id,
+        categoryParentKey: () => id != null ? parentKey : null,
+      );
 
   void setTransferMode(bool isTransfer) {
     state = state.copyWith(
@@ -288,6 +317,14 @@ class RecordForm extends _$RecordForm {
   }) async {
     final amount = entry.amount;
     final normalized = amount.toStringAsFixed(2).replaceFirst(RegExp(r'\.00$'), '');
+
+    String? categoryParentKey;
+    if (entry.categoryId != null) {
+      final catRepo = await ref.read(categoryRepositoryProvider.future);
+      final cats = await catRepo.listActiveAll();
+      categoryParentKey = cats.where((c) => c.id == entry.categoryId).firstOrNull?.parentKey;
+    }
+
     state = state.copyWith(
       selectedParentKey: parentKey,
       expression: normalized,
@@ -301,6 +338,7 @@ class RecordForm extends _$RecordForm {
       editingEntryId: () => asEdit ? entry.id : const Uuid().v4(),
       isTransfer: entry.type == 'transfer',
       attachmentPaths: _decodeAttachmentPaths(entry.attachmentsEncrypted),
+      categoryParentKey: () => categoryParentKey,
     );
     await initDefaultAccount();
   }
@@ -335,6 +373,13 @@ class RecordForm extends _$RecordForm {
 
     final txRepo = await ref.read(transactionRepositoryProvider.future);
     final ledgerId = await ref.read(currentLedgerIdProvider.future);
+    // Step 8.2：保存时计算"该币种 → 账本默认币种"的换算因子并连同 currency
+    // 一起持久化到 transaction_entry.fx_rate。同币种 → 1.0，简化统计聚合
+    // （`amount * fxRate` 始终是账本默认币种下的金额）。
+    final ledgerCurrency =
+        await ref.read(currentLedgerDefaultCurrencyProvider.future);
+    final rates = await ref.read(fxRatesProvider.future);
+    final fxRate = computeFxRate(d.currency, ledgerCurrency, rates);
 
     final tx = TransactionEntry(
       id: d.editingEntryId ?? const Uuid().v4(),
@@ -342,6 +387,7 @@ class RecordForm extends _$RecordForm {
       type: d.inferredType,
       amount: d.amount!,
       currency: d.currency,
+      fxRate: fxRate,
       categoryId: d.isTransfer ? null : d.categoryId,
       accountId: d.accountId,
       toAccountId: d.isTransfer ? d.toAccountId : null,
@@ -354,6 +400,11 @@ class RecordForm extends _$RecordForm {
 
     await txRepo.save(tx);
     ref.invalidate(recordMonthSummaryProvider);
+    ref.invalidate(statsLinePointsProvider);
+    ref.invalidate(statsPieSlicesProvider);
+    ref.invalidate(statsRankItemsProvider);
+    ref.invalidate(statsHeatmapCellsProvider);
+    ref.invalidate(budgetProgressForProvider);
 
     // 持久化本次使用的钱包
     if (d.accountId != null) {

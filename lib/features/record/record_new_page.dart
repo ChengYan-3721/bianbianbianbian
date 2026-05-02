@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/util/currencies.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
+import '../settings/settings_providers.dart';
 import 'record_new_providers.dart';
 import 'widgets/number_keyboard.dart';
 
@@ -60,6 +62,13 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
   void initState() {
     super.initState();
     _showKeyboard = widget.startAtKeyboard || widget.isTransfer;
+    // Step 8.2：进入新建/转账页时把币种字段设为账本默认币种（fire-and-forget）。
+    // 编辑/复制路径走 preloadFromEntry，已在 currency 字段填好原 entry 值，
+    // initDefaultCurrency 内部会因 currency != 'CNY' 提前 return，不会覆盖。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(recordFormProvider.notifier).initDefaultCurrency();
+    });
   }
 
   @override
@@ -67,6 +76,10 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
     final form = ref.watch(recordFormProvider);
     final notifier = ref.read(recordFormProvider.notifier);
     final effectiveShowKeyboard = widget.isTransfer ? true : _showKeyboard;
+    // Step 8.1：开关关闭时记账页币种字段隐藏（loading/error 期间默认按
+    // "关闭"显示，避免短暂闪现币种键的不一致体验）。
+    final showCurrencyKey =
+        ref.watch(multiCurrencyEnabledProvider).valueOrNull ?? false;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -105,12 +118,10 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                           parentKey: form.selectedParentKey,
                           selectedId: form.categoryId,
                           onParentChanged: notifier.setParentKey,
-                          onCategorySelected: (id) {
-                            notifier.setCategory(id);
-                            if (id != null) {
-                              notifier.initDefaultAccount(); // fire-and-forget，键盘立即弹出
-                              setState(() => _showKeyboard = true);
-                            }
+                          onCategorySelected: (id, pk) {
+                            notifier.setCategory(id, parentKey: pk);
+                            notifier.initDefaultAccount(); // fire-and-forget，键盘立即弹出
+                            setState(() => _showKeyboard = true);
                           },
                         ),
                       ),
@@ -125,7 +136,19 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
               onKeyTap: notifier.onKeyTap,
               currencyLabel: form.currency,
               showEquals: notifier.hasOperator,
-              onCurrencyTap: notifier.toggleCurrency,
+              onCurrencyTap: () async {
+                // Step 8.2：CNY 键改为打开 11 内置币种下拉。
+                final picked = await showModalBottomSheet<String>(
+                  context: context,
+                  builder: (sheetContext) => _CurrencyPicker(
+                    selectedCode: form.currency,
+                  ),
+                );
+                if (picked != null && picked != form.currency) {
+                  notifier.setCurrency(picked);
+                }
+              },
+              showCurrencyKey: showCurrencyKey,
               onActionTap: () async {
                 if (notifier.hasOperator) {
                   if (!notifier.canAction) return;
@@ -180,7 +203,7 @@ class _CategoryStage extends StatelessWidget {
   final String parentKey;
   final String? selectedId;
   final ValueChanged<String> onParentChanged;
-  final ValueChanged<String?> onCategorySelected;
+  final void Function(String id, String parentKey) onCategorySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +223,7 @@ class _CategoryStage extends StatelessWidget {
             child: _CategoryGrid(
               parentKey: parentKey,
               selectedId: selectedId,
-              onSelected: onCategorySelected,
+              onSelected: (id, pk) => onCategorySelected(id, pk),
             ),
           ),
         ],
@@ -335,7 +358,13 @@ class _AmountDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final symbol = form.currency == 'CNY' ? '¥' : '\$';
+    // Step 8.2：根据 form.currency 在 kBuiltInCurrencies 中查找符号，避免硬
+    // 编码 ¥/$；非内置币种回退到列表第一项（CNY）。
+    final currency = kBuiltInCurrencies.firstWhere(
+      (c) => c.code == form.currency,
+      orElse: () => kBuiltInCurrencies.first,
+    );
+    final symbol = currency.symbol;
     final amountText = form.expression.isNotEmpty
         ? form.expression
         : (form.amount ?? 0).toStringAsFixed(2);
@@ -378,7 +407,7 @@ class _CategoryGrid extends ConsumerWidget {
 
   final String parentKey;
   final String? selectedId;
-  final ValueChanged<String?> onSelected;
+  final void Function(String id, String parentKey) onSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -452,7 +481,7 @@ class _CategoryGrid extends ConsumerWidget {
             final selected = selectedId == cat.id;
             return InkWell(
               borderRadius: BorderRadius.circular(10),
-              onTap: () => onSelected(cat.id),
+              onTap: () => onSelected(cat.id, cat.parentKey),
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
@@ -1042,6 +1071,81 @@ class _NotePillButton extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Step 8.2：币种选择器底部抽屉。
+///
+/// 罗列 [kBuiltInCurrencies] 11 种内置币种；当前选中项尾部带 ✓。点击某行
+/// `Navigator.pop(context, code)` 把 ISO 码回传给调用方。
+class _CurrencyPicker extends StatelessWidget {
+  const _CurrencyPicker({required this.selectedCode});
+
+  final String selectedCode;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(top: 6, bottom: 8),
+              decoration: BoxDecoration(
+                color: colors.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '选择币种',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: kBuiltInCurrencies.length,
+                itemBuilder: (context, index) {
+                  final c = kBuiltInCurrencies[index];
+                  final selected = c.code == selectedCode;
+                  return ListTile(
+                    key: Key('currency_picker_${c.code}'),
+                    leading: SizedBox(
+                      width: 68,
+                      child: Text(
+                        c.symbol,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    title: Text('${c.code}  ·  ${c.name}'),
+                    trailing: selected
+                        ? Icon(Icons.check, color: colors.primary)
+                        : null,
+                    onTap: () => Navigator.pop(context, c.code),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

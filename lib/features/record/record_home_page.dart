@@ -8,20 +8,56 @@ import 'record_new_page.dart';
 import 'record_new_providers.dart';
 import 'record_providers.dart';
 
+import '../../core/util/currencies.dart';
 import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/providers.dart'
     show
-        accountRepositoryProvider,
         categoryRepositoryProvider,
         currentLedgerIdProvider,
         ledgerRepositoryProvider,
         transactionRepositoryProvider;
+import '../account/account_providers.dart';
+import '../ledger/ledger_list_page.dart';
+import '../ledger/ledger_providers.dart';
+import '../budget/budget_providers.dart';
+import '../settings/settings_providers.dart';
+import '../stats/stats_range_providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/ledger.dart';
 import '../../domain/entity/transaction_entry.dart';
 
 final _fmt = NumberFormat('#,##0.00');
+
+/// Step 8.2：在 [kBuiltInCurrencies] 中按 code 查 symbol，未命中回退 CNY 的 ¥。
+String _symbolFor(String code) {
+  for (final c in kBuiltInCurrencies) {
+    if (c.code == code) return c.symbol;
+  }
+  return '¥';
+}
+
+/// Step 8.2：流水详情/列表展示金额的字符串。
+///
+/// - 同币种：`±¥10.00`（直接用 tx.currency 的符号）。
+/// - 跨币种：`±USD 10.00（≈ ¥72.00）`——前段是原始币种 + 金额，括号内是
+///   按 `tx.fxRate` 折算到账本默认币种的近似值。`fxRate` 在保存时已经把
+///   "原币 → 账本默认币种"换算因子算好（[computeFxRate]），所以这里直接
+///   `amount * fxRate` 即可，无需再读 fx_rate 表。
+///
+/// 转账（type == 'transfer'）不带正负号；income +、expense -。
+@visibleForTesting
+String formatTxAmountForDetail(TransactionEntry tx, String ledgerCurrency) {
+  final isExpense = tx.type == 'expense';
+  final isTransfer = tx.type == 'transfer';
+  final sign = isTransfer ? '' : (isExpense ? '-' : '+');
+  final amount = _fmt.format(tx.amount);
+  if (tx.currency == ledgerCurrency) {
+    return '$sign${_symbolFor(tx.currency)}$amount';
+  }
+  final converted = _fmt.format(tx.amount * tx.fxRate);
+  return '$sign${tx.currency} $amount（≈ ${_symbolFor(ledgerCurrency)}$converted）';
+}
 
 /// 记账首页骨架（Phase 3 Step 3.1）。
 ///
@@ -103,6 +139,7 @@ class _TopBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final id = currentId;
     final r = repo;
+    final ledgersAsync = ref.watch(ledgerGroupsProvider);
     if (id == null || r == null) {
       return const SizedBox(height: 48);
     }
@@ -116,15 +153,56 @@ class _TopBar extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: 6),
-              Text(
-                name,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+              PopupMenuButton<Ledger>(
+                tooltip: '切换账本',
+                position: PopupMenuPosition.under,
+                offset: const Offset(0, 6),
+                onSelected: (selected) async {
+                  if (selected.id == id) return;
+                  await ref.read(currentLedgerIdProvider.notifier).switchTo(selected.id);
+                  ref.invalidate(recordMonthSummaryProvider);
+                  ref.invalidate(ledgerTxCountsProvider);
+                  ref.invalidate(statsLinePointsProvider);
+                  ref.invalidate(statsPieSlicesProvider);
+                  ref.invalidate(statsRankItemsProvider);
+                  ref.invalidate(statsHeatmapCellsProvider);
+                  ref.invalidate(activeBudgetsProvider);
+                  ref.invalidate(budgetProgressForProvider);
+                },
+                itemBuilder: (_) {
+                  final active = ledgersAsync.valueOrNull?.active ?? const <Ledger>[];
+                  return [
+                    for (final l in active)
+                      PopupMenuItem<Ledger>(
+                        value: l,
+                        child: Row(
+                          children: [
+                            Text(l.coverEmoji ?? '📒', style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(l.name)),
+                            if (l.id == id) const Icon(Icons.check_circle, size: 18),
+                          ],
+                        ),
+                      ),
+                  ];
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(emoji, style: const TextStyle(fontSize: 22)),
+                      const SizedBox(width: 6),
+                      Text(
+                        name,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const Icon(Icons.arrow_drop_down, size: 20),
+                    ],
+                  ),
+                ),
               ),
-              const Icon(Icons.arrow_drop_down, size: 20),
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.swap_horiz, size: 22),
@@ -163,6 +241,7 @@ class _TopBar extends ConsumerWidget {
       },
     );
   }
+
 }
 
 // ---- 月份切换条 ----
@@ -208,23 +287,43 @@ class _MonthBar extends StatelessWidget {
 
 // ---- 数据卡片 ----
 
-class _DataCards extends StatelessWidget {
+class _DataCards extends ConsumerWidget {
   const _DataCards({required this.summary});
 
   final AsyncValue<RecordMonthSummary> summary;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final data = summary.valueOrNull;
+    // Step 8.2：卡片汇总以账本默认币种为单位（recordMonthSummary 已按 fxRate
+    // 折算）；这里只取 symbol 与之保持一致。
+    final ledgerCurrency =
+        ref.watch(currentLedgerDefaultCurrencyProvider).valueOrNull ?? 'CNY';
+    final symbol = _symbolFor(ledgerCurrency);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          _CardChip(label: '收入', amount: data?.income, colorKey: 'income'),
+          _CardChip(
+            label: '收入',
+            amount: data?.income,
+            colorKey: 'income',
+            symbol: symbol,
+          ),
           const SizedBox(height: 6),
-          _CardChip(label: '支出', amount: data?.expense, colorKey: 'expense'),
+          _CardChip(
+            label: '支出',
+            amount: data?.expense,
+            colorKey: 'expense',
+            symbol: symbol,
+          ),
           const SizedBox(height: 6),
-          _CardChip(label: '结余', amount: data?.balance, colorKey: 'balance'),
+          _CardChip(
+            label: '结余',
+            amount: data?.balance,
+            colorKey: 'balance',
+            symbol: symbol,
+          ),
         ],
       ),
     );
@@ -232,11 +331,17 @@ class _DataCards extends StatelessWidget {
 }
 
 class _CardChip extends StatelessWidget {
-  const _CardChip({required this.label, this.amount, required this.colorKey});
+  const _CardChip({
+    required this.label,
+    this.amount,
+    required this.colorKey,
+    this.symbol = '¥',
+  });
 
   final String label;
   final double? amount;
   final String colorKey;
+  final String symbol;
 
   @override
   Widget build(BuildContext context) {
@@ -255,8 +360,8 @@ class _CardChip extends StatelessWidget {
     }
 
     final display = amount != null
-        ? '¥${_fmt.format(amount!)}'
-        : '¥--.--';
+        ? '$symbol${_fmt.format(amount!)}'
+        : '$symbol--.--';
 
     return Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -341,10 +446,18 @@ class _QuickInputBar extends StatelessWidget {
 
 // ---- 流水列表 ----
 
-class _TransactionList extends StatelessWidget {
+class _TransactionList extends ConsumerStatefulWidget {
   const _TransactionList({required this.summary});
 
   final AsyncValue<RecordMonthSummary> summary;
+
+  @override
+  ConsumerState<_TransactionList> createState() => _TransactionListState();
+}
+
+class _TransactionListState extends ConsumerState<_TransactionList> {
+  final ScrollController _scrollController = ScrollController();
+  final Map<DateTime, GlobalKey> _dayKeys = {};
 
   String _dayLabel(DateTime date) {
     final weekdays = RecordHomePage._weekdays;
@@ -353,7 +466,39 @@ class _TransactionList extends StatelessWidget {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _consumeScrollTarget(List<DailyTransactions> groups) {
+    final target = ref.read(recordScrollTargetProvider);
+    if (target == null) return;
+    final normalizedTarget =
+        DateTime(target.year, target.month, target.day);
+    if (!groups.any((g) => g.date == normalizedTarget)) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final key = _dayKeys[normalizedTarget];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+          alignment: 0.05,
+        );
+      }
+      // 一次性消费，避免下次重建被误触发
+      ref.read(recordScrollTargetProvider.notifier).state = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final summary = widget.summary;
+
     return summary.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('加载失败：$e')),
@@ -378,31 +523,45 @@ class _TransactionList extends StatelessWidget {
           );
         }
 
-        return ListView.builder(
-          itemCount: data.dailyGroups.length,
+        // 重建当月所有日期的 key 映射，并尝试消费一次性滚动目标
+        _dayKeys.clear();
+        for (final g in data.dailyGroups) {
+          _dayKeys[g.date] = GlobalKey(debugLabel: 'tx_day_${g.date}');
+        }
+        _consumeScrollTarget(data.dailyGroups);
+
+        return SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemBuilder: (context, groupIndex) {
-            final group = data.dailyGroups[groupIndex];
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 4),
-                  child: Text(
-                    _dayLabel(group.date),
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final group in data.dailyGroups)
+                Container(
+                  key: _dayKeys[group.date],
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 4),
+                        child: Text(
+                          _dayLabel(group.date),
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+                              ),
                         ),
+                      ),
+                      for (final tx in group.transactions)
+                        _TxTile(
+                          key: ValueKey('tx_tile_${tx.id}'),
+                          tx: tx,
+                        ),
+                    ],
                   ),
                 ),
-                for (final tx in group.transactions)
-                  _TxTile(
-                    key: ValueKey('tx_tile_${tx.id}'),
-                    tx: tx,
-                  ),
-              ],
-            );
-          },
+            ],
+          ),
         );
       },
     );
@@ -440,7 +599,13 @@ class _TxTileState extends ConsumerState<_TxTile> {
         ? const Color(0xFF6C8CC8)
         : (isExpense ? const Color(0xFFE76F51) : const Color(0xFFA8D8B9));
     final repo = ref.watch(categoryRepositoryProvider).valueOrNull;
-    final accountRepo = ref.watch(accountRepositoryProvider).valueOrNull;
+    // Step 7.2 修复：watch `accountsListProvider`（而非 `accountRepositoryProvider`
+    // + FutureBuilder）。后者拿到的是仓库实例本身，删除账户后实例不变 → tile
+    // 不会 rebuild → 显示陈旧的账户名。前者在 `_confirmDelete` / `_save` 后已
+    // 被 invalidate → 触发整族 watcher 重建 → 流水副标题与详情底部页立即拿到
+    // 最新账户列表，软删账户立即显示"（已删账户）"。
+    final accounts =
+        ref.watch(accountsListProvider).valueOrNull ?? const <Account>[];
 
     return FutureBuilder<List<Category>>(
       future: repo?.listActiveAll(),
@@ -464,23 +629,22 @@ class _TxTileState extends ConsumerState<_TxTile> {
         final nameText = isTransfer ? '转账' : (matched?.name ?? '未分类');
         final parentKey = _inferParentKey(matched, tx);
 
-        return FutureBuilder<List<Account>>(
-          future: accountRepo?.listActive(),
-          builder: (context, accountSnap) {
-            final accounts = accountSnap.data ?? const <Account>[];
-            String accountName(String? id) {
-              if (id == null) return '账户';
-              for (final a in accounts) {
-                if (a.id == id) return a.name;
-              }
-              return '账户';
-            }
+        String accountName(String? id) {
+          if (id == null || id.isEmpty) return '账户';
+          for (final a in accounts) {
+            if (a.id == id) return a.name;
+          }
+          // Step 7.2：账户已被软删（不在 listActive 结果里），但流水的
+          // accountId 仍指向它——展示"（已删账户）"占位，避免 UI 误把
+          // 缺失账户当作"未填写"。
+          return '（已删账户）';
+        }
 
-            final transferSubTitle = isTransfer
-                ? '${accountName(tx.accountId)} → ${accountName(tx.toAccountId)}'
-                : null;
+        final transferSubTitle = isTransfer
+            ? '${accountName(tx.accountId)} → ${accountName(tx.toAccountId)}'
+            : null;
 
-            return Dismissible(
+        return Dismissible(
               key: Key('tx_${tx.id}'),
               direction: DismissDirection.endToStart,
               confirmDismiss: (_) async {
@@ -493,6 +657,11 @@ class _TxTileState extends ConsumerState<_TxTile> {
                 final txRepo = await ref.read(transactionRepositoryProvider.future);
                 await txRepo.softDeleteById(tx.id);
                 ref.invalidate(recordMonthSummaryProvider);
+                ref.invalidate(statsLinePointsProvider);
+                ref.invalidate(statsPieSlicesProvider);
+                ref.invalidate(statsRankItemsProvider);
+                ref.invalidate(statsHeatmapCellsProvider);
+                ref.invalidate(budgetProgressForProvider);
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('已删除')),
@@ -554,6 +723,11 @@ class _TxTileState extends ConsumerState<_TxTile> {
                       );
                       if (!context.mounted) return;
                       ref.invalidate(recordMonthSummaryProvider);
+                      ref.invalidate(statsLinePointsProvider);
+                      ref.invalidate(statsPieSlicesProvider);
+                      ref.invalidate(statsRankItemsProvider);
+                      ref.invalidate(statsHeatmapCellsProvider);
+                      ref.invalidate(budgetProgressForProvider);
                       break;
                     case _DetailAction.copy:
                       await ref.read(recordFormProvider.notifier).preloadFromEntry(
@@ -583,6 +757,11 @@ class _TxTileState extends ConsumerState<_TxTile> {
                       );
                       if (!context.mounted) return;
                       ref.invalidate(recordMonthSummaryProvider);
+                      ref.invalidate(statsLinePointsProvider);
+                      ref.invalidate(statsPieSlicesProvider);
+                      ref.invalidate(statsRankItemsProvider);
+                      ref.invalidate(statsHeatmapCellsProvider);
+                      ref.invalidate(budgetProgressForProvider);
                       break;
                     case _DetailAction.delete:
                       final ok = await _confirmDelete(context);
@@ -591,6 +770,11 @@ class _TxTileState extends ConsumerState<_TxTile> {
                       await txRepo.softDeleteById(tx.id);
                       if (!context.mounted) return;
                       ref.invalidate(recordMonthSummaryProvider);
+                      ref.invalidate(statsLinePointsProvider);
+                      ref.invalidate(statsPieSlicesProvider);
+                      ref.invalidate(statsRankItemsProvider);
+                      ref.invalidate(statsHeatmapCellsProvider);
+                      ref.invalidate(budgetProgressForProvider);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('已删除')),
                       );
@@ -637,7 +821,7 @@ class _TxTileState extends ConsumerState<_TxTile> {
                         ),
                       ),
                       Text(
-                        '$sign¥${_fmt.format(tx.amount)}',
+                        '$sign${_symbolFor(tx.currency)}${_fmt.format(tx.amount)}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: amountColor,
@@ -648,8 +832,6 @@ class _TxTileState extends ConsumerState<_TxTile> {
                 ),
               ),
             );
-          },
-        );
       },
     );
   }
@@ -687,7 +869,7 @@ class _TxTileState extends ConsumerState<_TxTile> {
 
 enum _DetailAction { edit, copy, delete }
 
-class _RecordDetailSheet extends StatelessWidget {
+class _RecordDetailSheet extends ConsumerWidget {
   const _RecordDetailSheet({
     required this.tx,
     this.category,
@@ -721,8 +903,16 @@ class _RecordDetailSheet extends StatelessWidget {
     }
   }
 
+  /// Step 8.2：金额展示。
+  ///
+  /// 同币种 → `±¥10.00`；跨币种 → `±USD 10.00（≈ ¥72.00）`。`fxRate` 是
+  /// 该流水保存时算出的"原币 → 账本默认币种"换算因子，所以
+  /// `amount * fxRate` 即折合金额，无需读 fx_rate 表。
+  String _amountText(String ledgerCurrency) =>
+      formatTxAmountForDetail(tx, ledgerCurrency);
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final c = category;
     final icon = tx.type == 'transfer'
         ? '🔁'
@@ -732,6 +922,14 @@ class _RecordDetailSheet extends StatelessWidget {
     final date =
         '${tx.occurredAt.year}-${tx.occurredAt.month.toString().padLeft(2, '0')}-${tx.occurredAt.day.toString().padLeft(2, '0')} '
         '${tx.occurredAt.hour.toString().padLeft(2, '0')}:${tx.occurredAt.minute.toString().padLeft(2, '0')}';
+    final ledgerCurrency =
+        ref.watch(currentLedgerDefaultCurrencyProvider).valueOrNull ?? 'CNY';
+    final amountText = _amountText(ledgerCurrency);
+    final amountColor = tx.type == 'expense'
+        ? const Color(0xFFE76F51)
+        : tx.type == 'income'
+            ? const Color(0xFFA8D8B9)
+            : const Color(0xFF6C8CC8);
 
     return SafeArea(
       top: false,
@@ -753,12 +951,11 @@ class _RecordDetailSheet extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${tx.type == 'expense' ? '-' : '+'}¥${_fmt.format(tx.amount)}',
+                  amountText,
+                  key: const Key('detail_amount'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: tx.type == 'expense'
-                            ? const Color(0xFFE76F51)
-                            : const Color(0xFFA8D8B9),
+                        color: amountColor,
                       ),
                 ),
               ],

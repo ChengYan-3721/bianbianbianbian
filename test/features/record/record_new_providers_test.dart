@@ -4,11 +4,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:bianbianbianbian/data/repository/ledger_repository.dart';
 import 'package:bianbianbianbian/data/repository/providers.dart'
-    show CurrentLedgerId, currentLedgerIdProvider, transactionRepositoryProvider;
+    show
+        CurrentLedgerId,
+        currentLedgerIdProvider,
+        ledgerRepositoryProvider,
+        transactionRepositoryProvider;
 import 'package:bianbianbianbian/data/repository/transaction_repository.dart';
+import 'package:bianbianbianbian/domain/entity/ledger.dart';
 import 'package:bianbianbianbian/domain/entity/transaction_entry.dart';
 import 'package:bianbianbianbian/features/record/record_new_providers.dart';
+import 'package:bianbianbianbian/features/settings/settings_providers.dart';
 
 /// 假 TransactionRepository —— save 返回收到的实体，softDeleteById 静默成功。
 class _FakeTransactionRepository implements TransactionRepository {
@@ -37,15 +44,58 @@ class _TestCurrentLedgerId extends CurrentLedgerId {
   Future<String> build() async => _id;
 }
 
+class _FakeLedgerRepository implements LedgerRepository {
+  _FakeLedgerRepository({required this.ledger});
+  final Ledger ledger;
+
+  @override
+  Future<Ledger?> getById(String id) async => ledger;
+
+  @override
+  Future<List<Ledger>> listActive() async => [ledger];
+
+  @override
+  Future<Ledger> save(Ledger entity) => fail('unexpected save');
+
+  @override
+  Future<void> softDeleteById(String id) => fail('unexpected delete');
+
+  @override
+  Future<Ledger> setArchived(String id, bool archived) =>
+      fail('unexpected archive');
+}
+
+Ledger _testLedger({String defaultCurrency = 'CNY'}) => Ledger(
+      id: 'test-ledger',
+      name: '测试账本',
+      defaultCurrency: defaultCurrency,
+      createdAt: DateTime(2026, 4),
+      updatedAt: DateTime(2026, 4),
+      deviceId: 'dev',
+    );
+
 void main() {
   ProviderContainer makeContainer({
     TransactionRepository? txRepo,
     String ledgerId = 'test-ledger',
+    String ledgerCurrency = 'CNY',
+    Map<String, double>? fxRates,
   }) {
     final repo = txRepo ?? _FakeTransactionRepository();
+    final ledger = _testLedger(defaultCurrency: ledgerCurrency);
     return ProviderContainer(overrides: [
       currentLedgerIdProvider.overrideWith(() => _TestCurrentLedgerId(ledgerId)),
       transactionRepositoryProvider.overrideWith((ref) async => repo),
+      ledgerRepositoryProvider.overrideWith(
+        (ref) async => _FakeLedgerRepository(ledger: ledger),
+      ),
+      currentLedgerDefaultCurrencyProvider.overrideWith(
+        (ref) async => ledgerCurrency,
+      ),
+      fxRatesProvider.overrideWith(
+        (ref) async =>
+            fxRates ?? const {'CNY': 1.0, 'USD': 7.2, 'EUR': 7.85},
+      ),
     ]);
   }
 
@@ -366,6 +416,13 @@ void main() {
       container.updateOverrides([
         currentLedgerIdProvider.overrideWith(() => _TestCurrentLedgerId('test-ledger')),
         transactionRepositoryProvider.overrideWith((ref) async => repo),
+        ledgerRepositoryProvider.overrideWith(
+          (ref) async => _FakeLedgerRepository(ledger: _testLedger()),
+        ),
+        currentLedgerDefaultCurrencyProvider.overrideWith((ref) async => 'CNY'),
+        fxRatesProvider.overrideWith(
+          (ref) async => const {'CNY': 1.0, 'USD': 7.2},
+        ),
       ]);
       container.read(recordFormProvider.notifier).state = injected;
 
@@ -376,6 +433,119 @@ void main() {
       expect(bytes, isNotNull);
       final decoded = jsonDecode(utf8.decode(bytes!)) as List<dynamic>;
       expect(decoded, ['/a/1.jpg', '/a/2.jpg']);
+    });
+  });
+
+  // ---- Step 8.2：币种选择 + fxRate 写入 ----
+
+  group('Step 8.2 币种与汇率', () {
+    test('setCurrency 直接写入 form.currency', () {
+      final container = makeContainer();
+      final notifier = container.read(recordFormProvider.notifier);
+
+      notifier.setCurrency('USD');
+      expect(container.read(recordFormProvider).currency, 'USD');
+
+      notifier.setCurrency('EUR');
+      expect(container.read(recordFormProvider).currency, 'EUR');
+    });
+
+    test('initDefaultCurrency 把 form.currency 设为账本默认币种', () async {
+      final container = makeContainer(ledgerCurrency: 'USD');
+      final notifier = container.read(recordFormProvider.notifier);
+
+      // 初值是 'CNY'（RecordFormData 默认）
+      expect(container.read(recordFormProvider).currency, 'CNY');
+
+      await notifier.initDefaultCurrency();
+      expect(container.read(recordFormProvider).currency, 'USD');
+    });
+
+    test('initDefaultCurrency 在已选非 CNY 时不覆盖（避免覆盖用户选择）', () async {
+      final container = makeContainer(ledgerCurrency: 'CNY');
+      final notifier = container.read(recordFormProvider.notifier);
+
+      notifier.setCurrency('JPY');
+      expect(container.read(recordFormProvider).currency, 'JPY');
+
+      await notifier.initDefaultCurrency();
+      // 已是非 CNY，跳过
+      expect(container.read(recordFormProvider).currency, 'JPY');
+    });
+
+    test('save 时写入 currency = "USD" 且 fxRate = 7.2（账本默认 CNY）', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final repo = _FakeTransactionRepository();
+      final container = makeContainer(
+        txRepo: repo,
+        ledgerCurrency: 'CNY',
+        fxRates: const {'CNY': 1.0, 'USD': 7.2, 'EUR': 7.85},
+      );
+      final notifier = container.read(recordFormProvider.notifier);
+
+      notifier.setCategory('cat-food');
+      notifier.setCurrency('USD');
+      notifier.onKeyTap('1');
+      notifier.onKeyTap('0');
+
+      final ok = await notifier.save();
+      expect(ok, isTrue);
+      expect(repo.lastSaved, isNotNull);
+      expect(repo.lastSaved!.amount, 10);
+      expect(repo.lastSaved!.currency, 'USD');
+      expect(repo.lastSaved!.fxRate, closeTo(7.2, 1e-9));
+      // 折合金额 = 10 * 7.2 = 72 CNY
+      expect(
+        repo.lastSaved!.amount * repo.lastSaved!.fxRate,
+        closeTo(72.0, 1e-9),
+      );
+    });
+
+    test('save 时同币种 fxRate = 1.0', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final repo = _FakeTransactionRepository();
+      final container = makeContainer(
+        txRepo: repo,
+        ledgerCurrency: 'CNY',
+      );
+      final notifier = container.read(recordFormProvider.notifier);
+
+      notifier.setCategory('cat-food');
+      // currency 默认 'CNY' = 账本默认
+      notifier.onKeyTap('5');
+      notifier.onKeyTap('0');
+
+      final ok = await notifier.save();
+      expect(ok, isTrue);
+      expect(repo.lastSaved!.currency, 'CNY');
+      expect(repo.lastSaved!.fxRate, 1.0);
+    });
+
+    test('save 时跨币种到 USD 账本：CNY 50 → fxRate ≈ 1/7.2、折合 ≈ USD 6.94', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final repo = _FakeTransactionRepository();
+      final container = makeContainer(
+        txRepo: repo,
+        ledgerCurrency: 'USD',
+      );
+      final notifier = container.read(recordFormProvider.notifier);
+
+      notifier.setCategory('cat-food');
+      notifier.setCurrency('CNY');
+      notifier.onKeyTap('5');
+      notifier.onKeyTap('0');
+
+      final ok = await notifier.save();
+      expect(ok, isTrue);
+      expect(repo.lastSaved!.currency, 'CNY');
+      expect(repo.lastSaved!.fxRate, closeTo(1 / 7.2, 1e-9));
+      expect(
+        repo.lastSaved!.amount * repo.lastSaved!.fxRate,
+        closeTo(50 / 7.2, 1e-9),
+      );
     });
   });
 }

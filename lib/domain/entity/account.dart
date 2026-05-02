@@ -10,6 +10,10 @@
 /// - `currency`：drift 层 `String?`（默认 `'CNY'`）；实体层非空默认 `'CNY'`。
 ///
 /// 账户不绑定账本——是全局资源（[ledgerId] 字段不存在）。
+///
+/// Step 7.3：信用卡专属字段 `billingDay` / `repaymentDay` 仅展示用，
+/// 取值约束 1-28（在 UI 层校验）。非信用卡账户两字段为 null；信用卡账户也允许
+/// 暂时不填（保持 null）。
 class Account {
   const Account({
     required this.id,
@@ -20,6 +24,8 @@ class Account {
     this.initialBalance = 0.0,
     this.includeInTotal = true,
     this.currency = 'CNY',
+    this.billingDay,
+    this.repaymentDay,
     required this.updatedAt,
     this.deletedAt,
     required this.deviceId,
@@ -33,6 +39,8 @@ class Account {
   final double initialBalance;
   final bool includeInTotal;
   final String currency;
+  final int? billingDay;
+  final int? repaymentDay;
   final DateTime updatedAt;
   final DateTime? deletedAt;
   final String deviceId;
@@ -46,6 +54,8 @@ class Account {
     double? initialBalance,
     bool? includeInTotal,
     String? currency,
+    int? billingDay,
+    int? repaymentDay,
     DateTime? updatedAt,
     DateTime? deletedAt,
     String? deviceId,
@@ -59,6 +69,8 @@ class Account {
       initialBalance: initialBalance ?? this.initialBalance,
       includeInTotal: includeInTotal ?? this.includeInTotal,
       currency: currency ?? this.currency,
+      billingDay: billingDay ?? this.billingDay,
+      repaymentDay: repaymentDay ?? this.repaymentDay,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       deviceId: deviceId ?? this.deviceId,
@@ -74,6 +86,8 @@ class Account {
         'initial_balance': initialBalance,
         'include_in_total': includeInTotal,
         'currency': currency,
+        'billing_day': billingDay,
+        'repayment_day': repaymentDay,
         'updated_at': updatedAt.toIso8601String(),
         'deleted_at': deletedAt?.toIso8601String(),
         'device_id': deviceId,
@@ -89,6 +103,8 @@ class Account {
             (json['initial_balance'] as num?)?.toDouble() ?? 0.0,
         includeInTotal: (json['include_in_total'] as bool?) ?? true,
         currency: (json['currency'] as String?) ?? 'CNY',
+        billingDay: (json['billing_day'] as num?)?.toInt(),
+        repaymentDay: (json['repayment_day'] as num?)?.toInt(),
         updatedAt: DateTime.parse(json['updated_at'] as String),
         deletedAt: json['deleted_at'] == null
             ? null
@@ -108,6 +124,8 @@ class Account {
         other.initialBalance == initialBalance &&
         other.includeInTotal == includeInTotal &&
         other.currency == currency &&
+        other.billingDay == billingDay &&
+        other.repaymentDay == repaymentDay &&
         other.updatedAt == updatedAt &&
         other.deletedAt == deletedAt &&
         other.deviceId == deviceId;
@@ -123,6 +141,8 @@ class Account {
         initialBalance,
         includeInTotal,
         currency,
+        billingDay,
+        repaymentDay,
         updatedAt,
         deletedAt,
         deviceId,
@@ -132,5 +152,6 @@ class Account {
   String toString() => 'Account(id: $id, name: $name, type: $type, '
       'initialBalance: $initialBalance, includeInTotal: $includeInTotal, '
       'currency: $currency, icon: $icon, color: $color, '
+      'billingDay: $billingDay, repaymentDay: $repaymentDay, '
       'updatedAt: $updatedAt, deletedAt: $deletedAt, deviceId: $deviceId)';
 }

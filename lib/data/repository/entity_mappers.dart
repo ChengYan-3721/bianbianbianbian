@@ -96,6 +96,8 @@ Account rowToAccount(AccountEntry row) {
     initialBalance: row.initialBalance ?? 0.0,
     includeInTotal: (row.includeInTotal ?? 1) != 0,
     currency: row.currency ?? 'CNY',
+    billingDay: row.billingDay,
+    repaymentDay: row.repaymentDay,
     updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAt),
     deletedAt: row.deletedAt == null
         ? null
@@ -114,6 +116,8 @@ AccountTableCompanion accountToCompanion(Account entity) {
     initialBalance: Value(entity.initialBalance),
     includeInTotal: Value(entity.includeInTotal ? 1 : 0),
     currency: Value(entity.currency),
+    billingDay: Value(entity.billingDay),
+    repaymentDay: Value(entity.repaymentDay),
     updatedAt: Value(entity.updatedAt.millisecondsSinceEpoch),
     deletedAt: Value(entity.deletedAt?.millisecondsSinceEpoch),
     deviceId: Value(entity.deviceId),
@@ -180,6 +184,10 @@ Budget rowToBudget(BudgetEntry row) {
     categoryId: row.categoryId,
     amount: row.amount,
     carryOver: (row.carryOver ?? 0) != 0,
+    carryBalance: row.carryBalance,
+    lastSettledAt: row.lastSettledAt == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(row.lastSettledAt!),
     startDate: DateTime.fromMillisecondsSinceEpoch(row.startDate),
     updatedAt: DateTime.fromMillisecondsSinceEpoch(row.updatedAt),
     deletedAt: row.deletedAt == null
@@ -197,6 +205,8 @@ BudgetTableCompanion budgetToCompanion(Budget entity) {
     categoryId: Value(entity.categoryId),
     amount: Value(entity.amount),
     carryOver: Value(entity.carryOver ? 1 : 0),
+    carryBalance: Value(entity.carryBalance),
+    lastSettledAt: Value(entity.lastSettledAt?.millisecondsSinceEpoch),
     startDate: Value(entity.startDate.millisecondsSinceEpoch),
     updatedAt: Value(entity.updatedAt.millisecondsSinceEpoch),
     deletedAt: Value(entity.deletedAt?.millisecondsSinceEpoch),

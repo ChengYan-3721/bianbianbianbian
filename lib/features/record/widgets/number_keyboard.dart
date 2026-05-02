@@ -10,6 +10,9 @@ import 'package:flutter/material.dart';
 /// CNY   0    .    ✓/=
 /// ```
 /// 每个按键通过 `onKeyTap(String key)` 回调通知父组件。
+///
+/// Step 8.1：当 [showCurrencyKey] 为 false（多币种全局开关关闭）时，
+/// 左下角币种位渲染为空白占位（保持 4×4 布局），不显示币种文字、不响应点击。
 class NumberKeyboard extends StatelessWidget {
   const NumberKeyboard({
     super.key,
@@ -19,6 +22,7 @@ class NumberKeyboard extends StatelessWidget {
     this.onActionTap,
     this.canAction = false,
     this.onCurrencyTap,
+    this.showCurrencyKey = true,
   });
 
   final ValueChanged<String> onKeyTap;
@@ -27,6 +31,7 @@ class NumberKeyboard extends StatelessWidget {
   final VoidCallback? onActionTap;
   final bool canAction;
   final VoidCallback? onCurrencyTap;
+  final bool showCurrencyKey;
 
   static const _rows = [
     ['7', '8', '9', '⌫'],
@@ -47,27 +52,29 @@ class NumberKeyboard extends StatelessWidget {
               children: [
                 for (final key in row)
                   Expanded(
-                    child: _KeyButton(
-                      label: key == 'CURRENCY'
-                          ? currencyLabel
-                          : key == 'ACTION'
-                              ? (showEquals ? '=' : '✓')
-                              : key,
-                      onTap: () {
-                        if (key == 'CURRENCY') {
-                          (onCurrencyTap ?? () {})();
-                          return;
-                        }
-                        if (key == 'ACTION') {
-                          (onActionTap ?? () {})();
-                          return;
-                        }
-                        onKeyTap(key);
-                      },
-                      highlight: key == 'ACTION',
-                      enabled: key == 'ACTION' ? canAction : true,
-                      colors: colors,
-                    ),
+                    child: key == 'CURRENCY' && !showCurrencyKey
+                        ? const SizedBox(height: 65)
+                        : _KeyButton(
+                            label: key == 'CURRENCY'
+                                ? currencyLabel
+                                : key == 'ACTION'
+                                    ? (showEquals ? '=' : '✓')
+                                    : key,
+                            onTap: () {
+                              if (key == 'CURRENCY') {
+                                (onCurrencyTap ?? () {})();
+                                return;
+                              }
+                              if (key == 'ACTION') {
+                                (onActionTap ?? () {})();
+                                return;
+                              }
+                              onKeyTap(key);
+                            },
+                            highlight: key == 'ACTION',
+                            enabled: key == 'ACTION' ? canAction : true,
+                            colors: colors,
+                          ),
                   ),
               ],
             ),

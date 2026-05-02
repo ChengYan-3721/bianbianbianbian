@@ -104,12 +104,14 @@ void main() {
       initialBalance: -1200.5,
       includeInTotal: false,
       currency: 'USD',
+      billingDay: 5,
+      repaymentDay: 22,
       updatedAt: DateTime.utc(2026, 4, 21),
       deletedAt: DateTime.utc(2026, 4, 22),
       deviceId: 'device-a',
     );
 
-    test('fromJson(toJson(x)) == x （全字段）', () {
+    test('fromJson(toJson(x)) == x （全字段，含信用卡日）', () {
       expect(Account.fromJson(full.toJson()), full);
     });
 
@@ -126,13 +128,32 @@ void main() {
       expect(minimal.initialBalance, 0.0);
       expect(minimal.includeInTotal, isTrue);
       expect(minimal.currency, 'CNY');
+      expect(minimal.billingDay, isNull);
+      expect(minimal.repaymentDay, isNull);
     });
 
-    test('copyWith 改 initialBalance 不动 includeInTotal', () {
+    test('copyWith 改 initialBalance 不动 includeInTotal / 信用卡日', () {
       final topped = full.copyWith(initialBalance: -800.0);
       expect(topped.initialBalance, -800.0);
       expect(topped.includeInTotal, isFalse);
       expect(topped.currency, 'USD');
+      expect(topped.billingDay, 5);
+      expect(topped.repaymentDay, 22);
+    });
+
+    test('信用卡日仅存其一也能 roundtrip（Step 7.3：允许部分填写）', () {
+      final partial = Account(
+        id: 'acc-3',
+        name: '工商信用卡',
+        type: 'credit',
+        billingDay: 10,
+        // repaymentDay 留空
+        updatedAt: DateTime.utc(2026, 4, 21),
+        deviceId: 'device-a',
+      );
+      expect(Account.fromJson(partial.toJson()), partial);
+      expect(partial.billingDay, 10);
+      expect(partial.repaymentDay, isNull);
     });
   });
 

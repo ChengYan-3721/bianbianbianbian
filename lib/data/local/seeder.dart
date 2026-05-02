@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../../core/util/currencies.dart';
 import 'app_database.dart';
 
 /// [DefaultSeeder] 的 UUID / 时间注入点（测试里可替换成确定性实现）。
@@ -154,17 +155,37 @@ class DefaultSeeder {
 
   /// 如果 `ledger` 表当前非空（含软删的行）→ 整体跳过；否则在单事务内插入
   /// 账本 + 全部分类 + 全部账户。任一行失败整体回滚，不会留下半成品。
+  ///
+  /// fx_rate 工具表（Step 8.1）走**独立判空**——与 ledger 解耦：
+  /// - 即使用户清空了 ledger 又重新种子化，fx_rate 不应被覆盖（用户可能
+  ///   手动改过某币种汇率）。
+  /// - schema v6 升级流程只 `createTable(fxRateTable)`，本机首次冷启动
+  ///   到 v6 时由 seeder 把 [kFxRateSnapshot] 灌进去。
   Future<void> seedIfEmpty() async {
     await _db.transaction(() async {
       final anyLedger = await (_db.select(_db.ledgerTable)..limit(1)).get();
-      if (anyLedger.isNotEmpty) return;
+      if (anyLedger.isEmpty) {
+        final nowMs = _clock().millisecondsSinceEpoch;
+        final ledgerId = _uuidFactory();
 
-      final nowMs = _clock().millisecondsSinceEpoch;
-      final ledgerId = _uuidFactory();
+        await _insertLedger(ledgerId, nowMs);
+        await _insertCategories(nowMs);
+        await _insertAccounts(nowMs);
+      }
 
-      await _insertLedger(ledgerId, nowMs);
-      await _insertCategories(nowMs);
-      await _insertAccounts(nowMs);
+      final anyFxRate = await (_db.select(_db.fxRateTable)..limit(1)).get();
+      if (anyFxRate.isEmpty) {
+        final nowMs = _clock().millisecondsSinceEpoch;
+        for (final entry in kFxRateSnapshot.entries) {
+          await _db.into(_db.fxRateTable).insert(
+                FxRateTableCompanion.insert(
+                  code: entry.key,
+                  rateToCny: entry.value,
+                  updatedAt: nowMs,
+                ),
+              );
+        }
+      }
     });
   }
 

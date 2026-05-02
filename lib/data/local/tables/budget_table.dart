@@ -25,6 +25,18 @@ class BudgetTable extends Table {
       .nullable()
       .withDefault(const Constant(0))();
 
+  /// Step 6.4 引入的"已结转余额"。每次跨周期触发懒结算时，把上一周期未花完
+  /// 的额度（`max(0, amount - spent)`）累加到这里；预算进度 UI 把它叠加到
+  /// `amount` 上展示"本期可用"。
+  RealColumn get carryBalance => real()
+      .named('carry_balance')
+      .withDefault(const Constant(0))();
+
+  /// Step 6.4 引入的"已结算到的周期 end（epoch ms）"。`null` 表示还从未结算过。
+  /// 结算函数从这里向 `now` 推进，关闭→重新开启时由 `applyCarryOverToggle`
+  /// 重置为当前周期开始，从而满足"重新打开不回溯历史"的约束。
+  IntColumn get lastSettledAt => integer().nullable().named('last_settled_at')();
+
   IntColumn get startDate => integer().named('start_date')();
 
   IntColumn get updatedAt => integer().named('updated_at')();

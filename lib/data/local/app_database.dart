@@ -10,6 +10,7 @@ import 'package:sqlite3/open.dart' as sqlite3_open;
 import 'dao/account_dao.dart';
 import 'dao/budget_dao.dart';
 import 'dao/category_dao.dart';
+import 'dao/fx_rate_dao.dart';
 import 'dao/ledger_dao.dart';
 import 'dao/sync_op_dao.dart';
 import 'dao/transaction_entry_dao.dart';
@@ -17,6 +18,7 @@ import 'db_cipher_key_store.dart';
 import 'tables/account_table.dart';
 import 'tables/budget_table.dart';
 import 'tables/category_table.dart';
+import 'tables/fx_rate_table.dart';
 import 'tables/ledger_table.dart';
 import 'tables/sync_op_table.dart';
 import 'tables/transaction_entry_table.dart';
@@ -44,6 +46,15 @@ part 'app_database.g.dart';
 ///   （`idx_tx_ledger_time`、`idx_tx_updated`）。
 /// - v3（Step 3.2 重构）：`category` 改为“全局二级分类”模型（新增 `parent_key`
 ///   / `is_favorite`，移除 `ledger_id` / `type`），按需求“不兼容旧结构”直接重建表。
+/// - v4（Step 6.4）：`budget` 追加 `carry_balance REAL NOT NULL DEFAULT 0` 与
+///   `last_settled_at INTEGER`（nullable），用于预算结转的累加值与结算 anchor。
+/// - v5（Step 7.3）：`account` 追加 `billing_day INTEGER` 与
+///   `repayment_day INTEGER`（均 nullable），用于信用卡账单日 / 还款日展示。
+/// - v6（Step 8.1）：`user_pref` 追加 `multi_currency_enabled INTEGER DEFAULT 0`；
+///   新增工具表 `fx_rate(code PK, rate_to_cny REAL, updated_at INTEGER)`。
+/// - v7（Step 8.3）：`fx_rate` 追加 `is_manual INTEGER NOT NULL DEFAULT 0`
+///   （手动覆盖标记，自动刷新跳过）；`user_pref` 追加 `last_fx_refresh_at
+///   INTEGER`（上次自动刷新时间，每日节流锚点）。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -53,6 +64,7 @@ part 'app_database.g.dart';
     TransactionEntryTable,
     BudgetTable,
     SyncOpTable,
+    FxRateTable,
   ],
   daos: [
     LedgerDao,
@@ -61,6 +73,7 @@ part 'app_database.g.dart';
     TransactionEntryDao,
     BudgetDao,
     SyncOpDao,
+    FxRateDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -70,7 +83,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -97,6 +110,43 @@ class AppDatabase extends _$AppDatabase {
             // v2 → v3：按产品要求“无需兼容旧 category 结构”，直接重建 category。
             await m.deleteTable('category');
             await m.createTable(categoryTable);
+          }
+
+          if (from < 4) {
+            // v3 → v4：budget 表追加 carry_balance / last_settled_at 两列，
+            // 历史记录默认结转余额 0、未结算（lastSettledAt = NULL）。
+            await m.addColumn(budgetTable, budgetTable.carryBalance);
+            await m.addColumn(budgetTable, budgetTable.lastSettledAt);
+          }
+
+          if (from < 5) {
+            // v4 → v5：account 表追加 billing_day / repayment_day 两列，
+            // 历史记录默认 NULL；非信用卡账户也允许保持 NULL。
+            await m.addColumn(accountTable, accountTable.billingDay);
+            await m.addColumn(accountTable, accountTable.repaymentDay);
+          }
+
+          if (from < 6) {
+            // v5 → v6：user_pref 追加 multi_currency_enabled 列（默认 0
+            // = 关闭，与新装行为一致）；新增工具表 fx_rate。fx_rate 的
+            // 初始快照不在 onUpgrade 写入——下次冷启动 seeder 会按
+            // "fx_rate 表为空"独立判空补齐，与 ledger 种子化逻辑解耦。
+            await m.addColumn(
+              userPrefTable,
+              userPrefTable.multiCurrencyEnabled,
+            );
+            await m.createTable(fxRateTable);
+          }
+
+          if (from < 7) {
+            // v6 → v7：fx_rate 追加 is_manual 列（默认 0 = 自动管理，可被
+            // 自动刷新覆盖）；user_pref 追加 last_fx_refresh_at（每日刷新
+            // 节流锚点；NULL = 从未刷新）。
+            await m.addColumn(fxRateTable, fxRateTable.isManual);
+            await m.addColumn(
+              userPrefTable,
+              userPrefTable.lastFxRefreshAt,
+            );
           }
         },
       );

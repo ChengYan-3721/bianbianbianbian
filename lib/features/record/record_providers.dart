@@ -25,7 +25,17 @@ class RecordMonth extends _$RecordMonth {
   void next() {
     state = DateTime(state.year, state.month + 1);
   }
+
+  void jumpTo(DateTime day) {
+    state = DateTime(day.year, day.month);
+  }
 }
+
+/// 记账列表期望滚动到的目标日期。
+///
+/// 一次性信号：消费方读取后应立即清空，避免下次月份切换被误触发。
+/// 由统计页热力图点击设置，由 [RecordHomePage] 在新月份数据就绪后消费。
+final recordScrollTargetProvider = StateProvider<DateTime?>((ref) => null);
 
 /// 按日期倒序分组的流水列表。
 class DailyTransactions {
@@ -74,10 +84,14 @@ Future<RecordMonthSummary> recordMonthSummary(Ref ref) async {
   double income = 0;
   double expense = 0;
   for (final tx in monthTxs) {
+    // Step 8.2：跨币种流水按 fxRate 折算到账本默认币种再求和。
+    // fxRate 在保存时已计算（同币种 = 1.0），因此这里乘法对 V1 单币种用户
+    // 是无变化路径；多币种开启后才真正起作用。
+    final converted = tx.amount * tx.fxRate;
     if (tx.type == 'income') {
-      income += tx.amount;
+      income += converted;
     } else if (tx.type == 'expense') {
-      expense += tx.amount;
+      expense += converted;
     }
   }
 

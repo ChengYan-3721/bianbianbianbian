@@ -88,12 +88,34 @@ class $UserPrefTableTable extends UserPrefTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _multiCurrencyEnabledMeta =
+      const VerificationMeta('multiCurrencyEnabled');
+  @override
+  late final GeneratedColumn<int> multiCurrencyEnabled = GeneratedColumn<int>(
+    'multi_currency_enabled',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _lastSyncAtMeta = const VerificationMeta(
     'lastSyncAt',
   );
   @override
   late final GeneratedColumn<int> lastSyncAt = GeneratedColumn<int>(
     'last_sync_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastFxRefreshAtMeta = const VerificationMeta(
+    'lastFxRefreshAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastFxRefreshAt = GeneratedColumn<int>(
+    'last_fx_refresh_at',
     aliasedName,
     true,
     type: DriftSqlType.int,
@@ -131,7 +153,9 @@ class $UserPrefTableTable extends UserPrefTable
     theme,
     lockEnabled,
     syncEnabled,
+    multiCurrencyEnabled,
     lastSyncAt,
+    lastFxRefreshAt,
     aiApiEndpoint,
     aiApiKeyEncrypted,
   ];
@@ -200,12 +224,30 @@ class $UserPrefTableTable extends UserPrefTable
         ),
       );
     }
+    if (data.containsKey('multi_currency_enabled')) {
+      context.handle(
+        _multiCurrencyEnabledMeta,
+        multiCurrencyEnabled.isAcceptableOrUnknown(
+          data['multi_currency_enabled']!,
+          _multiCurrencyEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('last_sync_at')) {
       context.handle(
         _lastSyncAtMeta,
         lastSyncAt.isAcceptableOrUnknown(
           data['last_sync_at']!,
           _lastSyncAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_fx_refresh_at')) {
+      context.handle(
+        _lastFxRefreshAtMeta,
+        lastFxRefreshAt.isAcceptableOrUnknown(
+          data['last_fx_refresh_at']!,
+          _lastFxRefreshAtMeta,
         ),
       );
     }
@@ -264,9 +306,17 @@ class $UserPrefTableTable extends UserPrefTable
         DriftSqlType.int,
         data['${effectivePrefix}sync_enabled'],
       ),
+      multiCurrencyEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}multi_currency_enabled'],
+      ),
       lastSyncAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}last_sync_at'],
+      ),
+      lastFxRefreshAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_fx_refresh_at'],
       ),
       aiApiEndpoint: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -293,7 +343,15 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
   final String? theme;
   final int? lockEnabled;
   final int? syncEnabled;
+
+  /// Step 8.1：多币种全局开关。0 = 关闭（默认；记账页币种字段隐藏），
+  /// 1 = 开启（记账页可选币种、统计页按账本默认币种换算展示）。
+  final int? multiCurrencyEnabled;
   final int? lastSyncAt;
+
+  /// Step 8.3：上次汇率自动刷新时间（epoch ms）。null = 从未刷新。
+  /// 用于"每日最多一次"节流，[FxRateRefreshService.refreshIfDue] 据此判断。
+  final int? lastFxRefreshAt;
   final String? aiApiEndpoint;
   final Uint8List? aiApiKeyEncrypted;
   const UserPrefEntry({
@@ -304,7 +362,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     this.theme,
     this.lockEnabled,
     this.syncEnabled,
+    this.multiCurrencyEnabled,
     this.lastSyncAt,
+    this.lastFxRefreshAt,
     this.aiApiEndpoint,
     this.aiApiKeyEncrypted,
   });
@@ -328,8 +388,14 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     if (!nullToAbsent || syncEnabled != null) {
       map['sync_enabled'] = Variable<int>(syncEnabled);
     }
+    if (!nullToAbsent || multiCurrencyEnabled != null) {
+      map['multi_currency_enabled'] = Variable<int>(multiCurrencyEnabled);
+    }
     if (!nullToAbsent || lastSyncAt != null) {
       map['last_sync_at'] = Variable<int>(lastSyncAt);
+    }
+    if (!nullToAbsent || lastFxRefreshAt != null) {
+      map['last_fx_refresh_at'] = Variable<int>(lastFxRefreshAt);
     }
     if (!nullToAbsent || aiApiEndpoint != null) {
       map['ai_api_endpoint'] = Variable<String>(aiApiEndpoint);
@@ -359,9 +425,15 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       syncEnabled: syncEnabled == null && nullToAbsent
           ? const Value.absent()
           : Value(syncEnabled),
+      multiCurrencyEnabled: multiCurrencyEnabled == null && nullToAbsent
+          ? const Value.absent()
+          : Value(multiCurrencyEnabled),
       lastSyncAt: lastSyncAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastSyncAt),
+      lastFxRefreshAt: lastFxRefreshAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastFxRefreshAt),
       aiApiEndpoint: aiApiEndpoint == null && nullToAbsent
           ? const Value.absent()
           : Value(aiApiEndpoint),
@@ -384,7 +456,11 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       theme: serializer.fromJson<String?>(json['theme']),
       lockEnabled: serializer.fromJson<int?>(json['lockEnabled']),
       syncEnabled: serializer.fromJson<int?>(json['syncEnabled']),
+      multiCurrencyEnabled: serializer.fromJson<int?>(
+        json['multiCurrencyEnabled'],
+      ),
       lastSyncAt: serializer.fromJson<int?>(json['lastSyncAt']),
+      lastFxRefreshAt: serializer.fromJson<int?>(json['lastFxRefreshAt']),
       aiApiEndpoint: serializer.fromJson<String?>(json['aiApiEndpoint']),
       aiApiKeyEncrypted: serializer.fromJson<Uint8List?>(
         json['aiApiKeyEncrypted'],
@@ -402,7 +478,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       'theme': serializer.toJson<String?>(theme),
       'lockEnabled': serializer.toJson<int?>(lockEnabled),
       'syncEnabled': serializer.toJson<int?>(syncEnabled),
+      'multiCurrencyEnabled': serializer.toJson<int?>(multiCurrencyEnabled),
       'lastSyncAt': serializer.toJson<int?>(lastSyncAt),
+      'lastFxRefreshAt': serializer.toJson<int?>(lastFxRefreshAt),
       'aiApiEndpoint': serializer.toJson<String?>(aiApiEndpoint),
       'aiApiKeyEncrypted': serializer.toJson<Uint8List?>(aiApiKeyEncrypted),
     };
@@ -416,7 +494,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     Value<String?> theme = const Value.absent(),
     Value<int?> lockEnabled = const Value.absent(),
     Value<int?> syncEnabled = const Value.absent(),
+    Value<int?> multiCurrencyEnabled = const Value.absent(),
     Value<int?> lastSyncAt = const Value.absent(),
+    Value<int?> lastFxRefreshAt = const Value.absent(),
     Value<String?> aiApiEndpoint = const Value.absent(),
     Value<Uint8List?> aiApiKeyEncrypted = const Value.absent(),
   }) => UserPrefEntry(
@@ -431,7 +511,13 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     theme: theme.present ? theme.value : this.theme,
     lockEnabled: lockEnabled.present ? lockEnabled.value : this.lockEnabled,
     syncEnabled: syncEnabled.present ? syncEnabled.value : this.syncEnabled,
+    multiCurrencyEnabled: multiCurrencyEnabled.present
+        ? multiCurrencyEnabled.value
+        : this.multiCurrencyEnabled,
     lastSyncAt: lastSyncAt.present ? lastSyncAt.value : this.lastSyncAt,
+    lastFxRefreshAt: lastFxRefreshAt.present
+        ? lastFxRefreshAt.value
+        : this.lastFxRefreshAt,
     aiApiEndpoint: aiApiEndpoint.present
         ? aiApiEndpoint.value
         : this.aiApiEndpoint,
@@ -456,9 +542,15 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       syncEnabled: data.syncEnabled.present
           ? data.syncEnabled.value
           : this.syncEnabled,
+      multiCurrencyEnabled: data.multiCurrencyEnabled.present
+          ? data.multiCurrencyEnabled.value
+          : this.multiCurrencyEnabled,
       lastSyncAt: data.lastSyncAt.present
           ? data.lastSyncAt.value
           : this.lastSyncAt,
+      lastFxRefreshAt: data.lastFxRefreshAt.present
+          ? data.lastFxRefreshAt.value
+          : this.lastFxRefreshAt,
       aiApiEndpoint: data.aiApiEndpoint.present
           ? data.aiApiEndpoint.value
           : this.aiApiEndpoint,
@@ -478,7 +570,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ..write('theme: $theme, ')
           ..write('lockEnabled: $lockEnabled, ')
           ..write('syncEnabled: $syncEnabled, ')
+          ..write('multiCurrencyEnabled: $multiCurrencyEnabled, ')
           ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastFxRefreshAt: $lastFxRefreshAt, ')
           ..write('aiApiEndpoint: $aiApiEndpoint, ')
           ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted')
           ..write(')'))
@@ -494,7 +588,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     theme,
     lockEnabled,
     syncEnabled,
+    multiCurrencyEnabled,
     lastSyncAt,
+    lastFxRefreshAt,
     aiApiEndpoint,
     $driftBlobEquality.hash(aiApiKeyEncrypted),
   );
@@ -509,7 +605,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           other.theme == this.theme &&
           other.lockEnabled == this.lockEnabled &&
           other.syncEnabled == this.syncEnabled &&
+          other.multiCurrencyEnabled == this.multiCurrencyEnabled &&
           other.lastSyncAt == this.lastSyncAt &&
+          other.lastFxRefreshAt == this.lastFxRefreshAt &&
           other.aiApiEndpoint == this.aiApiEndpoint &&
           $driftBlobEquality.equals(
             other.aiApiKeyEncrypted,
@@ -525,7 +623,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
   final Value<String?> theme;
   final Value<int?> lockEnabled;
   final Value<int?> syncEnabled;
+  final Value<int?> multiCurrencyEnabled;
   final Value<int?> lastSyncAt;
+  final Value<int?> lastFxRefreshAt;
   final Value<String?> aiApiEndpoint;
   final Value<Uint8List?> aiApiKeyEncrypted;
   const UserPrefTableCompanion({
@@ -536,7 +636,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.theme = const Value.absent(),
     this.lockEnabled = const Value.absent(),
     this.syncEnabled = const Value.absent(),
+    this.multiCurrencyEnabled = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
+    this.lastFxRefreshAt = const Value.absent(),
     this.aiApiEndpoint = const Value.absent(),
     this.aiApiKeyEncrypted = const Value.absent(),
   });
@@ -548,7 +650,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.theme = const Value.absent(),
     this.lockEnabled = const Value.absent(),
     this.syncEnabled = const Value.absent(),
+    this.multiCurrencyEnabled = const Value.absent(),
     this.lastSyncAt = const Value.absent(),
+    this.lastFxRefreshAt = const Value.absent(),
     this.aiApiEndpoint = const Value.absent(),
     this.aiApiKeyEncrypted = const Value.absent(),
   }) : deviceId = Value(deviceId);
@@ -560,7 +664,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Expression<String>? theme,
     Expression<int>? lockEnabled,
     Expression<int>? syncEnabled,
+    Expression<int>? multiCurrencyEnabled,
     Expression<int>? lastSyncAt,
+    Expression<int>? lastFxRefreshAt,
     Expression<String>? aiApiEndpoint,
     Expression<Uint8List>? aiApiKeyEncrypted,
   }) {
@@ -572,7 +678,10 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       if (theme != null) 'theme': theme,
       if (lockEnabled != null) 'lock_enabled': lockEnabled,
       if (syncEnabled != null) 'sync_enabled': syncEnabled,
+      if (multiCurrencyEnabled != null)
+        'multi_currency_enabled': multiCurrencyEnabled,
       if (lastSyncAt != null) 'last_sync_at': lastSyncAt,
+      if (lastFxRefreshAt != null) 'last_fx_refresh_at': lastFxRefreshAt,
       if (aiApiEndpoint != null) 'ai_api_endpoint': aiApiEndpoint,
       if (aiApiKeyEncrypted != null) 'ai_api_key_encrypted': aiApiKeyEncrypted,
     });
@@ -586,7 +695,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Value<String?>? theme,
     Value<int?>? lockEnabled,
     Value<int?>? syncEnabled,
+    Value<int?>? multiCurrencyEnabled,
     Value<int?>? lastSyncAt,
+    Value<int?>? lastFxRefreshAt,
     Value<String?>? aiApiEndpoint,
     Value<Uint8List?>? aiApiKeyEncrypted,
   }) {
@@ -598,7 +709,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       theme: theme ?? this.theme,
       lockEnabled: lockEnabled ?? this.lockEnabled,
       syncEnabled: syncEnabled ?? this.syncEnabled,
+      multiCurrencyEnabled: multiCurrencyEnabled ?? this.multiCurrencyEnabled,
       lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+      lastFxRefreshAt: lastFxRefreshAt ?? this.lastFxRefreshAt,
       aiApiEndpoint: aiApiEndpoint ?? this.aiApiEndpoint,
       aiApiKeyEncrypted: aiApiKeyEncrypted ?? this.aiApiKeyEncrypted,
     );
@@ -628,8 +741,14 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     if (syncEnabled.present) {
       map['sync_enabled'] = Variable<int>(syncEnabled.value);
     }
+    if (multiCurrencyEnabled.present) {
+      map['multi_currency_enabled'] = Variable<int>(multiCurrencyEnabled.value);
+    }
     if (lastSyncAt.present) {
       map['last_sync_at'] = Variable<int>(lastSyncAt.value);
+    }
+    if (lastFxRefreshAt.present) {
+      map['last_fx_refresh_at'] = Variable<int>(lastFxRefreshAt.value);
     }
     if (aiApiEndpoint.present) {
       map['ai_api_endpoint'] = Variable<String>(aiApiEndpoint.value);
@@ -652,7 +771,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
           ..write('theme: $theme, ')
           ..write('lockEnabled: $lockEnabled, ')
           ..write('syncEnabled: $syncEnabled, ')
+          ..write('multiCurrencyEnabled: $multiCurrencyEnabled, ')
           ..write('lastSyncAt: $lastSyncAt, ')
+          ..write('lastFxRefreshAt: $lastFxRefreshAt, ')
           ..write('aiApiEndpoint: $aiApiEndpoint, ')
           ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted')
           ..write(')'))
@@ -1935,6 +2056,28 @@ class $AccountTableTable extends AccountTable
     requiredDuringInsert: false,
     defaultValue: const Constant('CNY'),
   );
+  static const VerificationMeta _billingDayMeta = const VerificationMeta(
+    'billingDay',
+  );
+  @override
+  late final GeneratedColumn<int> billingDay = GeneratedColumn<int>(
+    'billing_day',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _repaymentDayMeta = const VerificationMeta(
+    'repaymentDay',
+  );
+  @override
+  late final GeneratedColumn<int> repaymentDay = GeneratedColumn<int>(
+    'repayment_day',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -1978,6 +2121,8 @@ class $AccountTableTable extends AccountTable
     initialBalance,
     includeInTotal,
     currency,
+    billingDay,
+    repaymentDay,
     updatedAt,
     deletedAt,
     deviceId,
@@ -2051,6 +2196,21 @@ class $AccountTableTable extends AccountTable
         currency.isAcceptableOrUnknown(data['currency']!, _currencyMeta),
       );
     }
+    if (data.containsKey('billing_day')) {
+      context.handle(
+        _billingDayMeta,
+        billingDay.isAcceptableOrUnknown(data['billing_day']!, _billingDayMeta),
+      );
+    }
+    if (data.containsKey('repayment_day')) {
+      context.handle(
+        _repaymentDayMeta,
+        repaymentDay.isAcceptableOrUnknown(
+          data['repayment_day']!,
+          _repaymentDayMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2114,6 +2274,14 @@ class $AccountTableTable extends AccountTable
         DriftSqlType.string,
         data['${effectivePrefix}currency'],
       ),
+      billingDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}billing_day'],
+      ),
+      repaymentDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}repayment_day'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at'],
@@ -2144,6 +2312,12 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
   final double? initialBalance;
   final int? includeInTotal;
   final String? currency;
+
+  /// 账单日（信用卡专属，1-28），nullable。Step 7.3。
+  final int? billingDay;
+
+  /// 还款日（信用卡专属，1-28），nullable。Step 7.3。
+  final int? repaymentDay;
   final int updatedAt;
   final int? deletedAt;
   final String deviceId;
@@ -2156,6 +2330,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     this.initialBalance,
     this.includeInTotal,
     this.currency,
+    this.billingDay,
+    this.repaymentDay,
     required this.updatedAt,
     this.deletedAt,
     required this.deviceId,
@@ -2180,6 +2356,12 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     }
     if (!nullToAbsent || currency != null) {
       map['currency'] = Variable<String>(currency);
+    }
+    if (!nullToAbsent || billingDay != null) {
+      map['billing_day'] = Variable<int>(billingDay);
+    }
+    if (!nullToAbsent || repaymentDay != null) {
+      map['repayment_day'] = Variable<int>(repaymentDay);
     }
     map['updated_at'] = Variable<int>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -2207,6 +2389,12 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       currency: currency == null && nullToAbsent
           ? const Value.absent()
           : Value(currency),
+      billingDay: billingDay == null && nullToAbsent
+          ? const Value.absent()
+          : Value(billingDay),
+      repaymentDay: repaymentDay == null && nullToAbsent
+          ? const Value.absent()
+          : Value(repaymentDay),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
           ? const Value.absent()
@@ -2229,6 +2417,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       initialBalance: serializer.fromJson<double?>(json['initialBalance']),
       includeInTotal: serializer.fromJson<int?>(json['includeInTotal']),
       currency: serializer.fromJson<String?>(json['currency']),
+      billingDay: serializer.fromJson<int?>(json['billingDay']),
+      repaymentDay: serializer.fromJson<int?>(json['repaymentDay']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
       deletedAt: serializer.fromJson<int?>(json['deletedAt']),
       deviceId: serializer.fromJson<String>(json['deviceId']),
@@ -2246,6 +2436,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       'initialBalance': serializer.toJson<double?>(initialBalance),
       'includeInTotal': serializer.toJson<int?>(includeInTotal),
       'currency': serializer.toJson<String?>(currency),
+      'billingDay': serializer.toJson<int?>(billingDay),
+      'repaymentDay': serializer.toJson<int?>(repaymentDay),
       'updatedAt': serializer.toJson<int>(updatedAt),
       'deletedAt': serializer.toJson<int?>(deletedAt),
       'deviceId': serializer.toJson<String>(deviceId),
@@ -2261,6 +2453,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     Value<double?> initialBalance = const Value.absent(),
     Value<int?> includeInTotal = const Value.absent(),
     Value<String?> currency = const Value.absent(),
+    Value<int?> billingDay = const Value.absent(),
+    Value<int?> repaymentDay = const Value.absent(),
     int? updatedAt,
     Value<int?> deletedAt = const Value.absent(),
     String? deviceId,
@@ -2277,6 +2471,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
         ? includeInTotal.value
         : this.includeInTotal,
     currency: currency.present ? currency.value : this.currency,
+    billingDay: billingDay.present ? billingDay.value : this.billingDay,
+    repaymentDay: repaymentDay.present ? repaymentDay.value : this.repaymentDay,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     deviceId: deviceId ?? this.deviceId,
@@ -2295,6 +2491,12 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           ? data.includeInTotal.value
           : this.includeInTotal,
       currency: data.currency.present ? data.currency.value : this.currency,
+      billingDay: data.billingDay.present
+          ? data.billingDay.value
+          : this.billingDay,
+      repaymentDay: data.repaymentDay.present
+          ? data.repaymentDay.value
+          : this.repaymentDay,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
@@ -2312,6 +2514,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           ..write('initialBalance: $initialBalance, ')
           ..write('includeInTotal: $includeInTotal, ')
           ..write('currency: $currency, ')
+          ..write('billingDay: $billingDay, ')
+          ..write('repaymentDay: $repaymentDay, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('deviceId: $deviceId')
@@ -2329,6 +2533,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     initialBalance,
     includeInTotal,
     currency,
+    billingDay,
+    repaymentDay,
     updatedAt,
     deletedAt,
     deviceId,
@@ -2345,6 +2551,8 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           other.initialBalance == this.initialBalance &&
           other.includeInTotal == this.includeInTotal &&
           other.currency == this.currency &&
+          other.billingDay == this.billingDay &&
+          other.repaymentDay == this.repaymentDay &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
           other.deviceId == this.deviceId);
@@ -2359,6 +2567,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
   final Value<double?> initialBalance;
   final Value<int?> includeInTotal;
   final Value<String?> currency;
+  final Value<int?> billingDay;
+  final Value<int?> repaymentDay;
   final Value<int> updatedAt;
   final Value<int?> deletedAt;
   final Value<String> deviceId;
@@ -2372,6 +2582,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     this.initialBalance = const Value.absent(),
     this.includeInTotal = const Value.absent(),
     this.currency = const Value.absent(),
+    this.billingDay = const Value.absent(),
+    this.repaymentDay = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -2386,6 +2598,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     this.initialBalance = const Value.absent(),
     this.includeInTotal = const Value.absent(),
     this.currency = const Value.absent(),
+    this.billingDay = const Value.absent(),
+    this.repaymentDay = const Value.absent(),
     required int updatedAt,
     this.deletedAt = const Value.absent(),
     required String deviceId,
@@ -2404,6 +2618,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     Expression<double>? initialBalance,
     Expression<int>? includeInTotal,
     Expression<String>? currency,
+    Expression<int>? billingDay,
+    Expression<int>? repaymentDay,
     Expression<int>? updatedAt,
     Expression<int>? deletedAt,
     Expression<String>? deviceId,
@@ -2418,6 +2634,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
       if (initialBalance != null) 'initial_balance': initialBalance,
       if (includeInTotal != null) 'include_in_total': includeInTotal,
       if (currency != null) 'currency': currency,
+      if (billingDay != null) 'billing_day': billingDay,
+      if (repaymentDay != null) 'repayment_day': repaymentDay,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (deviceId != null) 'device_id': deviceId,
@@ -2434,6 +2652,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     Value<double?>? initialBalance,
     Value<int?>? includeInTotal,
     Value<String?>? currency,
+    Value<int?>? billingDay,
+    Value<int?>? repaymentDay,
     Value<int>? updatedAt,
     Value<int?>? deletedAt,
     Value<String>? deviceId,
@@ -2448,6 +2668,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
       initialBalance: initialBalance ?? this.initialBalance,
       includeInTotal: includeInTotal ?? this.includeInTotal,
       currency: currency ?? this.currency,
+      billingDay: billingDay ?? this.billingDay,
+      repaymentDay: repaymentDay ?? this.repaymentDay,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       deviceId: deviceId ?? this.deviceId,
@@ -2482,6 +2704,12 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     if (currency.present) {
       map['currency'] = Variable<String>(currency.value);
     }
+    if (billingDay.present) {
+      map['billing_day'] = Variable<int>(billingDay.value);
+    }
+    if (repaymentDay.present) {
+      map['repayment_day'] = Variable<int>(repaymentDay.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(updatedAt.value);
     }
@@ -2508,6 +2736,8 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
           ..write('initialBalance: $initialBalance, ')
           ..write('includeInTotal: $includeInTotal, ')
           ..write('currency: $currency, ')
+          ..write('billingDay: $billingDay, ')
+          ..write('repaymentDay: $repaymentDay, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('deviceId: $deviceId, ')
@@ -3572,6 +3802,29 @@ class $BudgetTableTable extends BudgetTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _carryBalanceMeta = const VerificationMeta(
+    'carryBalance',
+  );
+  @override
+  late final GeneratedColumn<double> carryBalance = GeneratedColumn<double>(
+    'carry_balance',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastSettledAtMeta = const VerificationMeta(
+    'lastSettledAt',
+  );
+  @override
+  late final GeneratedColumn<int> lastSettledAt = GeneratedColumn<int>(
+    'last_settled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _startDateMeta = const VerificationMeta(
     'startDate',
   );
@@ -3624,6 +3877,8 @@ class $BudgetTableTable extends BudgetTable
     categoryId,
     amount,
     carryOver,
+    carryBalance,
+    lastSettledAt,
     startDate,
     updatedAt,
     deletedAt,
@@ -3680,6 +3935,24 @@ class $BudgetTableTable extends BudgetTable
       context.handle(
         _carryOverMeta,
         carryOver.isAcceptableOrUnknown(data['carry_over']!, _carryOverMeta),
+      );
+    }
+    if (data.containsKey('carry_balance')) {
+      context.handle(
+        _carryBalanceMeta,
+        carryBalance.isAcceptableOrUnknown(
+          data['carry_balance']!,
+          _carryBalanceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_settled_at')) {
+      context.handle(
+        _lastSettledAtMeta,
+        lastSettledAt.isAcceptableOrUnknown(
+          data['last_settled_at']!,
+          _lastSettledAtMeta,
+        ),
       );
     }
     if (data.containsKey('start_date')) {
@@ -3745,6 +4018,14 @@ class $BudgetTableTable extends BudgetTable
         DriftSqlType.int,
         data['${effectivePrefix}carry_over'],
       ),
+      carryBalance: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}carry_balance'],
+      )!,
+      lastSettledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}last_settled_at'],
+      ),
       startDate: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}start_date'],
@@ -3777,6 +4058,16 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
   final String? categoryId;
   final double amount;
   final int? carryOver;
+
+  /// Step 6.4 引入的"已结转余额"。每次跨周期触发懒结算时，把上一周期未花完
+  /// 的额度（`max(0, amount - spent)`）累加到这里；预算进度 UI 把它叠加到
+  /// `amount` 上展示"本期可用"。
+  final double carryBalance;
+
+  /// Step 6.4 引入的"已结算到的周期 end（epoch ms）"。`null` 表示还从未结算过。
+  /// 结算函数从这里向 `now` 推进，关闭→重新开启时由 `applyCarryOverToggle`
+  /// 重置为当前周期开始，从而满足"重新打开不回溯历史"的约束。
+  final int? lastSettledAt;
   final int startDate;
   final int updatedAt;
   final int? deletedAt;
@@ -3788,6 +4079,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     this.categoryId,
     required this.amount,
     this.carryOver,
+    required this.carryBalance,
+    this.lastSettledAt,
     required this.startDate,
     required this.updatedAt,
     this.deletedAt,
@@ -3805,6 +4098,10 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     map['amount'] = Variable<double>(amount);
     if (!nullToAbsent || carryOver != null) {
       map['carry_over'] = Variable<int>(carryOver);
+    }
+    map['carry_balance'] = Variable<double>(carryBalance);
+    if (!nullToAbsent || lastSettledAt != null) {
+      map['last_settled_at'] = Variable<int>(lastSettledAt);
     }
     map['start_date'] = Variable<int>(startDate);
     map['updated_at'] = Variable<int>(updatedAt);
@@ -3827,6 +4124,10 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       carryOver: carryOver == null && nullToAbsent
           ? const Value.absent()
           : Value(carryOver),
+      carryBalance: Value(carryBalance),
+      lastSettledAt: lastSettledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSettledAt),
       startDate: Value(startDate),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -3848,6 +4149,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       categoryId: serializer.fromJson<String?>(json['categoryId']),
       amount: serializer.fromJson<double>(json['amount']),
       carryOver: serializer.fromJson<int?>(json['carryOver']),
+      carryBalance: serializer.fromJson<double>(json['carryBalance']),
+      lastSettledAt: serializer.fromJson<int?>(json['lastSettledAt']),
       startDate: serializer.fromJson<int>(json['startDate']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
       deletedAt: serializer.fromJson<int?>(json['deletedAt']),
@@ -3864,6 +4167,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
       'categoryId': serializer.toJson<String?>(categoryId),
       'amount': serializer.toJson<double>(amount),
       'carryOver': serializer.toJson<int?>(carryOver),
+      'carryBalance': serializer.toJson<double>(carryBalance),
+      'lastSettledAt': serializer.toJson<int?>(lastSettledAt),
       'startDate': serializer.toJson<int>(startDate),
       'updatedAt': serializer.toJson<int>(updatedAt),
       'deletedAt': serializer.toJson<int?>(deletedAt),
@@ -3878,6 +4183,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     Value<String?> categoryId = const Value.absent(),
     double? amount,
     Value<int?> carryOver = const Value.absent(),
+    double? carryBalance,
+    Value<int?> lastSettledAt = const Value.absent(),
     int? startDate,
     int? updatedAt,
     Value<int?> deletedAt = const Value.absent(),
@@ -3889,6 +4196,10 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     categoryId: categoryId.present ? categoryId.value : this.categoryId,
     amount: amount ?? this.amount,
     carryOver: carryOver.present ? carryOver.value : this.carryOver,
+    carryBalance: carryBalance ?? this.carryBalance,
+    lastSettledAt: lastSettledAt.present
+        ? lastSettledAt.value
+        : this.lastSettledAt,
     startDate: startDate ?? this.startDate,
     updatedAt: updatedAt ?? this.updatedAt,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -3904,6 +4215,12 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
           : this.categoryId,
       amount: data.amount.present ? data.amount.value : this.amount,
       carryOver: data.carryOver.present ? data.carryOver.value : this.carryOver,
+      carryBalance: data.carryBalance.present
+          ? data.carryBalance.value
+          : this.carryBalance,
+      lastSettledAt: data.lastSettledAt.present
+          ? data.lastSettledAt.value
+          : this.lastSettledAt,
       startDate: data.startDate.present ? data.startDate.value : this.startDate,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -3920,6 +4237,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
           ..write('categoryId: $categoryId, ')
           ..write('amount: $amount, ')
           ..write('carryOver: $carryOver, ')
+          ..write('carryBalance: $carryBalance, ')
+          ..write('lastSettledAt: $lastSettledAt, ')
           ..write('startDate: $startDate, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -3936,6 +4255,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
     categoryId,
     amount,
     carryOver,
+    carryBalance,
+    lastSettledAt,
     startDate,
     updatedAt,
     deletedAt,
@@ -3951,6 +4272,8 @@ class BudgetEntry extends DataClass implements Insertable<BudgetEntry> {
           other.categoryId == this.categoryId &&
           other.amount == this.amount &&
           other.carryOver == this.carryOver &&
+          other.carryBalance == this.carryBalance &&
+          other.lastSettledAt == this.lastSettledAt &&
           other.startDate == this.startDate &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt &&
@@ -3964,6 +4287,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
   final Value<String?> categoryId;
   final Value<double> amount;
   final Value<int?> carryOver;
+  final Value<double> carryBalance;
+  final Value<int?> lastSettledAt;
   final Value<int> startDate;
   final Value<int> updatedAt;
   final Value<int?> deletedAt;
@@ -3976,6 +4301,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
     this.categoryId = const Value.absent(),
     this.amount = const Value.absent(),
     this.carryOver = const Value.absent(),
+    this.carryBalance = const Value.absent(),
+    this.lastSettledAt = const Value.absent(),
     this.startDate = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -3989,6 +4316,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
     this.categoryId = const Value.absent(),
     required double amount,
     this.carryOver = const Value.absent(),
+    this.carryBalance = const Value.absent(),
+    this.lastSettledAt = const Value.absent(),
     required int startDate,
     required int updatedAt,
     this.deletedAt = const Value.absent(),
@@ -4008,6 +4337,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
     Expression<String>? categoryId,
     Expression<double>? amount,
     Expression<int>? carryOver,
+    Expression<double>? carryBalance,
+    Expression<int>? lastSettledAt,
     Expression<int>? startDate,
     Expression<int>? updatedAt,
     Expression<int>? deletedAt,
@@ -4021,6 +4352,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
       if (categoryId != null) 'category_id': categoryId,
       if (amount != null) 'amount': amount,
       if (carryOver != null) 'carry_over': carryOver,
+      if (carryBalance != null) 'carry_balance': carryBalance,
+      if (lastSettledAt != null) 'last_settled_at': lastSettledAt,
       if (startDate != null) 'start_date': startDate,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -4036,6 +4369,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
     Value<String?>? categoryId,
     Value<double>? amount,
     Value<int?>? carryOver,
+    Value<double>? carryBalance,
+    Value<int?>? lastSettledAt,
     Value<int>? startDate,
     Value<int>? updatedAt,
     Value<int?>? deletedAt,
@@ -4049,6 +4384,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
       categoryId: categoryId ?? this.categoryId,
       amount: amount ?? this.amount,
       carryOver: carryOver ?? this.carryOver,
+      carryBalance: carryBalance ?? this.carryBalance,
+      lastSettledAt: lastSettledAt ?? this.lastSettledAt,
       startDate: startDate ?? this.startDate,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -4078,6 +4415,12 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
     if (carryOver.present) {
       map['carry_over'] = Variable<int>(carryOver.value);
     }
+    if (carryBalance.present) {
+      map['carry_balance'] = Variable<double>(carryBalance.value);
+    }
+    if (lastSettledAt.present) {
+      map['last_settled_at'] = Variable<int>(lastSettledAt.value);
+    }
     if (startDate.present) {
       map['start_date'] = Variable<int>(startDate.value);
     }
@@ -4105,6 +4448,8 @@ class BudgetTableCompanion extends UpdateCompanion<BudgetEntry> {
           ..write('categoryId: $categoryId, ')
           ..write('amount: $amount, ')
           ..write('carryOver: $carryOver, ')
+          ..write('carryBalance: $carryBalance, ')
+          ..write('lastSettledAt: $lastSettledAt, ')
           ..write('startDate: $startDate, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -4613,6 +4958,317 @@ class SyncOpTableCompanion extends UpdateCompanion<SyncOpEntry> {
   }
 }
 
+class $FxRateTableTable extends FxRateTable
+    with TableInfo<$FxRateTableTable, FxRateEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FxRateTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+    'code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _rateToCnyMeta = const VerificationMeta(
+    'rateToCny',
+  );
+  @override
+  late final GeneratedColumn<double> rateToCny = GeneratedColumn<double>(
+    'rate_to_cny',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isManualMeta = const VerificationMeta(
+    'isManual',
+  );
+  @override
+  late final GeneratedColumn<int> isManual = GeneratedColumn<int>(
+    'is_manual',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [code, rateToCny, updatedAt, isManual];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'fx_rate';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FxRateEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('code')) {
+      context.handle(
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_codeMeta);
+    }
+    if (data.containsKey('rate_to_cny')) {
+      context.handle(
+        _rateToCnyMeta,
+        rateToCny.isAcceptableOrUnknown(data['rate_to_cny']!, _rateToCnyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rateToCnyMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('is_manual')) {
+      context.handle(
+        _isManualMeta,
+        isManual.isAcceptableOrUnknown(data['is_manual']!, _isManualMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {code};
+  @override
+  FxRateEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FxRateEntry(
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      )!,
+      rateToCny: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rate_to_cny'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      isManual: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_manual'],
+      )!,
+    );
+  }
+
+  @override
+  $FxRateTableTable createAlias(String alias) {
+    return $FxRateTableTable(attachedDatabase, alias);
+  }
+}
+
+class FxRateEntry extends DataClass implements Insertable<FxRateEntry> {
+  final String code;
+  final double rateToCny;
+  final int updatedAt;
+  final int isManual;
+  const FxRateEntry({
+    required this.code,
+    required this.rateToCny,
+    required this.updatedAt,
+    required this.isManual,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['code'] = Variable<String>(code);
+    map['rate_to_cny'] = Variable<double>(rateToCny);
+    map['updated_at'] = Variable<int>(updatedAt);
+    map['is_manual'] = Variable<int>(isManual);
+    return map;
+  }
+
+  FxRateTableCompanion toCompanion(bool nullToAbsent) {
+    return FxRateTableCompanion(
+      code: Value(code),
+      rateToCny: Value(rateToCny),
+      updatedAt: Value(updatedAt),
+      isManual: Value(isManual),
+    );
+  }
+
+  factory FxRateEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FxRateEntry(
+      code: serializer.fromJson<String>(json['code']),
+      rateToCny: serializer.fromJson<double>(json['rateToCny']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+      isManual: serializer.fromJson<int>(json['isManual']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'code': serializer.toJson<String>(code),
+      'rateToCny': serializer.toJson<double>(rateToCny),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+      'isManual': serializer.toJson<int>(isManual),
+    };
+  }
+
+  FxRateEntry copyWith({
+    String? code,
+    double? rateToCny,
+    int? updatedAt,
+    int? isManual,
+  }) => FxRateEntry(
+    code: code ?? this.code,
+    rateToCny: rateToCny ?? this.rateToCny,
+    updatedAt: updatedAt ?? this.updatedAt,
+    isManual: isManual ?? this.isManual,
+  );
+  FxRateEntry copyWithCompanion(FxRateTableCompanion data) {
+    return FxRateEntry(
+      code: data.code.present ? data.code.value : this.code,
+      rateToCny: data.rateToCny.present ? data.rateToCny.value : this.rateToCny,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      isManual: data.isManual.present ? data.isManual.value : this.isManual,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FxRateEntry(')
+          ..write('code: $code, ')
+          ..write('rateToCny: $rateToCny, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isManual: $isManual')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(code, rateToCny, updatedAt, isManual);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FxRateEntry &&
+          other.code == this.code &&
+          other.rateToCny == this.rateToCny &&
+          other.updatedAt == this.updatedAt &&
+          other.isManual == this.isManual);
+}
+
+class FxRateTableCompanion extends UpdateCompanion<FxRateEntry> {
+  final Value<String> code;
+  final Value<double> rateToCny;
+  final Value<int> updatedAt;
+  final Value<int> isManual;
+  final Value<int> rowid;
+  const FxRateTableCompanion({
+    this.code = const Value.absent(),
+    this.rateToCny = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.isManual = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FxRateTableCompanion.insert({
+    required String code,
+    required double rateToCny,
+    required int updatedAt,
+    this.isManual = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : code = Value(code),
+       rateToCny = Value(rateToCny),
+       updatedAt = Value(updatedAt);
+  static Insertable<FxRateEntry> custom({
+    Expression<String>? code,
+    Expression<double>? rateToCny,
+    Expression<int>? updatedAt,
+    Expression<int>? isManual,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (code != null) 'code': code,
+      if (rateToCny != null) 'rate_to_cny': rateToCny,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (isManual != null) 'is_manual': isManual,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FxRateTableCompanion copyWith({
+    Value<String>? code,
+    Value<double>? rateToCny,
+    Value<int>? updatedAt,
+    Value<int>? isManual,
+    Value<int>? rowid,
+  }) {
+    return FxRateTableCompanion(
+      code: code ?? this.code,
+      rateToCny: rateToCny ?? this.rateToCny,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isManual: isManual ?? this.isManual,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (rateToCny.present) {
+      map['rate_to_cny'] = Variable<double>(rateToCny.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (isManual.present) {
+      map['is_manual'] = Variable<int>(isManual.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FxRateTableCompanion(')
+          ..write('code: $code, ')
+          ..write('rateToCny: $rateToCny, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isManual: $isManual, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4624,6 +5280,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $TransactionEntryTableTable(this);
   late final $BudgetTableTable budgetTable = $BudgetTableTable(this);
   late final $SyncOpTableTable syncOpTable = $SyncOpTableTable(this);
+  late final $FxRateTableTable fxRateTable = $FxRateTableTable(this);
   late final LedgerDao ledgerDao = LedgerDao(this as AppDatabase);
   late final CategoryDao categoryDao = CategoryDao(this as AppDatabase);
   late final AccountDao accountDao = AccountDao(this as AppDatabase);
@@ -4632,6 +5289,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final BudgetDao budgetDao = BudgetDao(this as AppDatabase);
   late final SyncOpDao syncOpDao = SyncOpDao(this as AppDatabase);
+  late final FxRateDao fxRateDao = FxRateDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4644,6 +5302,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     transactionEntryTable,
     budgetTable,
     syncOpTable,
+    fxRateTable,
   ];
 }
 
@@ -4656,7 +5315,9 @@ typedef $$UserPrefTableTableCreateCompanionBuilder =
       Value<String?> theme,
       Value<int?> lockEnabled,
       Value<int?> syncEnabled,
+      Value<int?> multiCurrencyEnabled,
       Value<int?> lastSyncAt,
+      Value<int?> lastFxRefreshAt,
       Value<String?> aiApiEndpoint,
       Value<Uint8List?> aiApiKeyEncrypted,
     });
@@ -4669,7 +5330,9 @@ typedef $$UserPrefTableTableUpdateCompanionBuilder =
       Value<String?> theme,
       Value<int?> lockEnabled,
       Value<int?> syncEnabled,
+      Value<int?> multiCurrencyEnabled,
       Value<int?> lastSyncAt,
+      Value<int?> lastFxRefreshAt,
       Value<String?> aiApiEndpoint,
       Value<Uint8List?> aiApiKeyEncrypted,
     });
@@ -4718,8 +5381,18 @@ class $$UserPrefTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get multiCurrencyEnabled => $composableBuilder(
+    column: $table.multiCurrencyEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get lastSyncAt => $composableBuilder(
     column: $table.lastSyncAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastFxRefreshAt => $composableBuilder(
+    column: $table.lastFxRefreshAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4778,8 +5451,18 @@ class $$UserPrefTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get multiCurrencyEnabled => $composableBuilder(
+    column: $table.multiCurrencyEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get lastSyncAt => $composableBuilder(
     column: $table.lastSyncAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastFxRefreshAt => $composableBuilder(
+    column: $table.lastFxRefreshAt,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -4832,8 +5515,18 @@ class $$UserPrefTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get multiCurrencyEnabled => $composableBuilder(
+    column: $table.multiCurrencyEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get lastSyncAt => $composableBuilder(
     column: $table.lastSyncAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastFxRefreshAt => $composableBuilder(
+    column: $table.lastFxRefreshAt,
     builder: (column) => column,
   );
 
@@ -4886,7 +5579,9 @@ class $$UserPrefTableTableTableManager
                 Value<String?> theme = const Value.absent(),
                 Value<int?> lockEnabled = const Value.absent(),
                 Value<int?> syncEnabled = const Value.absent(),
+                Value<int?> multiCurrencyEnabled = const Value.absent(),
                 Value<int?> lastSyncAt = const Value.absent(),
+                Value<int?> lastFxRefreshAt = const Value.absent(),
                 Value<String?> aiApiEndpoint = const Value.absent(),
                 Value<Uint8List?> aiApiKeyEncrypted = const Value.absent(),
               }) => UserPrefTableCompanion(
@@ -4897,7 +5592,9 @@ class $$UserPrefTableTableTableManager
                 theme: theme,
                 lockEnabled: lockEnabled,
                 syncEnabled: syncEnabled,
+                multiCurrencyEnabled: multiCurrencyEnabled,
                 lastSyncAt: lastSyncAt,
+                lastFxRefreshAt: lastFxRefreshAt,
                 aiApiEndpoint: aiApiEndpoint,
                 aiApiKeyEncrypted: aiApiKeyEncrypted,
               ),
@@ -4910,7 +5607,9 @@ class $$UserPrefTableTableTableManager
                 Value<String?> theme = const Value.absent(),
                 Value<int?> lockEnabled = const Value.absent(),
                 Value<int?> syncEnabled = const Value.absent(),
+                Value<int?> multiCurrencyEnabled = const Value.absent(),
                 Value<int?> lastSyncAt = const Value.absent(),
+                Value<int?> lastFxRefreshAt = const Value.absent(),
                 Value<String?> aiApiEndpoint = const Value.absent(),
                 Value<Uint8List?> aiApiKeyEncrypted = const Value.absent(),
               }) => UserPrefTableCompanion.insert(
@@ -4921,7 +5620,9 @@ class $$UserPrefTableTableTableManager
                 theme: theme,
                 lockEnabled: lockEnabled,
                 syncEnabled: syncEnabled,
+                multiCurrencyEnabled: multiCurrencyEnabled,
                 lastSyncAt: lastSyncAt,
+                lastFxRefreshAt: lastFxRefreshAt,
                 aiApiEndpoint: aiApiEndpoint,
                 aiApiKeyEncrypted: aiApiKeyEncrypted,
               ),
@@ -5652,6 +6353,8 @@ typedef $$AccountTableTableCreateCompanionBuilder =
       Value<double?> initialBalance,
       Value<int?> includeInTotal,
       Value<String?> currency,
+      Value<int?> billingDay,
+      Value<int?> repaymentDay,
       required int updatedAt,
       Value<int?> deletedAt,
       required String deviceId,
@@ -5667,6 +6370,8 @@ typedef $$AccountTableTableUpdateCompanionBuilder =
       Value<double?> initialBalance,
       Value<int?> includeInTotal,
       Value<String?> currency,
+      Value<int?> billingDay,
+      Value<int?> repaymentDay,
       Value<int> updatedAt,
       Value<int?> deletedAt,
       Value<String> deviceId,
@@ -5719,6 +6424,16 @@ class $$AccountTableTableFilterComposer
 
   ColumnFilters<String> get currency => $composableBuilder(
     column: $table.currency,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get billingDay => $composableBuilder(
+    column: $table.billingDay,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get repaymentDay => $composableBuilder(
+    column: $table.repaymentDay,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5787,6 +6502,16 @@ class $$AccountTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get billingDay => $composableBuilder(
+    column: $table.billingDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get repaymentDay => $composableBuilder(
+    column: $table.repaymentDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -5840,6 +6565,16 @@ class $$AccountTableTableAnnotationComposer
   GeneratedColumn<String> get currency =>
       $composableBuilder(column: $table.currency, builder: (column) => column);
 
+  GeneratedColumn<int> get billingDay => $composableBuilder(
+    column: $table.billingDay,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get repaymentDay => $composableBuilder(
+    column: $table.repaymentDay,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -5889,6 +6624,8 @@ class $$AccountTableTableTableManager
                 Value<double?> initialBalance = const Value.absent(),
                 Value<int?> includeInTotal = const Value.absent(),
                 Value<String?> currency = const Value.absent(),
+                Value<int?> billingDay = const Value.absent(),
+                Value<int?> repaymentDay = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int?> deletedAt = const Value.absent(),
                 Value<String> deviceId = const Value.absent(),
@@ -5902,6 +6639,8 @@ class $$AccountTableTableTableManager
                 initialBalance: initialBalance,
                 includeInTotal: includeInTotal,
                 currency: currency,
+                billingDay: billingDay,
+                repaymentDay: repaymentDay,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 deviceId: deviceId,
@@ -5917,6 +6656,8 @@ class $$AccountTableTableTableManager
                 Value<double?> initialBalance = const Value.absent(),
                 Value<int?> includeInTotal = const Value.absent(),
                 Value<String?> currency = const Value.absent(),
+                Value<int?> billingDay = const Value.absent(),
+                Value<int?> repaymentDay = const Value.absent(),
                 required int updatedAt,
                 Value<int?> deletedAt = const Value.absent(),
                 required String deviceId,
@@ -5930,6 +6671,8 @@ class $$AccountTableTableTableManager
                 initialBalance: initialBalance,
                 includeInTotal: includeInTotal,
                 currency: currency,
+                billingDay: billingDay,
+                repaymentDay: repaymentDay,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
                 deviceId: deviceId,
@@ -6552,6 +7295,8 @@ typedef $$BudgetTableTableCreateCompanionBuilder =
       Value<String?> categoryId,
       required double amount,
       Value<int?> carryOver,
+      Value<double> carryBalance,
+      Value<int?> lastSettledAt,
       required int startDate,
       required int updatedAt,
       Value<int?> deletedAt,
@@ -6566,6 +7311,8 @@ typedef $$BudgetTableTableUpdateCompanionBuilder =
       Value<String?> categoryId,
       Value<double> amount,
       Value<int?> carryOver,
+      Value<double> carryBalance,
+      Value<int?> lastSettledAt,
       Value<int> startDate,
       Value<int> updatedAt,
       Value<int?> deletedAt,
@@ -6609,6 +7356,16 @@ class $$BudgetTableTableFilterComposer
 
   ColumnFilters<int> get carryOver => $composableBuilder(
     column: $table.carryOver,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get carryBalance => $composableBuilder(
+    column: $table.carryBalance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get lastSettledAt => $composableBuilder(
+    column: $table.lastSettledAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6672,6 +7429,16 @@ class $$BudgetTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get carryBalance => $composableBuilder(
+    column: $table.carryBalance,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get lastSettledAt => $composableBuilder(
+    column: $table.lastSettledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get startDate => $composableBuilder(
     column: $table.startDate,
     builder: (column) => ColumnOrderings(column),
@@ -6721,6 +7488,16 @@ class $$BudgetTableTableAnnotationComposer
 
   GeneratedColumn<int> get carryOver =>
       $composableBuilder(column: $table.carryOver, builder: (column) => column);
+
+  GeneratedColumn<double> get carryBalance => $composableBuilder(
+    column: $table.carryBalance,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get lastSettledAt => $composableBuilder(
+    column: $table.lastSettledAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get startDate =>
       $composableBuilder(column: $table.startDate, builder: (column) => column);
@@ -6772,6 +7549,8 @@ class $$BudgetTableTableTableManager
                 Value<String?> categoryId = const Value.absent(),
                 Value<double> amount = const Value.absent(),
                 Value<int?> carryOver = const Value.absent(),
+                Value<double> carryBalance = const Value.absent(),
+                Value<int?> lastSettledAt = const Value.absent(),
                 Value<int> startDate = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int?> deletedAt = const Value.absent(),
@@ -6784,6 +7563,8 @@ class $$BudgetTableTableTableManager
                 categoryId: categoryId,
                 amount: amount,
                 carryOver: carryOver,
+                carryBalance: carryBalance,
+                lastSettledAt: lastSettledAt,
                 startDate: startDate,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -6798,6 +7579,8 @@ class $$BudgetTableTableTableManager
                 Value<String?> categoryId = const Value.absent(),
                 required double amount,
                 Value<int?> carryOver = const Value.absent(),
+                Value<double> carryBalance = const Value.absent(),
+                Value<int?> lastSettledAt = const Value.absent(),
                 required int startDate,
                 required int updatedAt,
                 Value<int?> deletedAt = const Value.absent(),
@@ -6810,6 +7593,8 @@ class $$BudgetTableTableTableManager
                 categoryId: categoryId,
                 amount: amount,
                 carryOver: carryOver,
+                carryBalance: carryBalance,
+                lastSettledAt: lastSettledAt,
                 startDate: startDate,
                 updatedAt: updatedAt,
                 deletedAt: deletedAt,
@@ -7094,6 +7879,187 @@ typedef $$SyncOpTableTableProcessedTableManager =
       SyncOpEntry,
       PrefetchHooks Function()
     >;
+typedef $$FxRateTableTableCreateCompanionBuilder =
+    FxRateTableCompanion Function({
+      required String code,
+      required double rateToCny,
+      required int updatedAt,
+      Value<int> isManual,
+      Value<int> rowid,
+    });
+typedef $$FxRateTableTableUpdateCompanionBuilder =
+    FxRateTableCompanion Function({
+      Value<String> code,
+      Value<double> rateToCny,
+      Value<int> updatedAt,
+      Value<int> isManual,
+      Value<int> rowid,
+    });
+
+class $$FxRateTableTableFilterComposer
+    extends Composer<_$AppDatabase, $FxRateTableTable> {
+  $$FxRateTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get rateToCny => $composableBuilder(
+    column: $table.rateToCny,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get isManual => $composableBuilder(
+    column: $table.isManual,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FxRateTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $FxRateTableTable> {
+  $$FxRateTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get rateToCny => $composableBuilder(
+    column: $table.rateToCny,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get isManual => $composableBuilder(
+    column: $table.isManual,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FxRateTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FxRateTableTable> {
+  $$FxRateTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<double> get rateToCny =>
+      $composableBuilder(column: $table.rateToCny, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get isManual =>
+      $composableBuilder(column: $table.isManual, builder: (column) => column);
+}
+
+class $$FxRateTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FxRateTableTable,
+          FxRateEntry,
+          $$FxRateTableTableFilterComposer,
+          $$FxRateTableTableOrderingComposer,
+          $$FxRateTableTableAnnotationComposer,
+          $$FxRateTableTableCreateCompanionBuilder,
+          $$FxRateTableTableUpdateCompanionBuilder,
+          (
+            FxRateEntry,
+            BaseReferences<_$AppDatabase, $FxRateTableTable, FxRateEntry>,
+          ),
+          FxRateEntry,
+          PrefetchHooks Function()
+        > {
+  $$FxRateTableTableTableManager(_$AppDatabase db, $FxRateTableTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FxRateTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FxRateTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FxRateTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> code = const Value.absent(),
+                Value<double> rateToCny = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int> isManual = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FxRateTableCompanion(
+                code: code,
+                rateToCny: rateToCny,
+                updatedAt: updatedAt,
+                isManual: isManual,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String code,
+                required double rateToCny,
+                required int updatedAt,
+                Value<int> isManual = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FxRateTableCompanion.insert(
+                code: code,
+                rateToCny: rateToCny,
+                updatedAt: updatedAt,
+                isManual: isManual,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FxRateTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FxRateTableTable,
+      FxRateEntry,
+      $$FxRateTableTableFilterComposer,
+      $$FxRateTableTableOrderingComposer,
+      $$FxRateTableTableAnnotationComposer,
+      $$FxRateTableTableCreateCompanionBuilder,
+      $$FxRateTableTableUpdateCompanionBuilder,
+      (
+        FxRateEntry,
+        BaseReferences<_$AppDatabase, $FxRateTableTable, FxRateEntry>,
+      ),
+      FxRateEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7112,4 +8078,6 @@ class $AppDatabaseManager {
       $$BudgetTableTableTableManager(_db, _db.budgetTable);
   $$SyncOpTableTableTableManager get syncOpTable =>
       $$SyncOpTableTableTableManager(_db, _db.syncOpTable);
+  $$FxRateTableTableTableManager get fxRateTable =>
+      $$FxRateTableTableTableManager(_db, _db.fxRateTable);
 }

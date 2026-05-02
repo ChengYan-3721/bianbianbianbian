@@ -8,7 +8,7 @@
 
 ---
 
-## 当前文件一览（Phase 4 · Step 4.1 账本列表后）
+## 当前文件一览（Phase 8 · Step 8.3 汇率自动刷新与手动覆盖后）
 
 ```
 bianbianbianbian/
@@ -16,21 +16,22 @@ bianbianbianbian/
 │  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider）+ 错误兜底
 │  ├─ app/
 │  │  ├─ app.dart               BianBianApp 根组件（MaterialApp.router）
-│  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage）
+│  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, …, /settings/multi-currency → MultiCurrencyPage）
 │  │  ├─ app_theme.dart         appTheme + BianBianSemanticColors ThemeExtension
-│  │  └─ home_shell.dart        底部 4 Tab 骨架页（Step 4.1：记账=RecordHomePage / 账本=LedgerListPage）
+│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 8.1：我的 Tab 加"多币种"入口）
 │  ├─ core/
 │  │  ├─ crypto/
 │  │  │  └─ bianbian_crypto.dart  BianbianCrypto（PBKDF2 + AES-256-GCM）+ DecryptionFailure
 │  │  ├─ network/               [空] Supabase 客户端工厂（双模）
-│  │  └─ util/                  [空] 通用工具（如 QuickTextParser）
+│  │  └─ util/
+│  │     └─ currencies.dart     Currency 数据类 + kBuiltInCurrencies (11 种) + kFxRateSnapshot 写死快照（Step 8.1）
 │  ├─ data/
 │  │  ├─ local/
-│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=3；v2->v3 重建 category）
+│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=6；含 v3 重建 category / v4 budget 结转 / v5 信用卡日 / v6 多币种 + fx_rate）
 │  │  │  ├─ app_database.g.dart       build_runner 产物
 │  │  │  ├─ db_cipher_key_store.dart  本地 DB 加密密钥的生成/持久化
 │  │  │  ├─ device_id_store.dart      device_id 加载器（secure ↔ user_pref 双向同步）
-│  │  │  ├─ seeder.dart               DefaultSeeder（首次启动默认数据种子化）
+│  │  │  ├─ seeder.dart               DefaultSeeder（首次启动默认数据种子化 + Step 8.1 fx_rate 独立判空）
 │  │  │  ├─ providers.dart            @Riverpod appDatabase / deviceId / defaultSeed 三个 provider
 │  │  │  ├─ providers.g.dart          riverpod_generator 产物
 │  │  │  ├─ dao/
@@ -39,15 +40,17 @@ bianbianbianbian/
 │  │  │  │  ├─ account_dao.dart             AccountDao + .g.dart（Step 1.4）
 │  │  │  │  ├─ transaction_entry_dao.dart   TransactionEntryDao + .g.dart（Step 1.4）
 │  │  │  │  ├─ budget_dao.dart              BudgetDao + .g.dart（Step 1.4）
-│  │  │  │  └─ sync_op_dao.dart             SyncOpDao + .g.dart（Step 2.2，供仓库层写队列）
+│  │  │  │  ├─ sync_op_dao.dart             SyncOpDao + .g.dart（Step 2.2，供仓库层写队列）
+│  │  │  │  └─ fx_rate_dao.dart             FxRateDao + .g.dart（Step 8.1，工具表 listAll/getByCode/upsert）
 │  │  │  └─ tables/
-│  │  │     ├─ user_pref_table.dart         §7.1 user_pref 表定义
+│  │  │     ├─ user_pref_table.dart         §7.1 user_pref 表（Step 8.1 追加 multi_currency_enabled）
 │  │  │     ├─ ledger_table.dart            §7.1 ledger 表
 │  │  │     ├─ category_table.dart          重构版 category 表（parent_key/is_favorite，全局二级分类）
-│  │  │     ├─ account_table.dart           §7.1 account 表
+│  │  │     ├─ account_table.dart           §7.1 account 表（Step 7.3 追加 billing_day / repayment_day）
 │  │  │     ├─ transaction_entry_table.dart §7.1 transaction_entry 表（FK→ledger）
 │  │  │     ├─ budget_table.dart            §7.1 budget 表
-│  │  │     └─ sync_op_table.dart           §7.1 sync_op 队列表（AUTOINCREMENT id）
+│  │  │     ├─ sync_op_table.dart           §7.1 sync_op 队列表（AUTOINCREMENT id）
+│  │  │     └─ fx_rate_table.dart           Step 8.1 工具表（code PK / rate_to_cny REAL / updated_at INTEGER）
 │  │  ├─ remote/                [空] Supabase DataSource
 │  │  └─ repository/             Step 2.2 已填充：entity_mappers + repo_clock + 5 个仓库
 │  │     ├─ repo_clock.dart             RepoClock typedef（仓库层时间注入点）
@@ -77,19 +80,36 @@ bianbianbianbian/
 │     │  ├─ record_new_providers.g.dart riverpod_generator 产物
 │     │  └─ widgets/
 │     │     └─ number_keyboard.dart     NumberKeyboard（4行自定义键盘：7/8/9/⌫，4/5/6/+，1/2/3/-，CNY/0/./✓或=）
-│     ├─ stats/                 [空] 统计
+│     ├─ stats/                 Step 5.6 已填充：统计区间选择器 + 折线图 + 分类饼图 + 收支排行榜 + 日历热力图 + 导出 PNG/CSV
+│     │  ├─ stats_page.dart            StatsPage（区间选择 + 4 类图表 + 顶栏导出按钮 + RepaintBoundary 包裹图表区）
+│     │  ├─ stats_range_providers.dart StatsRangePreset/StatsDateRange/StatsRangeState + 4 类统计聚合 provider
+│     │  ├─ stats_range_providers.g.dart riverpod_generator 产物
+│     │  └─ stats_export_service.dart  encodeStatsCsv（@visibleForTesting）+ buildExportFileName + StatsExportService（PNG/CSV/Share）
 │     ├─ ledger/                Step 4.1 已填充：正式账本列表页
 │     │  ├─ ledger_list_page.dart       LedgerListPage（账本卡片列表 + 切换 + 归档折叠区）
 │     │  ├─ ledger_list_page.g.dart     riverpod_generator 产物
 │     │  ├─ ledger_providers.dart       LedgerTxCounts AsyncNotifier（各账本流水条数）
 │     │  └─ ledger_providers.g.dart     riverpod_generator 产物
-│     ├─ budget/                [空] 预算
-│     ├─ account/               [空] 资产账户
+│     ├─ budget/                Step 6.1 列表/编辑；Step 6.2 进度计算 + 颜色 + 震动
+│     │  ├─ budget_progress.dart        BudgetProgress / Level + computeBudgetProgress / computePeriodSpent / budgetPeriodRange / shouldTriggerBudgetVibration
+│     │  ├─ budget_providers.dart       activeBudgets / budgetableCategories + kParentKeyLabels + budgetClock + budgetProgressFor + BudgetVibrationSession
+│     │  ├─ budget_providers.g.dart     riverpod_generator 产物
+│     │  ├─ budget_list_page.dart       BudgetListPage（卡片列表 + 进度条/颜色/震动 + 新建 FAB + 删除二次确认）
+│     │  └─ budget_edit_page.dart       BudgetEditPage（周期/分类/金额/结转，冲突 Snackbar）
+│     ├─ account/               Step 7.1 列表；Step 7.2 CRUD（新建/编辑/软删）
+│     │  ├─ account_balance.dart        AccountBalance + aggregateNetAmountsByAccount / computeAccountBalances / computeTotalAssets 纯函数
+│     │  ├─ account_providers.dart      accountsList / accountBalances / totalAssets 三个 @riverpod FutureProvider
+│     │  ├─ account_providers.g.dart    riverpod_generator 产物
+│     │  ├─ account_list_page.dart      AccountListPage（总资产卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单）
+│     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/初始余额/币种/计入总资产，新建+编辑双模式）
 │     ├─ sync/                  [空] 同步 UI + 状态
 │     ├─ trash/                 [空] 垃圾桶
 │     ├─ lock/                  [空] 应用锁
 │     ├─ import_export/         [空] 导入导出
-│     └─ settings/              [空] 设置
+│     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider
+│        ├─ settings_providers.dart      MultiCurrencyEnabled + currentLedgerDefaultCurrency + fxRates + computeFxRate
+│        ├─ settings_providers.g.dart    riverpod_generator 产物
+│        └─ multi_currency_page.dart     MultiCurrencyPage（开关 SwitchListTile + 内置币种概览 + 汇率管理占位）
 ├─ android/app/build.gradle.kts Android 构建脚本（core library desugaring + minSdk 23）
 ├─ test/
 │  ├─ core/
@@ -102,18 +122,33 @@ bianbianbianbian/
 │  │     ├─ dao_test.dart                    5 个 DAO × 4 类方法（5 用例，Step 1.4）
 │  │     ├─ device_id_store_test.dart        device_id 加载器的 4 条分支（5 用例，Step 1.5）
 │  │     ├─ seeder_test.dart                 默认数据种子化的 3 条路径（3 用例，Step 1.7）
-│  │     └─ db_cipher_key_store_test.dart    密钥生成/持久化（4 用例）
+│  │     ├─ db_cipher_key_store_test.dart    密钥生成/持久化（4 用例）
+│  │     └─ fx_rate_test.dart                FxRateDao + seeder fx_rate 路径 + 内置币种常量（11 用例，Step 8.1）
 │  ├─ data/
 │  │  └─ repository/
-│  │     └─ transaction_repository_test.dart TransactionRepository 4 条用例（Step 2.2）
+│  │     ├─ transaction_repository_test.dart TransactionRepository 4 条用例（Step 2.2）
+│  │     ├─ account_repository_test.dart     AccountRepository CRUD + getById 兜底（7 用例，Step 7.2）
+│  │     └─ budget_repository_test.dart      BudgetRepository 唯一性 + 软删后重建（8 用例，Step 6.1）
 │  ├─ domain/
 │  │  └─ entity/
 │  │     └─ entities_test.dart               5 个实体 roundtrip/copyWith + drift 隔离（17 用例，Step 2.1）
 │  ├─ features/
-│  │  └─ record/
-│  │     ├─ record_new_providers_test.dart  RecordForm Notifier 单元测试（含 Step 3.5 附件序列化断言）
-│  │     └─ record_new_page_test.dart        RecordNewPage widget 测试（含 Step 3.5 附件 UI 回归）
-│  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表覆盖 5 用例）
+│  │  ├─ record/
+│  │  │  ├─ record_new_providers_test.dart   RecordForm Notifier 单元测试（含 Step 3.5 附件序列化、Step 8.2 setCurrency/fxRate 写入断言）
+│  │  │  └─ record_new_page_test.dart        RecordNewPage widget 测试（含 Step 3.5 附件 UI、Step 8.2 币种下拉与 fxRate 保存）
+│  │  │  └─ record_home_page_format_test.dart formatTxAmountForDetail 纯函数（6 用例，Step 8.2）
+│  │  └─ stats/
+│  │     ├─ stats_range_providers_test.dart  统计区间/饼图/排行/热力图聚合测试（Step 5.1~5.5）
+│  │     └─ stats_export_service_test.dart   CSV 编码 + 文件名规则测试（Step 5.6）
+│  ├─ features/budget/
+│  │  ├─ budget_progress_test.dart           computeBudgetProgress 边界 + computePeriodSpent + shouldTriggerBudgetVibration（16 用例，Step 6.2）
+│  │  └─ budget_vibration_session_test.dart  BudgetVibrationSession Notifier 幂等/独立标记/clear（5 用例，Step 6.2）
+│  ├─ features/account/
+│  │  └─ account_balance_test.dart           aggregateNetAmountsByAccount + computeAccountBalances + computeTotalAssets 纯函数边界（16 用例，Step 7.1）
+│  ├─ features/settings/
+│  │  └─ multi_currency_page_test.dart       MultiCurrencyPage 开关行为 + 内置币种行 + 汇率管理 disabled（5 用例，Step 8.1）
+│  │  └─ fx_rate_compute_test.dart           computeFxRate 同币种/跨币种/兜底（8 用例，Step 8.2）
+│  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例）
 ├─ memory-bank/
 │  ├─ design-document.md        产品设计（权威来源）
 │  ├─ implementation-plan.md    分阶段实施计划
@@ -145,9 +180,9 @@ bianbianbianbian/
   - `BianBianSemanticColors`：`ThemeExtension`，承载抹茶绿 / 蜜橘 / 苹果红三色（对应成功/警告/错误语义）。故意不塞进 `ColorScheme`，避免 Material 组件错把这些当作 `colorScheme.error` 使用。读取方式：`Theme.of(context).extension<BianBianSemanticColors>()!`。
 - **`home_shell.dart`**：`HomeShell`（StatefulWidget）。`BottomNavigationBar` 4 Tab：记账 / 统计 / 账本 / 我的。使用**本地 index**（`setState`）管理当前 Tab。各 Tab body：
   - 记账（index=0）：`RecordHomePage`（Step 3.1 接入，ConsumerWidget，独立 Scaffold + FAB）。
-  - 统计（index=1）：占位大标题；Phase 5 填充。
+  - 统计（index=1）：`StatsPage`（Step 5.1 接入，时间区间选择器 + 区间展示）。
   - 账本（index=2）：`LedgerListPage`（Step 4.1 接入，ConsumerWidget，正式卡片列表 + 点击切换）。
-  - 我的（index=3）：占位大标题；Phase 17 填充。
+  - 我的（index=3）：`_MeTab`（Step 6.1 接入，文件内私有 StatelessWidget）。当前仅承载"预算"入口（`Icons.savings_outlined` → `context.push('/budget')`）；Phase 17 会扩展为完整设置页（同步 / 主题 / 导入导出 / 应用锁等）。
   - 若未来某 Tab 要求"深链 + 各自独立历史栈"，迁移到 `StatefulShellRoute.indexedStack`。
 
 ### `lib/core/`
@@ -162,13 +197,15 @@ bianbianbianbian/
 数据访问层，按"数据源"分三个子目录：
 - **`local/`**：drift 数据库定义与 DAO。Step 1.1（user_pref 表）、Step 1.2（SQLCipher + 密钥）、Step 1.3（其余 6 张业务表 + v1→v2 migration）已落地；Step 1.4（5 个 DAO 分层）已落地；并在 Phase 3 对 `category` 做了 v3 不兼容重构（全局二级分类）。
   - **`app_database.dart`**：`AppDatabase extends _$AppDatabase`，`@DriftDatabase(tables: [UserPrefTable, LedgerTable, CategoryTable, AccountTable, TransactionEntryTable, BudgetTable, SyncOpTable], daos: [LedgerDao, CategoryDao, AccountDao, TransactionEntryDao, BudgetDao])`。生产构造 `AppDatabase()` → `_openEncrypted()`：① 先在主 isolate 跑 `applyWorkaroundToOpenSqlCipherOnOldAndroidVersions()`；② 从 `DbCipherKeyStore().loadOrCreate()` 取 hex 密钥；③ `NativeDatabase.createInBackground(file, isolateSetup: ..., setup: ...)`——`isolateSetup` 在后台 isolate 再跑一次 Android workaround，`setup` 里执行 `PRAGMA key = "x'<hex>'"` 并用 `PRAGMA cipher_version` 断言 SQLCipher 真的加载（未加载即 `StateError`，防止"看似加密实则明文落盘"）。测试构造 `AppDatabase.forTesting(NativeDatabase.memory())` 不变。顶层 `export 'package:drift/drift.dart' show Value;`。DAO 作为 `late final xxxDao = XxxDao(this as AppDatabase)` 字段由 drift_dev 生成在 `app_database.g.dart`——调用方通过 `db.ledgerDao` / `db.categoryDao` / `db.accountDao` / `db.transactionEntryDao` / `db.budgetDao` 访问。
-    - **`schemaVersion = 3`（Phase 3 分类重构）**：
+    - **`schemaVersion = 5`（Phase 7 Step 7.3）**：
       - v1：`user_pref`
       - v2：新增 `ledger/category/account/transaction_entry/budget/sync_op` + transaction 索引
       - v3：`category` 改为“全局二级分类”模型（`parent_key` + `is_favorite`，移除 `ledger_id` + `type`）
+      - v4：`budget` 追加 `carry_balance` / `last_settled_at`（预算结转）
+      - v5：`account` 追加 `billing_day` / `repayment_day`（信用卡专属，1-28，仅展示）
     - **`MigrationStrategy`**：
       - `onCreate`：`m.createAll()` + `_createTransactionIndexes()`
-      - `onUpgrade`：`from < 2` 时创建 v2 业务表；`from < 3` 时按产品要求**不兼容旧分类结构**，执行 `deleteTable('category')` 后 `createTable(categoryTable)` 重建。
+      - `onUpgrade`：`from < 2` 时创建 v2 业务表；`from < 3` 时按产品要求**不兼容旧分类结构**，执行 `deleteTable('category')` 后 `createTable(categoryTable)` 重建；`from < 4` 时给 `budget` `addColumn` 两列；`from < 5` 时给 `account` `addColumn` 两列。
   - **`db_cipher_key_store.dart`**：`DbCipherKeyStore` + `SecureKeyValueStore` 抽象接口 + `FlutterSecureKeyValueStore` 生产实现。`loadOrCreate()`：已有合法 hex（64 字符小写）→ 读回；否则用注入的 `Random`（默认 `Random.secure()`）生成 32 字节，hex 编码写入 `flutter_secure_storage` 条目 `local_db_cipher_key`。密钥以 hex 串保存、以 `PRAGMA key = "x'<hex>'"` 注入，跳过 SQLCipher 自带 PBKDF2。**该密钥仅保护本机 `bbb.db`，与 Phase 11 的用户同步密码派生密钥完全无关**。
   - **`device_id_store.dart`**（Step 1.5）：`LocalDeviceIdStore` + `UuidFactory` 类型别名。`loadOrCreate()` 按「`flutter_secure_storage` → `user_pref.device_id` → 新生成」优先级解析 device_id，并把最终值**同步写回另一侧**（"冗余防丢"）。密钥名 `local_device_id`（静态常量 `storageKey`）独立于 `DbCipherKeyStore.storageKey`——前者可被同步恢复，后者丢失即本机 DB 永久不可读，两者命名空间故意分开。UUID 合法性走宽松正则（8-4-4-4-12 hex、不校验 v4 version/variant 位），允许从老库恢复任意合法 UUID。`_ensureUserPref` **故意不用 `insertOnConflictUpdate`**——user_pref 的 `CHECK(id=1)` 约束在 SQLite UPSERT 的 DO UPDATE 路径会被二次评估并误报失败，改为显式 select-then-insert/update（DAO 层普通表不受此影响，原因是它们没有 id CHECK）。依赖注入点：`SecureKeyValueStore`（生产 `FlutterSecureKeyValueStore`、测试 in-memory）+ `UuidFactory`（默认 `const Uuid().v4()`、测试返回固定字面量）。
   - **`seeder.dart`**（Step 1.7）：`DefaultSeeder` + `SeedClock` / `SeedUuidFactory` 类型别名。`seedIfEmpty()` 在单事务内判断 `ledger` 表是否空——非空整体跳过；空则插入 1 账本（📒 生活）+ 28 分类（18 支出 + 10 收入）+ 5 账户（现金 / 工商银行卡 / 招商信用卡 / 支付宝 / 微信）。默认列表作为 `static const List<(...)> expenseCategories / incomeCategories / defaultAccounts` 暴露给测试与后续 UI（Step 3.2 记账页分类网格直接消费）。颜色走 `palette` 6 色（design-document §10.2 奶油兔色板）的 `i % 6` 循环。**不向 `sync_op` 写条目**——Phase 10 再决定种子数据与首次同步的交互规则，避免两台设备各自种子导致"两套默认数据重复上云"。
@@ -184,7 +221,7 @@ bianbianbianbian/
     - 一级分类不落库，仅由 `parent_key` 归属（如 `income/food/shopping/...`）；
     - 二级分类通过 `is_favorite` 标记收藏（全局共享）；
     - 已移除 `ledger_id` 与 `type`，并通过 `parent_key` 约束保证值域合法。
-  - **`tables/account_table.dart`**（Step 1.3）：`AccountTable` + `@DataClassName('AccountEntry')`。`type` ∈ `cash` / `debit` / `credit` / `third_party` / `other`；`initial_balance` REAL 默认 0（信用卡可为负）；`include_in_total` 默认 1；`currency` 默认 `'CNY'`。账户不绑定账本——全局资源。
+  - **`tables/account_table.dart`**（Step 1.3 / Step 7.3）：`AccountTable` + `@DataClassName('AccountEntry')`。`type` ∈ `cash` / `debit` / `credit` / `third_party` / `other`；`initial_balance` REAL 默认 0（信用卡可为负）；`include_in_total` 默认 1；`currency` 默认 `'CNY'`。账户不绑定账本——全局资源。**Step 7.3** 追加两列 `billing_day INTEGER` / `repayment_day INTEGER`（均 nullable，UI 校验取值 1-28），仅信用卡使用，仅展示用、不生成提醒。
   - **`tables/transaction_entry_table.dart`**（Step 1.3）：`TransactionEntryTable` + `@DataClassName('TransactionEntryRow')`——**刻意不叫 `TransactionEntry`**，让位给 Step 2.1 的领域实体同名。`ledger_id` 声 FK，`amount` / `currency` / `occurred_at` NOT NULL，`fx_rate` 默认 1.0，`note_encrypted` / `attachments_encrypted` 为 BLOB（Phase 11 装密文，Phase 3 先明文/JSON）。两索引 `idx_tx_ledger_time (ledger_id, occurred_at DESC)` 与 `idx_tx_updated (updated_at)` 在 `MigrationStrategy` 里用 `customStatement` 建。
   - **`tables/budget_table.dart`**（Step 1.3）：`BudgetTable` + `@DataClassName('BudgetEntry')`。`period` ∈ `monthly` / `yearly`；`category_id = NULL` 表示"总预算"（该账本该周期的总盘子）；`carry_over` 默认 0（Phase 6 Step 6.4 才真正使用）。
   - **`tables/sync_op_table.dart`**（Step 1.3）：`SyncOpTable` + `@DataClassName('SyncOpEntry')`——本机出站同步队列。`id` 用 `integer().autoIncrement()`（隐式主键，**不**再覆写 `primaryKey`；重复覆写会触发 drift_dev 的 `primary_key_and_auto_increment` 报错）。无 `updated_at` / `deleted_at` / `device_id` 三件套——这是队列而非实体，push 成功就物理删除条目。
@@ -203,9 +240,9 @@ bianbianbianbian/
   - **5 个仓库**（一个抽象接口 + 一个 `LocalXxxRepository` 实现）：
     - `ledger_repository.dart`：`listActive()` / `save(Ledger)` / `softDeleteById(id)`
     - `category_repository.dart`：`listActiveByParentKey(parentKey)` / `listFavorites()` / `listActiveAll()` / `save(Category)` / `toggleFavorite(id, isFavorite)` / `softDeleteById(id)`
-    - `account_repository.dart`：`listActive()` / `save(Account)` / `softDeleteById(id)`
+    - `account_repository.dart`：`listActive()` / `getById(id)` / `save(Account)` / `softDeleteById(id)`。**Step 7.2 新增 `getById`**：**不**过滤 `deleted_at`，软删账户也能查到——这是流水详情显示"（已删账户）"占位的实现路径（参见 `_TxTile.accountName`）。
     - `transaction_repository.dart`：`listActiveByLedger(ledgerId)` / `save(TransactionEntry)` / `softDeleteById(id)`
-    - `budget_repository.dart`：`listActiveByLedger(ledgerId)` / `save(Budget)` / `softDeleteById(id)`
+    - `budget_repository.dart`：`listActiveByLedger(ledgerId)` / `save(Budget)` / `softDeleteById(id)`。**Step 6.1 强化**：`save()` 内额外查 `(ledgerId, period, categoryId)` 是否有未软删的同键预算（`categoryId == null` 与非空分别走 `isNull` / `equals`）；命中即抛 `BudgetConflictException`（同文件公开类，`Exception` 而非 `Error`）。允许"同 id 视为更新"（excludeId 排除自身）；软删后释放唯一性锁，可重建。
   - 所有仓库的 `LocalXxxRepository` 构造参数统一为 `(db, deviceId, {clock})`，内部持有 `AppDatabase` + 对应 DAO + `SyncOpDao`。
   - **共同职责**：
     1. `save`：覆写 `updated_at`（clock）+ `device_id`（构造参数），单事务内 `dao.upsert` + `syncOpDao.enqueue('upsert')`。返回已被 repo 覆写的实体快照。
@@ -229,6 +266,54 @@ bianbianbianbian/
 
 ### `lib/features/`
 UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能。
+
+- **`budget/`**（Step 6.1 列表/编辑；Step 6.2 进度计算 + 颜色 + 震动）：
+  - **`budget_progress.dart`**（Step 6.2 新增）：纯 Dart 工具集，不依赖 Flutter / Riverpod。
+    - `BudgetProgressLevel { green, orange, red }`、`BudgetProgress(spent, limit, ratio, level)`。
+    - `computeBudgetProgress({spent, limit})`：色档纯函数。`<70%` 绿、`70%~100%`（含两端）橙、`>100%` 红；`limit <= 0` 直接返回 ratio=0 / level=green，避免误震动。
+    - `budgetPeriodRange(period, now)`：返回半开区间 `[start, end)`。`monthly` = now 所在自然月，`yearly` = now 所在自然年。Step 6.4 接入结转后会改造为以 `Budget.startDate` 起算。
+    - `computePeriodSpent({budget, transactions, now})`：按上述区间过滤 + `type == 'expense'` + `categoryId 匹配（总预算不限）` + `deletedAt == null` 累加金额。
+    - `shouldTriggerBudgetVibration({level, alreadyVibrated})`：把"是否触发震动"的决策抽出为纯函数，`HapticFeedback` 留给 UI 调用方，便于单测覆盖"仅首次"语义。
+  - **`budget_providers.dart`**：
+    - `kParentKeyLabels`：一级分类 key → 中文标签的常量映射（与 `seeder.dart` 的 `categoriesByParent.keys` 同集合，仅是展示层翻译）。
+    - `activeBudgets(Ref)`（`@riverpod FutureProvider`）：当前账本的活跃预算列表，客户端排序——先按 `period` 月→年、再按 `categoryId == null` 的总预算优先。依赖 `currentLedgerIdProvider` + `budgetRepositoryProvider`。
+    - `budgetableCategories(Ref)`（`@riverpod FutureProvider`）：从 `categoryRepositoryProvider.listActiveAll()` 中过滤掉 `parentKey == 'income'` 的分类——预算只针对支出。依赖 `categoryRepositoryProvider`。
+    - `BudgetClock` typedef + `budgetClock(Ref)` provider（`keepAlive`）：默认 `DateTime.now`；测试覆盖以锁定参考时间，避免周期边界 flaky。
+    - `budgetProgressFor(Ref, Budget)`（`@riverpod FutureProvider.family`）：拉当前账本流水 → `computePeriodSpent` → `computeBudgetProgress`。Family key = Budget 实体，因此预算金额变更会产生新的 cache entry，旧 entry 由 autoDispose 回收；Riverpod 用 `Budget.hashCode` / `==`，所以实体的 `==` 实现必须包含所有相关字段（已有）。
+    - `BudgetVibrationSession`（`@Riverpod(keepAlive: true) class`）：状态为 `Set<String>`（已震动的预算 id 集合）。`hasVibrated(id)` / `markVibrated(id)`（幂等：重复 mark 不重建 state，避免无谓 rebuild）/ `clear(id)`。冷启动后自然清空——这就是"会话级"语义，符合 implementation-plan 的"session 标记"约束。
+  - **`budget_list_page.dart`**：`BudgetListPage`（ConsumerWidget）。
+    - `Scaffold` + `FloatingActionButton.extended('新建预算')` → `context.push('/budget/edit')`，返回 `true` 时 `invalidate(activeBudgetsProvider)` 刷新。
+    - 内嵌 `_BudgetCard`（Step 6.2 升级为 `ConsumerWidget`）：左侧分类 emoji（总预算用 💰）+ 中部"标题（分类名 / 总预算）+ 周期/结转副标题"+ 右侧金额 + 删除按钮；下方追加 `_ProgressSection`（订阅 `budgetProgressForProvider(budget)`）。
+    - **`_ProgressSection`**（ConsumerWidget）：渲染彩色 `LinearProgressIndicator`（color 来自 `BianBianSemanticColors`：green=success / orange=warning / red=danger，进度条 value 用 `ratio.clamp(0, 1)` 防止溢出）+ 一行"已花 ¥X / ¥Y · 百分比"。当 `shouldTriggerBudgetVibration(level, alreadyVibrated)` 为真时，**整段** `markVibrated + HapticFeedback.heavyImpact()` 都放进 `WidgetsBinding.addPostFrameCallback`——build 期间修改 provider state 会触发 Riverpod 的 "Tried to modify a provider while the widget tree was building" 断言。回调内再做一次 `hasVibrated` 检查，保证同帧多次 build 注册多个 postFrame 时只执行一次。
+    - 空状态：`_EmptyState`（💰 图标 + "还没有预算"+"点右下角加一个吧 🐰"）。
+    - 空状态：`_EmptyState`（💰 图标 + "还没有预算"+"点右下角加一个吧 🐰"）。
+  - **`budget_edit_page.dart`**：`BudgetEditPage`（ConsumerStatefulWidget，`budgetId` 可选——传入即编辑，否则新建）。
+    - `_loadBudget()` 编辑模式下从 `repo.listActiveByLedger` 中按 id 提取（不存在抛 `StateError`）；`_hydrate(...)` 仅在第一次 build 时把字段写入表单 controller / `_period` / `_categoryId` / `_carryOver`，避免 setState 循环覆盖输入。
+    - 表单组件：周期 `SegmentedButton<String>('monthly'/'yearly')`、分类 `DropdownButtonFormField<String?>`（首项"总预算（不限分类）"对应 `null`，其余按 `(parentKey 中文 + sortOrder)` 排序）、金额 `TextFormField`（`numberWithOptions(decimal: true)` + 正则限制最多两位小数）、结转 `SwitchListTile`（subtitle 注明"Step 6.4 实装"）。
+    - 保存逻辑：新建走 `const Uuid().v4()` + `startDate` 取本月/本年第一天；编辑走"裸构造 Budget"（`copyWith` 不能把 `categoryId` 清回 null，如果用户从分类预算切回总预算会失败）。捕获 `BudgetConflictException` 走 SnackBar；其他异常走通用"保存失败：$e"。
+    - 路由 `/budget` / `/budget/edit?id=...` 在 `app_router.dart` 注册。
+
+- **`stats/`**(Step 5.6 已填充)：
+  - **`stats_range_providers.dart`**：统计区间状态源 + 统计聚合纯函数/Provider。
+    - `StatsRangePreset`：`thisMonth / lastMonth / thisYear / custom`；
+    - `StatsDateRange`：`month(...)` / `year(...)` 边界构造 + `normalize(start, end)`（支持起止反序与跨年）；
+    - `StatsRangeState`：当前 preset + 生效区间；
+    - `StatsRange`（`@Riverpod(keepAlive: true)`）：`build()` 默认本月；`setPreset(...)` 切换本月/上月/本年；`setCustomRange(...)` 写入自定义区间。
+    - `StatsLinePoint` + `statsLinePointsProvider`：按日聚合收入/支出折线数据，排除 transfer。
+    - `StatsPieSlice` + `aggregatePieSlices(...)` + `statsPieSlicesProvider`：支出分类 Top 6 + 其他饼图聚合。
+    - `StatsRankItem` + `aggregateRankItems(...)` + `statsRankItemsProvider`：按分类金额生成收支排行榜，收入/支出各自计算百分比。
+    - `StatsHeatmapCell` + `quantileNormalize(...)` + `aggregateHeatmapCells(...)` + `statsHeatmapCellsProvider`：按日聚合支出热力图，并使用 90 分位归一化抑制极端值“冲白”其它日期。
+  - **`stats_page.dart`**：`StatsPage`（ConsumerStatefulWidget，Step 5.6 升级）。
+    - 顶部 4 个区间入口（本月/上月/本年/自定义）；
+    - 自定义区间用 `showDateRangePicker` 选择后写回 `statsRangeProvider`；
+    - 页面展示当前生效区间，作为 Step 5.2+ 图表的统一时间过滤来源；
+    - 当前卡片布局：收支折线图 / 分类饼图 / 收支排行榜 / 支出日历热力图，整体被 `RepaintBoundary(key: _chartsBoundaryKey)` + `Container(surface)` 包裹（避免截图透明）；
+    - 标题行右侧承载 `IconButton(Icons.ios_share)`，点击弹出 `showModalBottomSheet`（PNG / CSV 二选一），导出过程中显示 `CircularProgressIndicator`，错误通过 `ScaffoldMessenger` 提示；
+    - 热力图 `_HeatmapCard` 使用“周列 × 星期行”的滚动网格，cell 通过 `Tooltip` 展示“日期 + 支出金额”，颜色由 `BianBianSemanticColors.danger` 与 `surfaceContainerHighest` 插值得到。
+  - **`stats_export_service.dart`**（Step 5.6 新建）：
+    - `encodeStatsCsv({entries, categoryMap, accountMap, range})`（顶层 `@visibleForTesting` 纯函数）：UTF-8 BOM `\uFEFF` + 中文列头 `日期/类型/金额/币种/分类/账户/转入账户/备注` + RFC 4180 转义 + 按 `occurredAt` 升序 + 区间外丢弃 + 缺失字段空白。
+    - `buildExportFileName({prefix, extension, now, range})`（顶层 `@visibleForTesting` 纯函数）：`<prefix>_<startDate>_<endDate>_<timestamp>.<ext>`。
+    - `StatsExportService`：`exportCsv(...)` / `exportPng({boundary, range, pixelRatio = 3.0})` / `shareFile(File, {subject, text})` / `writeExportFile(filename, bytes)` / `capturePng(boundary, pixelRatio)`。`<documents>/exports/` 子目录写盘 + `share_plus.Share.shareXFiles` 分享。三个钩子可注入：`documentsDirProvider` / `shareXFiles` / `now`。
 
 - **`record/`**（Step 3.1 已填充，Step 3.2 已完成分类模型重构）：
   - **`record_providers.dart`**：
@@ -319,13 +404,27 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
 - 其余 4 个仓库（Ledger/Category/Account/Budget）的实现形式完全一致、复用同一套 `entity_mappers.dart` 映射函数——仅以 TransactionEntry 为代表做覆盖，避免 5×3=15 条高重复用例。
 
 ### `test/widget_test.dart`
-- HomeShell 骨架测试，共 4 用例（Step 2.3 重写）：
+- HomeShell 骨架测试，共 5 用例（Step 3.1 / Step 6.1 配合）：
   1. HomeShell renders all 4 bottom-nav tabs（Tab 名在 nav bar 各出现一次）。
   2. BottomNavigationBar background is cream yellow `#FFE9B0`。
   3. Tapping "统计" tab switches body text（body + nav bar 各一处"统计"）。
   4. 记账 Tab 通过 provider 显示当前账本名称：注入 `_FakeLedgerRepository` 返回"测试账本"，验证 `find.text('测试账本')` + Key 断言。
-- 所有测试通过 `ProviderScope(overrides: _standardOverrides())` 注入 `currentLedgerIdProvider`（固定字符串） + `ledgerRepositoryProvider`（`_FakeLedgerRepository` 实例），避免 `_RecordTabBody` 中的 `CircularProgressIndicator` 导致 `pumpAndSettle` 超时。
-- `_FakeLedgerRepository` 实现 `LedgerRepository` 接口：`getById` 返回固定 Ledger、`listActive` 返回单元素列表、`save`/`softDeleteById` 走 `fail()`。
+  5. 有 mock 数据时流水列表按天分组：注入两条 4 月流水，断言月份 header / 金额 / 数据卡片。
+- 所有测试通过 `ProviderScope(overrides: _standardOverrides())` 注入。Step 6.1 新增 `_FixedRecordMonth` Notifier 并 override `recordMonthProvider` 为 `DateTime(2026, 4)`——此前用例 4 / 5 硬编码 "2026年4月" / "4月25日"，跨月（如 2026-05-01 之后）跑会因 `RecordMonth.build()` 读 `DateTime.now()` 而 flaky；固定后测试与真实日期解耦。
+- `_FakeLedgerRepository` 实现 `LedgerRepository` 接口：`getById` 返回固定 Ledger、`listActive` 返回单元素列表，其余操作走 `fail()`。
+- `_FakeTransactionRepository` 实现 `TransactionRepository` 接口：`listActiveByLedger` 返回构造时传入的固定列表，其余走 `fail()`。
+
+### `test/data/repository/budget_repository_test.dart`
+- Step 6.1 落地的 8 个用例覆盖唯一性约束的所有边界：
+  1. 同账本 + 同周期 + 同分类（categoryId 非空）二次保存抛 `BudgetConflictException`。
+  2. 同账本 + 同周期 + `categoryId == null`（总预算）二次保存抛冲突——`isNull` 路径单独覆盖。
+  3. 同账本同周期不同分类可共存。
+  4. 总预算与分类预算同账本同周期可共存（一个 categoryId=null + 一个 categoryId 非空）。
+  5. 同分类不同周期（monthly / yearly）可共存。
+  6. 不同账本同周期同分类可共存。
+  7. 同 id 二次保存视为更新，`excludeId` 排除自身——不报冲突，金额从 1000 变 2000。
+  8. 软删除已存在预算后释放唯一性锁，允许重建（验证 `_findActiveDuplicate` 走 `deletedAt.isNull()` 过滤）。
+- 共享 setUp：`AppDatabase.forTesting(NativeDatabase.memory())` + 种子 `ledger-1` / `ledger-2`。`RepoClock` 注入固定 `1714000000000`。
 
 ### `pubspec.yaml`
 - 运行依赖（Step 0.3 集合经 Step 1.2 调整后）：
@@ -339,6 +438,7 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
   - 图表/SVG：`fl_chart ^1.2.0`、`flutter_svg ^2.2.4`
   - 平台能力：`local_auth ^3.0.1`、`flutter_local_notifications ^21.0.0`
   - 国际化/工具：`intl ^0.20.2`、`uuid ^4.5.3`、`flutter_localizations`（sdk）、`cupertino_icons ^1.0.8`
+  - 分享：`share_plus ^10.1.4`（Step 5.6 新增，用于统计页导出 PNG/CSV 后唤起系统 Share Sheet）
 - dev 依赖：`flutter_test`（sdk）、`flutter_lints ^6.0.0`、`build_runner ^2.4.13`、`drift_dev '>=2.22.0 <2.28.2'`、`riverpod_generator ^2.6.3`、`custom_lint ^0.7.4`、`riverpod_lint ^2.6.3`。
 - 版本整体略落后于 pub.dev 最新（如 `flutter_riverpod` 锁 2.x），是为了彼此 API 兼容；若要升级需作为独立一步。
 
@@ -406,9 +506,6 @@ features/*  →  domain/entity/*  →  data/repository/（抽象接口） →  d
   - `_NotePillButton` 由 `StatelessWidget` 调整为 `ConsumerWidget`，直接感知附件状态变化。
 - `test/features/record/record_new_providers_test.dart`：
   - 增加 Step 3.5 断言：保存时 `attachmentPaths` 会编码进 `attachmentsEncrypted`，并可按 JSON 数组还原。
-- 当前边界：
-  - 已完成 Step 3.5；
-  - Step 4.1 已于 2026-04-26 完成，账本列表正式上线。
 
 ## Phase 4 · Step 4.1 增量说明（2026-04-26）
 
@@ -438,10 +535,6 @@ features/*  →  domain/entity/*  →  data/repository/（抽象接口） →  d
 - 测试更新：
   - 新增 `_TestCurrentLedgerId extends CurrentLedgerId`（覆盖 `build()` 返回固定 id），用于 `AsyncNotifierProvider` override。
   - 三处测试文件（widget_test / record_new_providers_test / record_new_page_test）的 override 同步升级。
-
-- 当前边界：
-  - 已完成 Step 4.1；
-  - 按任务约束，在用户验证前不开始 Step 4.2。
 
 ## Phase 4 · Step 4.2 增量说明（2026-04-27）
 
@@ -485,6 +578,340 @@ features/*  →  domain/entity/*  →  data/repository/（抽象接口） →  d
   - `test/features/record/record_new_page_test.dart`：`_FakeLedgerRepository` 补 `setArchived`；`_FakeTransactionRepository` 补 `softDeleteByLedgerId`。
   - `test/features/record/record_new_providers_test.dart`：`_FakeTransactionRepository` 补 `softDeleteByLedgerId`。
 
-- 当前边界：
-  - 已完成 Step 4.2；
-  - 按任务约束，在用户验证前不开始 Step 4.3。
+## Phase 5 · Step 5.1 增量说明（2026-04-28）
+
+- `lib/features/stats/stats_range_providers.dart`（新建）：
+  - 新增 `StatsRangePreset`：`thisMonth / lastMonth / thisYear / custom`。
+  - 新增 `StatsDateRange`：封装统计时间区间，提供 `month(...)` / `year(...)` 构造与 `normalize(start, end)`（支持起止反序与跨年边界归一）。
+  - 新增 `StatsRangeState`：承载当前区间模式与生效区间。
+  - 新增 `StatsRange`（`@Riverpod(keepAlive: true)` Notifier）：
+    - `build()` 默认本月；
+    - `setPreset(...)` 切换本月/上月/本年；
+    - `setCustomRange(...)` 写入自定义时间区间。
+- `lib/features/stats/stats_page.dart`（新建）：
+  - 新增 `StatsPage`（`ConsumerWidget`）作为统计 Tab 页面。
+  - 顶部接入 4 个区间入口（本月/上月/本年/自定义）。
+  - 自定义区间通过 `showDateRangePicker` 选择并写回 `statsRangeProvider`。
+  - 增加当前生效区间展示条，为 Step 5.2+ 图表组件提供统一时间过滤来源。
+- `lib/app/home_shell.dart`：
+  - 统计 Tab（index=1）从占位 `_PlaceholderTab(label: '统计')` 替换为 `const StatsPage()`。
+- 测试更新：
+  - `test/features/stats/stats_range_providers_test.dart`（新建）：
+## Phase 5 · Step 5.3 增量说明（2026-04-28）
+
+- `lib/features/stats/stats_range_providers.dart`：
+  - 新增 `StatsPieSlice` 数据类：承载饼图单个切片的展示信息（`categoryId`/`categoryName`/`categoryColor`/`amount`/`percentage`），其中 `categoryId` 在"其他"切片中为 null。
+  - 新增 `aggregatePieSlices(List<TransactionEntry>, Map<String, Category>, DateTime, DateTime)` 纯函数：从流水列表中筛选支出类型、时间范围内的记录，按 `categoryId` 聚合金额，降序取 Top 6，其余归入"其他"切片。`Category.color` 为 hex 时解析为 `Color`，否则按索引从 `_piePalette` 6 色轮取色。
+  - 新增 `statsPieSlices`（`@Riverpod(keepAlive: true)` FutureProvider）：组合 `statsRangeProvider` + `currentLedgerIdProvider` + `transactionRepositoryProvider` + `categoryRepositoryProvider`，产出 `List<StatsPieSlice>`。
+  - 修复 `package:flutter/foundation.dart` 导入冲突：改为 `show visibleForTesting`，避免与 `domain/entity/category.dart` 的 `Category` 类型歧义。
+  - 新增 `_piePalette`（6 色奶油兔调色板常量）与 `_parseHexColor`（`#RRGGBB` → `Color` 解析器）。
+
+- `lib/features/stats/stats_page.dart`：
+  - `StatsPage` 统计卡片区重构为 `SingleChildScrollView` + `Column` 双卡片布局（折线图卡片 + 饼图卡片）。
+  - 新增 `_CategoryPieCard`（ConsumerWidget）：订阅 `statsPieSlicesProvider`，loading/error/data 三态渲染；数据为空时显示 `_PieChartEmptyState`（"暂无支出数据"）。
+  - 新增 `_PieChartView`（StatefulWidget）：`fl_chart` `PieChart`，支持触摸反馈（`_touchedIndex` 状态驱动选中切片放大 + 显示金额 badge），颜色直接使用 `StatsPieSlice.categoryColor`，切片标题文字颜色按背景亮度自动选择黑白。右侧搭配 `_LegendList`（圆点 + 分类名，`SingleChildScrollView` 兜底）。
+  - 新增 `_PieChartEmptyState`：与 `_LineChartEmptyState` 风格一致的占位组件。
+
+- `test/features/stats/stats_range_providers_test.dart`：
+  - 新增 `makeTx` / `makeCat` 本地辅助构造器。
+  - 新增 7 条 `aggregatePieSlices` 用例：空数据、排除 income/transfer、4 分类百分比和 = 100%、>6 分类 Top 6 + 其他、排除超时、使用分类自身颜色、无颜色回退调色板。
+
+- `test/widget_test.dart`：
+  - `_standardOverrides()` 新增 `statsLinePointsProvider` / `statsPieSlicesProvider` override（空列表），避免统计页 provider 未 mock 导致 widget 测试 `pumpAndSettle` 超时。
+
+## Phase 5 · Step 5.4 增量说明（2026-04-29）
+
+- `lib/features/stats/stats_range_providers.dart`：
+  - 新增 `StatsRankItem` 数据类：承载排行榜单行展示信息（`categoryId`/`categoryName`/`categoryColor`/`amount`/`percentage`/`isIncome`），其中 `categoryId` 在"未分类"场景中可能为 null。
+  - 新增 `_CategoryAgg` 内部聚合辅助类（`double amount = 0`）。
+  - 新增 `aggregateRankItems(List<TransactionEntry>, Map<String, Category>, DateTime, DateTime)` 纯函数：从流水列表中排除 transfer、按时间区间过滤、按 `type|categoryId` 复合键聚合金额，分别计算收入/支出各自的总和，产出按金额降序排列的 `List<StatsRankItem>`。百分比按各自类型（收入/支出）的总和计算。
+  - 新增 `statsRankItems`（`@Riverpod(keepAlive: true)` FutureProvider）：组合 `statsRangeProvider` + `currentLedgerIdProvider` + `transactionRepositoryProvider` + `categoryRepositoryProvider`，产出 `List<StatsRankItem>`。
+
+- `lib/features/stats/stats_page.dart`：
+  - `StatsPage` 统计卡片区新增排行榜卡片：`SizedBox(height: 360, child: _RankingCard())`。
+  - 新增 `_RankingCard`（ConsumerWidget）：订阅 `statsRankItemsProvider`，loading/error/data 三态渲染；数据为空时显示 `_RankingEmptyState`（"暂无排行数据"）。
+  - 新增 `_RankingList`（StatelessWidget）：`ListView.separated` 渲染排行榜。每行含排名序号（前 3 名用分类颜色高亮）、分类颜色圆点、分类名称、占比进度条（`FractionallySizedBox` 按 `amount/maxAmount` 比例填充）、金额（收入绿色 `+` 前缀、支出红色 `-` 前缀，颜色来自 `BianBianSemanticColors`）。
+  - 新增 `_RankingEmptyState`：与 `_LineChartEmptyState` / `_PieChartEmptyState` 风格一致的占位组件。
+
+- `test/features/stats/stats_range_providers_test.dart`：
+  - 新增 8 条 `aggregateRankItems` 用例：空数据、排除 transfer、同分类聚合、百分比计算、排除超时、使用分类颜色、回退调色板、混合收支正确分组与百分比。
+
+- `test/widget_test.dart`：
+  - `_standardOverrides()` 及第二个测试用例的 override 列表均新增 `statsRankItemsProvider.overrideWith((ref) async => [])`。
+
+## Phase 5 · Step 5.6 增量说明（2026-04-29）
+
+- `pubspec.yaml`：新增依赖 `share_plus: ^10.1.4`（实际解析到 10.1.4）。10.x 而非最新 13.x 是为了与现有 SDK / 依赖约束保持兼容；同时引入间接依赖 `share_plus_platform_interface 5.0.2` 与 `cross_file`（提供 `XFile`）。
+
+- `lib/features/stats/stats_export_service.dart`（新建）：
+  - `encodeStatsCsv({entries, categoryMap, accountMap, range})`（顶层 `@visibleForTesting` 纯函数）：UTF-8 BOM `\uFEFF` + 中文列头 `日期/类型/金额/币种/分类/账户/转入账户/备注` + RFC 4180 转义（值含 `,` / `"` / `\n` / `\r` 整体加引号、内部 `"` 转义为 `""`）+ 按 `occurredAt` 升序 + 区间外行丢弃 + categoryId/accountId 缺失时空字段。日期格式 `yyyy-MM-dd HH:mm`，金额 `0.00`，类型映射中文（`收入/支出/转账`）。
+  - `buildExportFileName({prefix, extension, now, range})`（顶层 `@visibleForTesting` 纯函数）：产出 `<prefix>_<startDate>_<endDate>_<timestamp>.<ext>`，时间戳格式 `yyyyMMdd_HHmmss`、区间格式 `yyyyMMdd`，避免 Windows 文件名非法字符。
+  - `StatsExportService` 类：注入 `documentsDirProvider`（默认 `getApplicationDocumentsDirectory`）/ `shareXFiles`（默认 `Share.shareXFiles`）/ `now`（默认 `DateTime.now`）三个钩子；公开 API：
+    - `writeExportFile(filename, bytes)`：在 `<documents>/exports/` 子目录下写文件，自动创建目录，`flush: true` 保证落盘后再返回 `File`。
+    - `exportCsv(...)` / `exportPng({boundary, range, pixelRatio = 3.0})`：组合 encode + 文件名 + 写盘。
+    - `capturePng(boundary, pixelRatio)`：`RenderRepaintBoundary.toImage(pixelRatio: 3.0)` 默认值满足验收"PNG 分辨率 ≥ 2x"；`image.dispose()` 在 finally 内确保 ImageBuffer 释放。
+    - `shareFile(File, {subject, text})`：薄封装 `share_plus.Share.shareXFiles([XFile(file.path)], ...)`。
+
+- `lib/features/stats/stats_page.dart`：
+  - `StatsPage` 由 `ConsumerWidget` 升级为 `ConsumerStatefulWidget`，持有 `_chartsBoundaryKey: GlobalKey` + `_exportService: StatsExportService` + `_exporting: bool`。
+  - 标题行重构为 `Row` 三段式：左占位 40px / 居中 `Text('统计分析')` / 右侧 40px 区域承载 `IconButton(Icons.ios_share, tooltip: '导出')`；导出中显示 `CircularProgressIndicator(strokeWidth: 2)`。
+  - 点击导出按钮 → `showModalBottomSheet<_ExportKind>` 选 PNG / CSV → `_exportPng()` 或 `_exportCsv()`；任意失败由 `try/catch` 通过 `ScaffoldMessenger` 提示「导出失败：$e」并在 finally 中复位 `_exporting`。
+  - PNG 路径：`_chartsBoundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?` → service.exportPng → service.shareFile。
+  - CSV 路径：`ref.read` 拉取 `currentLedgerIdProvider.future` / `transactionRepositoryProvider.future` / `categoryRepositoryProvider.future` / `accountRepositoryProvider.future`，组装 `categoryMap` / `accountMap` 后调用 service.exportCsv → service.shareFile。
+  - 图表区被 `RepaintBoundary(key: _chartsBoundaryKey, child: Container(color: surface, ...))` 包裹（`Container` 给 PNG 截图填充背景，避免透明区显示为黑/白色）。
+  - 顺手清理 Step 5.5 留下的预存 warning：`_HeatmapCard` 删除未消费的 `super.key` 形参。
+
+- `test/features/stats/stats_export_service_test.dart`（新建）：8 条用例——
+  - `encodeStatsCsv` × 6：UTF-8 BOM + 中文列头 / 行排序 + 字段格式 / transfer 行 toAccount 解析 / RFC 4180 转义（`,` / `"` / `\n`）/ 区间过滤 / 缺失映射时空字段。
+  - `buildExportFileName` × 2：含起止 + 时间戳 / 扩展名参数生效。
+  - 自带迷你 `LineSplitter`（识别 `\n` / `\r\n`）以避免外部 `dart:convert` import 噪声。
+
+- 验证摘要：`flutter analyze` → No issues found；`flutter test` → 126/126 通过（118 前 + 8 新）；`dart run custom_lint` → 3 条预存 INFO（`record_new_providers.dart`），与本步无关。
+
+## Phase 6 · Step 6.1 增量说明（2026-05-01）
+
+- `lib/data/repository/budget_repository.dart`：
+  - 新增 `BudgetConflictException`（`Exception`，含 `message`），用于业务可恢复的"重复预算"冲突。
+  - `LocalBudgetRepository.save()` 在事务内、`dao.upsert` 之前先调 `_findActiveDuplicate(...)`：按 `(ledgerId, period, categoryId)` 查未软删行（`categoryId == null` 走 `t.categoryId.isNull()`，否则 `t.categoryId.equals(...)`）；通过 `t.id.isNotIn([excludeId])` 排除自身，使"同 id 二次保存"仍是合法更新。
+  - 静态助手 `_periodLabel(period)` 把 `'monthly'` / `'yearly'` 映射为中文"月" / "年"，仅用于异常 message 的拼接，不外泄到 UI 文案。
+
+- `lib/features/budget/budget_providers.dart`（新建）：
+  - `kParentKeyLabels`：常量映射，键集与 `seeder.dart::categoriesByParent.keys` 同步。
+  - `activeBudgets(Ref)`：从 `budgetRepositoryProvider` 拉当前账本未软删预算，客户端排序"先 monthly 后 yearly、再 categoryId=null 优先"，UI 不再二次排序。
+  - `budgetableCategories(Ref)`：从 `categoryRepositoryProvider.listActiveAll()` 过滤掉 `parentKey == 'income'`——预算覆盖支出场景。
+
+- `lib/features/budget/budget_list_page.dart`（新建）：
+  - `BudgetListPage`（ConsumerWidget）：`Scaffold` + 列表 + `FloatingActionButton.extended`。卡片点击进入编辑、按钮触发删除二次确认（`AlertDialog`）。删除走 `repo.softDeleteById` → `invalidate(activeBudgetsProvider)` + Snackbar。
+  - 私有 `_BudgetCard`：左 emoji（来自分类 icon，总预算用 💰 兜底）+ 中部双行（标题/副标题"周期 · 结转标记"）+ 右金额（`NumberFormat('#,##0.00')`）+ 删除 `IconButton`。
+  - 私有 `_EmptyState`：💰 图标 + "还没有预算" + "点右下角加一个吧 🐰"。
+
+- `lib/features/budget/budget_edit_page.dart`（新建）：
+  - `BudgetEditPage`（ConsumerStatefulWidget，`budgetId` 可选）。`_loadBudget()` 在 `FutureBuilder` 内异步取 budget；`_hydrate(...)` 守 `_initialized` flag 仅首次 build 写入字段，避免重渲染时覆盖用户编辑。
+  - 字段：周期 `SegmentedButton<String>(monthly/yearly)`、分类 `DropdownButtonFormField<String?>`（首项 null = 总预算 + 其余按"中文 parentKey + sortOrder"排序）、金额 `TextFormField`（`numberWithOptions(decimal:true)` + `FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))`）、结转 `SwitchListTile`。
+  - 保存逻辑：编辑模式直接 `Budget(...)` 裸构造（不走 copyWith——`copyWith` 不能把 `categoryId` 清回 null，否则用户从分类预算切回总预算会失败）。新建走 `Uuid().v4()` + `startDate` 取本月/本年第一天。捕获 `BudgetConflictException` → SnackBar 友好提示；捕获其他异常 → "保存失败：$e"。`_saving` 状态守按钮，避免双击。
+
+- `lib/app/app_router.dart`：新增两条路由 `/budget`（`BudgetListPage`）、`/budget/edit`（`BudgetEditPage` + `?id=...`）。
+
+- `lib/app/home_shell.dart`：
+  - 移除占位 `_PlaceholderTab`；`_pages[3]` 改为 `_MeTab`。
+  - 新增 `_MeTab` 私有 StatelessWidget：`Scaffold` + `AppBar('我的')` + `ListView`，目前唯一一项 `ListTile('预算')` → `context.push('/budget')`。Phase 17 会扩展为完整设置/同步/锁等入口。
+  - 新增 import `package:go_router/go_router.dart`（`_MeTab` 内 `context.push` 用）。
+
+- `test/data/repository/budget_repository_test.dart`（新建）：8 用例覆盖 `(ledgerId, period, categoryId)` 唯一性的全部边界（详见对应 test 文件章节）。
+
+- `test/widget_test.dart`：新增 `_FixedRecordMonth extends RecordMonth` 并在 `_standardOverrides()` + 测试 5 的 inline overrides 中各加一行 `recordMonthProvider.overrideWith(() => _FixedRecordMonth(DateTime(2026, 4)))`——把 widget 测试的"当前月"锁死，避免随真实日期跨月而 flaky（曾在 2026-05-01 触发）。
+
+- 验证摘要：`flutter analyze` → No issues found；`flutter test` → 134/134 通过（126 前 + 8 新 budget repo 用例）；含 widget_test 时间敏感修复后 5/5 通过。
+
+## Phase 6 · Step 6.2 增量说明（2026-05-01）
+
+- `lib/features/budget/budget_progress.dart`（新建）：纯 Dart 工具集（不依赖 Flutter / Riverpod / drift），承载色档、周期边界、消费聚合、震动决策四件事。详细内容见上文 `lib/features/budget/` 节。色档边界严格按 implementation-plan：`<70%` 绿、`70%`/`100%` 归橙、`>100%` 红。
+
+- `lib/features/budget/budget_providers.dart`：
+  - 新增 `BudgetClock` typedef + `budgetClock(Ref)` provider（默认 `DateTime.now`）——测试可 override 锁定参考时间。
+  - 新增 `budgetProgressFor(Ref, Budget)`（family FutureProvider）：拉当前账本流水 → `computePeriodSpent` → `computeBudgetProgress`。
+  - 新增 `BudgetVibrationSession` Notifier（`keepAlive`）：状态为 `Set<String>`，`hasVibrated` / `markVibrated`（幂等）/ `clear`。冷启动后清空，符合"会话级"语义。
+
+- `lib/features/budget/budget_list_page.dart`：
+  - `_BudgetCard` 升级为 `ConsumerWidget`；卡片 body 从单 `Row` 改为 `Column`，下方追加 `_ProgressSection`。
+  - `_ProgressSection`（ConsumerWidget）：彩色 `LinearProgressIndicator` + "已花 ¥X / ¥Y · N%" 文案。颜色取自 `BianBianSemanticColors`（success/warning/danger）。`ratio.clamp(0, 1)` 给进度条 value，避免 >100% 溢出动画。
+  - 震动逻辑：`shouldTriggerBudgetVibration(level, hasVibrated)` 为真时，**整段** `markVibrated + HapticFeedback.heavyImpact()` 都放进 `WidgetsBinding.addPostFrameCallback`——build 期间修改 provider state 会被 Riverpod 拒绝。回调内再做一次 `hasVibrated` 检查，确保同帧多次 build 注册多个 postFrame 时只执行一次。
+  - import 新增 `package:flutter/services.dart`（HapticFeedback）+ `app/app_theme.dart`（BianBianSemanticColors）+ `budget_progress.dart`。
+
+- `test/features/budget/budget_progress_test.dart`（新建，16 用例）：
+  - `computeBudgetProgress`：< 70%、= 70%、85%、= 100%、100.01%、limit ≤ 0、spent = 0 共 7 条边界。
+  - `budgetPeriodRange`：monthly/yearly/12 月跨年 3 条。
+  - `computePeriodSpent`：总预算累加 / 分类预算过滤 / yearly 全年范围 3 条。
+  - `shouldTriggerBudgetVibration`：green/orange 不触发、red 首次触发、red 已触发不再触发 3 条。
+
+- `test/features/budget/budget_vibration_session_test.dart`（新建，5 用例）：
+  - 初始 state 空；`markVibrated` → `hasVibrated` true；同 id 重复 mark 不重建 state（`identical` 断言）；多 id 独立标记；`clear` 移除指定 id。
+
+- 验证摘要：`flutter analyze` → No issues found；`flutter test` → 155/155 通过（134 前 + 16 budget_progress + 5 vibration_session）；`dart run custom_lint` → 仍是 3 条预存 INFO（`record_new_providers.dart`），与本步无关。
+
+## Phase 7 · Step 7.2 增量说明（2026-05-01）
+
+- `lib/data/repository/account_repository.dart`：
+  - 接口新增 `Future<Account?> getById(String id)`——**不**过滤 `deleted_at`。
+  - `LocalAccountRepository.getById`：`select(accountTable)..where(id == id)..getSingleOrNull()` → `rowToAccount`；调用方按 `account.deletedAt != null` 自行决定如何渲染。这是流水详情显示"（已删账户）"占位的实现路径——`listActive` 不能给出软删账户，但流水的 `accountId` 仍指向历史 id，必须能拿到历史名 / 软删标记。
+
+- `lib/features/account/account_edit_page.dart`（新建）：`AccountEditPage`（`ConsumerStatefulWidget`，`accountId` 可选）。字段：名称（`TextFormField`，必填校验）、类型（下拉，`cash` / `debit` / `credit` / `third_party` / `other`）、图标 emoji（`TextFormField`，可空）、初始余额（`TextFormField` + `numberWithOptions(decimal: true, signed: true)` + 正则 `^-?\d*\.?\d{0,2}` 限两位小数 + 可负号）、默认币种（下拉同账本编辑页 7 种）、计入总资产（`SwitchListTile`）。`initState` 启动 `_loadFuture`；`_hydrate(acc)` 守 `_initialized` flag 仅首次写入字段。`_save()` 编辑模式走 `existing.copyWith(...)` 路径（避免裸构造遗漏字段）；新建模式走 `Account(id: const Uuid().v4(), ..., deviceId: '')` 让 repo 覆写 deviceId/updatedAt。保存成功后 `ref.invalidate(accountsListProvider)` / `accountBalancesProvider` / `totalAssetsProvider` 三连击，再 `Navigator.pop(true)`。`_saving` 守按钮防双击。
+
+- `lib/features/account/account_list_page.dart`：
+  - 新增 `FloatingActionButton.extended('新建账户')` → `context.push<bool>('/accounts/edit')`，返回 `true` 触发 3 个 provider invalidate。
+  - `_AccountCard` 接收 `onTap` / `onLongPress` 回调；`InkWell` 包裹卡片内容，点击进入 `/accounts/edit?id=<acc.id>`。
+  - 长按弹出 `showModalBottomSheet`：编辑（同 onTap）+ 删除（红色，触发 `_confirmDelete`）。
+  - `_confirmDelete(...)`：`AlertDialog` 二次确认 → `repo.softDeleteById(account.id)` → 3 个 provider invalidate + Snackbar `「{name}」已删除`；删除按钮置 `foregroundColor: Colors.red`。`hero_tag: 'account_list_fab'` 与账本列表的 FAB 区分，避免 Hero 冲突。
+
+- `lib/app/app_router.dart`：新增 `GoRoute('/accounts/edit')`，可选 query `id` 进入编辑模式；与 `/accounts` 路由列表平行。
+
+- `lib/features/record/record_home_page.dart::_TxTile` 的 `accountName(id)` 回退逻辑修订：
+  - id == null / 空字符串 → `'账户'`（保持旧版"未填写账户"语义）。
+  - id != null 且不在 `accountRepo?.listActive()` 结果中 → `'（已删账户）'`（**新增**——Step 7.2 验收）。
+  - 这是"懒查询"实现：不去查 `getById`（每条流水 + 每次 build 都查会爆查询），而是利用 `listActive` 一次性查出全部活跃账户后做内存查找。`getById` 由仓库测试覆盖，UI 不消费——但若未来产品要求"已删账户保留原名 + 加`（已删）`后缀"，则改为消费 `getById` 即可（每个 `_TxTile` 内 `FutureBuilder<Account?>`）。
+  - 转账流水副标题 `'A → B'` 与详情底部页 `_RecordDetailSheet` 的"钱包" / "转出" / "转入" KV 行均经此 `accountName` 函数，故同一处修改即生效。
+
+- `test/data/repository/account_repository_test.dart`（新建，7 用例）：
+  - `save → 写入并入队 sync_op upsert`（覆写 device_id/updated_at + payload 断言）。
+  - `getById 命中活跃账户`（基础正向）。
+  - `getById 不存在的 id 返回 null`。
+  - `softDeleteById → listActive 不可见，但 getById 仍能查到（含 deletedAt）`（Step 7.2 兜底关键）。
+  - `softDeleteById 不存在的 id 静默跳过（不入队）`。
+  - `save (update) 同 id 二次保存视为更新`（步进 clock + 单行 + 2 条 upsert）。
+  - `返回实体是纯 Dart 类型（不含 drift 专属类型）`。
+
+- `test/widget_test.dart`：
+  - 新增 `_FakeAccountRepository`（`listActive` / `getById` / `save fail` / `softDeleteById fail`）。
+  - 新增第 6 条用例 `删除账户后转账流水显示"（已删账户）"占位`：注入 1 条 transfer 流水 + 空账户列表 → 验证副标题 `（已删账户） → （已删账户）` + 金额 `¥200.00` 渲染（不崩溃）。
+
+- `test/features/record/record_new_page_test.dart`：`_FakeAccountRepository` 补 `getById`（按 id 内存匹配）以保持 implements 接口完整。
+
+- 验证摘要：`flutter analyze` → No issues found；`flutter test` → 200/200 通过（192 前 + 7 account repo + 1 widget = 200）。
+
+## Phase 7 · Step 7.2 刷新补丁（2026-05-01）
+
+- **现象**：删除账户后流水副标题不更新；切换账本再切回才刷新。
+- **根因**：`_TxTile` watch 的是 `accountRepositoryProvider`（仓库实例从不变），`accountsListProvider` 被 invalidate 不会让 tile 重建。
+- **修复点**：`lib/features/record/record_home_page.dart::_TxTile.build()`——把 `ref.watch(accountRepositoryProvider).valueOrNull` + 内层 `FutureBuilder<List<Account>>` 替换为 `ref.watch(accountsListProvider).valueOrNull ?? const <Account>[]`。同时 import 调整为 `features/account/account_providers.dart::accountsListProvider`，原 `data/repository/providers.dart` 的 `accountRepositoryProvider` 从 import 列表里移除（不再使用）。
+- **回归测试**：`test/widget_test.dart` 新增 `删除账户后流水副标题立即刷新（无需切换账本）` 用例——`_FakeAccountRepository.accounts` 改为可变；`ProviderContainer.invalidate(accountsListProvider)` 模拟删除事件；pumpAndSettle 后断言副标题从原账户名变为"（已删账户）"。
+- **同款风险**：`categoryRepositoryProvider` 在 `_TxTile` 内同样以仓库实例 + FutureBuilder 模式使用。若未来用户报告"删/改分类后流水图标/名未刷新"，应按同模式切换为某个 `categoriesListProvider`。本次刻意不顺手改，保持补丁聚焦。
+- 验证摘要：`flutter analyze` → No issues found；`flutter test` → 201/201 通过（200 前 + 1 新刷新回归）。
+
+## Phase 7 · Step 7.3 增量说明（2026-05-02）
+
+数据层 / 实体层：
+- `lib/data/local/tables/account_table.dart`：`AccountTable` 追加两列——`billing_day INTEGER`（nullable）、`repayment_day INTEGER`（nullable）。命名按 design-document §7.1 风格保持下划线，drift Companion getter 自动转 camelCase。两列对所有账户都允许 null，UI 层按 `type == 'credit'` 决定是否显示 / 是否写入。
+- `lib/data/local/app_database.dart`：`schemaVersion` 从 v4 升 v5；`onUpgrade` 新增 `if (from < 5)` 分支，调 `m.addColumn(accountTable, accountTable.billingDay)` + `m.addColumn(accountTable, accountTable.repaymentDay)`。schema 版本注释同步追加 v5 行。
+- `lib/domain/entity/account.dart`：实体加 `int? billingDay` / `int? repaymentDay`；`copyWith` / `toJson` / `fromJson` / `==` / `hashCode` / `toString` 全部同步。`fromJson` 用 `(json['billing_day'] as num?)?.toInt()` 兜底——保持向旧 JSON 备份的兼容（旧备份缺这两个 key 时按 null 解析）。Step 2.1 实体约定不变：`copyWith` 不能把 `T?` 清回 null；要清 `billingDay` / `repaymentDay` 必须裸构造（账户编辑页保存路径已切换为裸构造）。
+- `lib/data/repository/entity_mappers.dart`：`rowToAccount` / `accountToCompanion` 两侧都补两个字段映射，与其他 nullable 字段同模式（drift 端 `int?` ↔ 实体端 `int?` 直接透传）。
+
+UI 层：
+- `lib/features/account/account_edit_page.dart`：
+  - 新增 `_billingDayController` / `_repaymentDayController` 两个 controller + 对应 dispose；`_hydrate(acc)` 编辑模式回填两字段。
+  - `build()` 内当 `_type == 'credit'` 时条件渲染一行双 `TextFormField`（`Row + Expanded`），输入限制：`TextInputType.number` + `FilteringTextInputFormatter.digitsOnly` + `LengthLimitingTextInputFormatter(2)`；`validator` 共用 `_validateDay` 私有方法（空字符串放行；非空时要求 `1 ≤ n ≤ 28`，否则提示"请输入 1-28 的整数"）。两字段各挂 `Key('billing_day_field')` / `Key('repayment_day_field')`。
+  - 类型 dropdown 的 `onChanged` 在切到非 credit 时同步 `setState` 清空两个 controller，避免视觉残留。
+  - `_save()` 编辑分支改为**裸构造 `Account(...)`**（不走 copyWith）——这是为了支持"由非空 → null"的清空场景。`billingDay` / `repaymentDay` 仅当 `_type == 'credit'` 时取 controller 值，其它类型一律落 null。新建分支沿用裸构造（本来就是）。
+- `lib/features/account/account_list_page.dart`：
+  - `_AccountCard` 新增静态方法 `_creditDayLine(billingDay, repaymentDay)`：根据填写情况组合 `'账单日 X 号 · 还款日 Y 号'`；任一字段缺失时仅显示已填字段；两者都缺失返回 null。
+  - `build()` 中当 `account.type == 'credit' && creditInfo != null` 时，在卡片中部 Column 第二行（类型 + 不计入总资产 suffix）下方再渲染一行 `Text(creditInfo)`，挂 `Key('credit_info_<accountId>')` 便于测试断言。
+
+测试：
+- `test/domain/entity/entities_test.dart::Account` 组：原 `full` 加 `billingDay: 5` / `repaymentDay: 22`，覆盖含信用卡日的全字段 roundtrip；`minimal`（cash 账户）的预期断言新增"两字段为 null"；`copyWith` 用例新增"不动信用卡日"断言；新增第 4 条"信用卡日仅存其一也能 roundtrip"用例（仅填 `billingDay`）。
+- `test/data/repository/account_repository_test.dart`：`makeAccount` 工厂加 `billingDay` / `repaymentDay` 可选参数；新增 2 条 Step 7.3 用例——① 信用卡日持久化并可读回（同时验 sync_op payload 含两个 key）；② 非信用卡保存时两字段为 null（即使被传入也按 UI 规范落 null，但仓库本身不强制）。
+
+验证摘要：`dart run build_runner build --delete-conflicting-outputs` → 147 outputs；`flutter analyze` → No issues found；`flutter test` → 204/204 通过（201 前 + 1 entities + 2 account_repository = 204）；`dart run custom_lint` → 仍是 3 条预存 INFO（与 record_new_providers.dart 相关），与本步无关。
+
+
+## Phase 8 · Step 8.1 增量说明（2026-05-02）
+
+数据层 / Schema：
+- `lib/data/local/tables/user_pref_table.dart`：新增 `multi_currency_enabled INTEGER NULLABLE DEFAULT 0` 列。命名按 design-document §7.1 风格保持下划线，drift Companion getter 自动转 camelCase。`0` / `null` 视为关闭，`1` 视为开启——与生产默认一致。
+- `lib/data/local/tables/fx_rate_table.dart`（新建）：`FxRateTable` + `@DataClassName('FxRateEntry')`。**工具表**（与 `sync_op` 同性质，不是同步实体）——只有 `code` (TEXT PK) / `rate_to_cny` (REAL NOT NULL) / `updated_at` (INTEGER NOT NULL) 三列，无 `deleted_at` / `device_id` / sync_op 入队。设计 §5.7 的"汇率快照"职责。
+- `lib/data/local/app_database.dart`：`schemaVersion` 从 v5 升 v6；注册 `FxRateTable` + `FxRateDao`；`onUpgrade` 新增 `if (from < 6)` 分支：`m.addColumn(userPrefTable, userPrefTable.multiCurrencyEnabled)` + `m.createTable(fxRateTable)`。**故意不**在 onUpgrade 写入 fx_rate 快照——把"种子化"职责留给 `seeder.dart` 的独立判空，与 ledger 路径解耦。
+- `lib/data/local/dao/fx_rate_dao.dart`（新建）：`FxRateDao` 暴露 3 个方法——`listAll()` (按 code 升序) / `getByCode(code)` / `upsert(companion)`。不走 Step 1.4 的"业务表 4 方法"模式；不需要 softDelete / hardDelete。
+
+常量层：
+- `lib/core/util/currencies.dart`（新建，原目录 `[空]` 退役）：`Currency` 数据类（`code` / `symbol` / `name`）+ 顶层 `kBuiltInCurrencies` (11 种：CNY / USD / EUR / JPY / KRW / HKD / TWD / GBP / SGD / CAD / AUD) + 顶层 `kFxRateSnapshot: Map<String, double>`（写死的初始汇率快照，以 CNY 为基准；CNY 自身 = 1.0）。两个常量集对外暴露但**不可在运行期 mutate**——Step 8.3 联网刷新走的是"覆盖 fx_rate 表行"，不动这两个 const。
+
+种子化：
+- `lib/data/local/seeder.dart::seedIfEmpty()` 重构为**两段独立判空**：
+  - 第一段（旧 ledger 路径）：`ledger` 表为空 → 插入账本 + 分类 + 账户。
+  - 第二段（Step 8.1 新增）：`fx_rate` 表为空 → 按 [kFxRateSnapshot] 批量插入 11 行（updated_at = `_clock()` ms）。
+  两段都在同一个 `_db.transaction` 内，任一失败整体回滚。这种解耦让 v5 → v6 升级路径下的"既有用户首次冷启 v6"能仅补齐 fx_rate（不重建 ledger）；同样让"用户已手动覆盖某币种汇率"的场景下 seeder 不会回写覆盖（fx_rate 整体非空 → 整段跳过；逐 code 增量补齐留给 Step 8.3 的联网刷新）。
+
+UI 层 / 设置入口：
+- `lib/features/settings/settings_providers.dart`（新建）：`@Riverpod(keepAlive: true) class MultiCurrencyEnabled extends _$MultiCurrencyEnabled`。`build()` 读 `user_pref.multi_currency_enabled` → bool；`set(bool enabled)` 写 user_pref + `invalidateSelf()`。与 Step 4.1 的 `CurrentLedgerId` AsyncNotifier 同模式，是后续 settings 模块的"单字段开关"基底。
+- `lib/features/settings/multi_currency_page.dart`（新建）：`MultiCurrencyPage` ConsumerWidget。`SwitchListTile`（挂 `Key('multi_currency_switch')`）+ "内置币种" ListTile（展示 `kBuiltInCurrencies.map(code).join(' · ')`）+ "汇率管理"占位 ListTile（disabled，文案"Step 8.3 接入联网刷新与手动覆盖"）。
+- `lib/app/app_router.dart`：新增 `GoRoute('/settings/multi-currency')` → `MultiCurrencyPage`。
+- `lib/app/home_shell.dart`：`_MeTab` 在"资产"项之后追加"多币种"项（`Icons.public` → `context.push('/settings/multi-currency')`）。
+
+记账页接线：
+- `lib/features/record/widgets/number_keyboard.dart`：`NumberKeyboard` 加 `bool showCurrencyKey = true` 参数；构建左下角 'CURRENCY' 位时用 `key == 'CURRENCY' && !showCurrencyKey ? const SizedBox(height: 65) : _KeyButton(...)` 决定渲染。**保持 4×4 网格布局**——只是把币种按钮替换成等高空 SizedBox，不让其它键变形或换位。点击事件在该位为空时也不响应。
+- `lib/features/record/record_new_page.dart`：`_RecordNewPageState.build` 内 `ref.watch(multiCurrencyEnabledProvider).valueOrNull ?? false`，把结果作为 `NumberKeyboard.showCurrencyKey` 透传。loading/error 期间默认按"关闭"显示——避免短暂闪现币种键的不一致体验。
+
+测试：
+- `test/data/local/fx_rate_test.dart`（新建，11 用例）：
+  1. `FxRateDao` × 3：`upsert + listAll` 升序 / `upsert` 同 code 二次更新 / `getByCode` 命中与未命中。
+  2. `DefaultSeeder` fx_rate 路径 × 4：空库 → 写入 [kFxRateSnapshot] 全集 / CNY = 1.0 且 11 种内置币种全覆盖 / 已有 fx_rate 不被覆盖（独立判空）/ ledger 已存在但 fx_rate 为空 → 仅种子化 fx_rate（验证 v5→v6 升级路径）。
+  3. 内置币种常量 × 4：codes 顺序锁定 / [kFxRateSnapshot].keys 与 [kBuiltInCurrencies] 同集 / CNY 自身 = 1.0 / 每种币种有非空 symbol+中文 name。
+- `test/features/settings/multi_currency_page_test.dart`（新建，5 用例）：覆盖 SwitchListTile 在 initial=false / 切换后 true / initial=true 三种状态；内置币种行展示三个 code 抽样；汇率管理行 disabled。`_TestMultiCurrencyEnabled` fake notifier 走"override `build` + override `set` 直接 `state = AsyncValue.data(...)`"模式，避免 dependencies on real DB。
+- `test/features/record/record_new_page_test.dart`：
+  - `_baseOverrides` 加 `bool multiCurrencyEnabled = false` 参数 + `_TestMultiCurrencyEnabled` 类，默认与生产一致（false）。
+  - 原"数字键盘完整渲染"用例改为传 `multiCurrencyEnabled: true`（含 'CNY' 键断言）。
+  - 新增 2 条 Step 8.1 验收用例：① 开关关闭时 'CNY' 不可见、其它键仍渲染保持布局；② 开关开启时 'CNY' 可见。
+
+验证摘要：`dart run build_runner build --delete-conflicting-outputs` → 155 outputs；`flutter analyze` → No issues found；`flutter test` → 222/222 通过（204 前 + 11 fx_rate + 5 multi_currency_page + 2 record_new_page Step 8.1 = 222）；`dart run custom_lint` → 仍是 3 条预存 INFO（与 record_new_providers.dart 相关），与本步无关。
+
+
+## Phase 8 · Step 8.2 增量说明（2026-05-02）
+
+Provider 与纯函数：
+- `lib/features/settings/settings_providers.dart`：新增 `currentLedgerDefaultCurrencyProvider`（依赖 `currentLedgerIdProvider` + `ledgerRepositoryProvider`，账本切换 / 编辑后自动重算；读取失败兜底 `'CNY'`）+ `fxRatesProvider`（dump `fx_rate` 表为 `Map<String, double>`，code → rate_to_cny；后续 Step 8.3 联网刷新或用户手动覆写后会 invalidate）+ 顶层纯函数 `computeFxRate(from, to, ratesToCny)`（`from == to → 1.0` / 任一码缺失或 `toRate == 0` 兜底 1.0 / 否则 `from/to`）。本文件因新增 `Ref` 类型 import 加上 `package:flutter_riverpod/flutter_riverpod.dart`。
+
+记账表单：
+- `lib/features/record/record_new_providers.dart`：保留 `toggleCurrency()`（不再被 UI 调用，Step 8.3 之后再决定移除）；新增 `setCurrency(String code)` 与 `initDefaultCurrency()`（async，把 `state.currency` 设为账本默认币种；当 `state.currency != 'CNY'` 时跳过，避免覆盖已选/已 preload 的值）。`save()` 在保存前 `ref.read currentLedgerDefaultCurrencyProvider + fxRatesProvider`，调 `computeFxRate` 算出"原币 → 账本默认币种"的换算因子写入 `tx.fxRate`，与 `currency` 一同持久化。
+- `lib/features/record/record_new_page.dart`：`initState` 内 `addPostFrameCallback` 触发 `initDefaultCurrency()`（fire-and-forget，与 `initDefaultAccount()` 同模式）。`_AmountDisplay` 改为按 `kBuiltInCurrencies` 查 `symbol`（移除硬编码 `¥` / `$`）。`NumberKeyboard.onCurrencyTap` 由 toggle 改为打开 `_CurrencyPicker` 底部抽屉——抽屉新增同文件，`ListView.builder` 渲染 11 内置币种、当前选中尾部 ✓、点击 `Navigator.pop(context, code)` 把 ISO 码回传，外层 `setCurrency(picked)`。
+
+记账首页 / 流水：
+- `lib/features/record/record_home_page.dart`：新增顶层 `_symbolFor(String code)` 私有 helper 与顶层 `@visibleForTesting` 函数 `formatTxAmountForDetail(tx, ledgerCurrency)`——同币种 → `±¥10.00`；跨币种 → `±USD 10.00（≈ ¥72.00）`（`amount * fxRate` 即折合，无需读 fx_rate 表）。`_TxTile` 显示金额改用 `_symbolFor(tx.currency)`（保留原币展示）。`_DataCards` 升级为 `ConsumerWidget`，watch `currentLedgerDefaultCurrencyProvider` 拿账本默认币种 symbol 传给 `_CardChip`，使顶部卡片在 USD 账本下显示 `$X.XX`。`_RecordDetailSheet` 升级为 `ConsumerWidget`，watch 同 provider 后调 `formatTxAmountForDetail(tx, ledgerCurrency)`，并把容器挂上 `Key('detail_amount')`。
+
+统计聚合：
+- `lib/features/record/record_providers.dart`：`recordMonthSummary` 收入/支出累加从 `tx.amount` 改为 `tx.amount * tx.fxRate`，与"卡片显示账本默认币种 symbol"一致。
+- `lib/features/stats/stats_range_providers.dart`：`aggregatePieSlices` / `aggregateRankItems` / `aggregateHeatmapCells` / `statsLinePoints` 内的所有 `tx.amount` 求和改为 `tx.amount * tx.fxRate`。同币种流水 `fxRate = 1.0`，因此 V1 单币种用户行为完全不变；多币种开启后才真正起作用。
+- `lib/features/budget/budget_progress.dart`：`computePeriodSpent` 与 `_spentBetween` 同样改为 `tx.amount * tx.fxRate`——预算金额本身是账本默认币种，两侧单位一致。
+- **未触动** `lib/features/account/account_balance.dart`——账户余额按原币累加（每个账户有自己的 currency），跨币种总资产换算超出 Step 8.2 范围（V1 简化：跨币种转账留空，单账户内币种应与 account.currency 一致）。
+
+测试：
+- `test/features/settings/fx_rate_compute_test.dart`（新建，8 用例）：`computeFxRate` 同币种 / USD↔CNY / USD↔EUR / USD 10×7.2=72 验收 / 源缺失 / 目标缺失 / 除零保护。
+- `test/features/stats/stats_range_providers_test.dart`：新增 3 用例覆盖 pie / rank / heatmap 在 USD 10、fxRate 7.2 下计入 72 CNY；现有用例 `fxRate` 默认 1.0 → 行为不变。
+- `test/features/record/record_new_providers_test.dart`：新增 `_FakeLedgerRepository` + `_testLedger` + `currentLedgerDefaultCurrencyProvider` / `fxRatesProvider` / `ledgerRepositoryProvider` overrides；新增 6 个 Step 8.2 用例（setCurrency / initDefaultCurrency 默认 / initDefaultCurrency 不覆盖非 CNY / save 跨币种 USD 10 写入 fxRate=7.2 / save 同币种 fxRate=1.0 / save 跨币种到 USD 账本 fxRate=1/7.2）。
+- `test/features/record/record_new_page_test.dart`：`_baseOverrides` 加 `currentLedgerDefaultCurrencyProvider` + `fxRatesProvider` 注入；新增 2 个 Step 8.2 widget 用例（点 CNY 键打开下拉 + 选 USD 后金额前缀变 `$` / 保存 USD 10 → fxRate=7.2、折合 72 CNY）。
+- `test/features/record/record_home_page_format_test.dart`（新建，6 用例）：`formatTxAmountForDetail` 同币种 / USD 10×7.2 → "-USD 10.00（≈ ¥72.00）" / 收入用 `+` / 转账无符号 / CNY → USD 账本 / JPY 1500 千分位逗号。
+
+验证摘要：`dart run build_runner build --delete-conflicting-outputs` → 70 outputs；`flutter analyze` → No issues found；`flutter test` → 247/247 通过（222 前 + 25 Step 8.2 = 247）；`dart run custom_lint` → 仍是 3 条预存 INFO（`record_new_providers.dart`），与本步无关。
+
+
+## Phase 8 · Step 8.3 增量说明（2026-05-02）
+
+数据层 / Schema：
+- `lib/data/local/tables/fx_rate_table.dart`：新增 `is_manual INTEGER NOT NULL DEFAULT 0` 列。`1` = 用户在"我的 → 多币种 → 汇率管理"手动覆盖；`0` = 由种子化 / 自动刷新写入。CNY 永远保持 `is_manual=0` 且服务层过滤掉 CNY，避免覆写基准。
+- `lib/data/local/tables/user_pref_table.dart`：新增 `last_fx_refresh_at INTEGER`（nullable）。每日刷新节流锚点；NULL = 从未刷新。
+- `lib/data/local/app_database.dart`：`schemaVersion` 从 v6 升 v7；`onUpgrade` 新增 `if (from < 7)` 分支：`m.addColumn(fxRateTable, fxRateTable.isManual)` + `m.addColumn(userPrefTable, userPrefTable.lastFxRefreshAt)`。Schema 版本注释同步追加 v7 行。
+- `lib/data/local/dao/fx_rate_dao.dart`：在原有 `listAll` / `getByCode` / `upsert` 之外新增 3 个方法。
+  - `setAutoRate({code, rateToCny, updatedAt})`：自动刷新写入。先 `getByCode`：不存在 → insert（`is_manual=0`）；存在且 `is_manual=0` → update；存在且 `is_manual=1` → 跳过。返回写入行数（0 表示被手动行跳过）。
+  - `setManualRate({code, rateToCny, updatedAt})`：用户手动覆盖。`insertOnConflictUpdate` 写入并把 `is_manual=1`。
+  - `clearManualFlag(code)`：把 `is_manual` 置回 0；汇率本身不动，等下次自动刷新覆盖（短暂保留旧值，避免出现"无值"中间态）。
+
+服务层：
+- `lib/features/settings/fx_rate_refresh_service.dart`（新建）：`FxRateRefreshService` 三公开 API。
+  - `refreshIfDue({force=false})`：受 `user_pref.last_fx_refresh_at` 节流（默认 24h）。`force=true`（"立即刷新"按钮）绕过节流。fetcher 抛异常 / 返回空 Map / 返回非有限数 / 返回 0 或负数都被防御性跳过——任何失败都返回 false 且**不**推进 `last_fx_refresh_at`，保证下次启动还能重试。CNY 在写入前过滤掉。
+  - `setManualRate(code, rate)`：参数校验（非 CNY、正有限数）后调 DAO 写入 `is_manual=1`；包装异常为 `ArgumentError`。
+  - `resetToAuto(code)`：调 DAO `clearManualFlag`。
+  - `defaultFxRateFetcher`（顶层）：默认 fetcher 走 `https://open.er-api.com/v6/latest/CNY`（免费、无 API key、ECB+Fed 数据源）。返回 `1 CNY = X target`，需要倒数得到 `rate_to_cny[code] = 1 / X`。仅对 [kBuiltInCurrencies] 中的非 CNY 币种返回结果；任何字段缺失或非法都跳过该币种（不抛异常，整体仍可成功）。
+  - `FxRateFetcher` typedef：`Future<Map<code, rate_to_cny>> Function()`。测试可注入伪造 fetcher 验证 throttle / failure / manual-skip 行为而不依赖网络。
+
+Provider 层：
+- `lib/features/settings/settings_providers.dart`：
+  - 新增 `fxRateRowsProvider`（`@Riverpod(keepAlive: true)`）：dump `fx_rate` 全字段行（含 `is_manual` / `updated_at`），供"汇率管理"列表渲染。与 `fxRatesProvider` 区分——后者只暴露 `code → rate`（供换算），本 provider 暴露视图所需全字段。
+  - 新增 `fxRateRefreshServiceProvider`（`@Riverpod(keepAlive: true)`）：返回 `FxRateRefreshService(db: ref.watch(appDatabaseProvider))`，生产 fetcher 默认走 `defaultFxRateFetcher`。
+- `lib/main.dart`：bootstrap `await defaultSeedProvider.future` 之后追加 fire-and-forget `container.read(fxRateRefreshServiceProvider).refreshIfDue()`。成功后 invalidate `fxRatesProvider` / `fxRateRowsProvider`；catchError 静默吞掉，不影响首帧。`unawaited(...)` 显式标注 fire-and-forget。
+
+UI 层：
+- `lib/features/settings/multi_currency_page.dart`（重写，从 ConsumerWidget 升级为 ConsumerStatefulWidget）：
+  - 顶部 AppBar 右侧 `IconButton(Icons.refresh, key: 'fx_refresh_now')`：刷新中显示 `CircularProgressIndicator`，点击触发 `service.refreshIfDue(force: true)`，成功 → "汇率已更新"，失败 → "联网失败，使用现有快照"。
+  - 三段：① 多币种 SwitchListTile（与 Step 8.1 一致）；② 内置币种概览（与 Step 8.1 一致）；③ "汇率管理"标题 + 11 行 `_FxRateTile`（每行渲染 code + 中文名 + 汇率 + 4 位小数 + 更新时间 + 手动/自动徽章；CNY 行显示"基准"徽章 + disabled）。
+  - 入页 `addPostFrameCallback` fire-and-forget `service.refreshIfDue()`（节流，不 force）；成功后 invalidate 行列表。
+  - 点击非 CNY 行 → `_ManualRateDialog`（StatefulWidget）：TextField 数字输入（默认 `numberWithOptions(decimal: true)`）+ 校验（正有限数）+ "保存"按钮。手动行额外显示"重置为自动"按钮 + 提示文案。返回 `_ManualResult(rate?, reset)` 由父组件分发到 `service.setManualRate` / `service.resetToAuto`。
+  - 视图模型 `FxRateRow.fromEntry(FxRateEntry)`：把 drift 行解耦成 UI 用结构（`isManual: bool`），便于 widget 测试 + 服务层 fake。
+
+测试：
+- `test/features/settings/fx_rate_refresh_service_test.dart`（新建，15 用例）：
+  - 节流 × 4：从未刷新即触发 / < 24h 跳过 / >= 24h 重发 / `force=true` 绕过节流。
+  - 失败静默 × 3：fetcher 抛异常 → 不更新 fx_rate 也不推进 `last_fx_refresh_at` / 返回空 Map / 返回非有限/非正数（NaN / 负数 / 0）跳过该币种但其他正常币种仍写入。
+  - 手动覆盖与重置 × 5：手动行不被自动刷新覆盖 / `resetToAuto` 后下次刷新可覆盖 / CNY 在 fetcher 返回时被服务层过滤掉永远保持 1.0 / `setManualRate` 拒绝 CNY / 拒绝非正数 / 写入新行（fx_rate 表中不存在的 code 也能被手动覆盖）。
+- `test/data/local/fx_rate_test.dart`：在原 11 用例基础上补 6 个 Step 8.3 DAO 用例（默认 is_manual=0 / `setAutoRate` 在新行插入 / `setAutoRate` 跳过手动行 / `setManualRate` 写入并标 1 / `clearManualFlag` 清标记保留 rate / `clearManualFlag` 对不存在 code 返回 0），原"upsert + listAll"用例补 `is_manual` 默认值断言。
+- `test/features/settings/multi_currency_page_test.dart`（重写）：注入 `_FakeRefreshService`（实现 `FxRateRefreshService` 接口的内存 fake，记录 `refreshCalls` / `refreshForceCalls` 并在 `setManualRate` / `resetToAuto` 调用时同步更新内存 rows），覆盖 11 用例：原开关 3 用例 + 内置币种行 + Step 8.3 新 7 用例（汇率列表渲染 / CNY 行禁用 + "基准"徽章 / 点击 USD 行 → 输入 → setManualRate / 点击 EUR（手动行）→ "重置为自动" / 点击 CNY 行无反应 / AppBar 立即刷新成功提示 / 立即刷新失败降级提示 / 入页 fire-and-forget refreshIfDue）。
+
+验证摘要：`dart run build_runner build --delete-conflicting-outputs` → 38 outputs；`flutter analyze` → No issues found；`flutter test` → 270/270 通过（247 前 + 15 fx_rate_refresh_service + 6 fx_rate_dao Step 8.3 + 7 multi_currency_page Step 8.3 - 5 multi_currency_page 老用例移除/合并 = 270）；`dart run custom_lint` → 6 条 INFO（3 条预存 `record_new_providers.dart` + 3 条新 `multi_currency_page_test.dart` 关于 `scoped_providers_should_specify_dependencies`，仅测试 override 风格，不影响生产）。
+
+依赖：`pubspec.yaml` 新增 `http: ^1.2.0`（`open.er-api.com` GET 请求）。在此之前 `http` 已是 `supabase_flutter` 的间接依赖；显式声明以满足 `depend_on_referenced_packages`。

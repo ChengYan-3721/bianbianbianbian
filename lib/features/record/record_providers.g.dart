@@ -7,7 +7,7 @@ part of 'record_providers.dart';
 // **************************************************************************
 
 String _$recordMonthSummaryHash() =>
-    r'5f8488719c5c89e960827cadb318220dc02c7236';
+    r'3c13f8d2a5f0808d5cd0f0e93b6c3c643bf9bd60';
 
 /// 当前账本当月的汇总数据。
 ///
@@ -31,7 +31,7 @@ final recordMonthSummaryProvider =
 // ignore: unused_element
 typedef RecordMonthSummaryRef =
     AutoDisposeFutureProviderRef<RecordMonthSummary>;
-String _$recordMonthHash() => r'627487d9e3102ffaed7246adf13d3067ae57a432';
+String _$recordMonthHash() => r'e26f6076990688c07a5a999e744129b4be0ac779';
 
 /// 记账首页当前选择的月份（年月，day 固定为 1）。
 ///

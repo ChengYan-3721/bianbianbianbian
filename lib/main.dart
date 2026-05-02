@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
 
 import 'app/app.dart';
 import 'data/local/providers.dart';
+import 'features/settings/settings_providers.dart';
 
 Future<void> main() async {
   // path_provider / flutter_secure_storage 在 runApp 前就会被 AppDatabase 打开，
@@ -22,6 +24,18 @@ Future<void> main() async {
   final container = ProviderContainer();
   try {
     await container.read(defaultSeedProvider.future);
+    // Step 8.3：fire-and-forget 触发汇率刷新。每日节流 + 失败静默；不阻塞首帧。
+    // 成功后 invalidate fxRates / fxRateRows 让任何已 mount 的页面拿到新值。
+    unawaited(
+      container
+          .read(fxRateRefreshServiceProvider)
+          .refreshIfDue()
+          .then((ok) {
+        if (!ok) return;
+        container.invalidate(fxRatesProvider);
+        container.invalidate(fxRateRowsProvider);
+      }).catchError((_) {/* 静默降级 */}),
+    );
     runApp(
       UncontrolledProviderScope(
         container: container,

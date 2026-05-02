@@ -38,8 +38,20 @@ class UserPrefTable extends Table {
       .nullable()
       .withDefault(const Constant(0))();
 
+  /// Step 8.1：多币种全局开关。0 = 关闭（默认；记账页币种字段隐藏），
+  /// 1 = 开启（记账页可选币种、统计页按账本默认币种换算展示）。
+  IntColumn get multiCurrencyEnabled => integer()
+      .named('multi_currency_enabled')
+      .nullable()
+      .withDefault(const Constant(0))();
+
   IntColumn get lastSyncAt =>
       integer().nullable().named('last_sync_at')();
+
+  /// Step 8.3：上次汇率自动刷新时间（epoch ms）。null = 从未刷新。
+  /// 用于"每日最多一次"节流，[FxRateRefreshService.refreshIfDue] 据此判断。
+  IntColumn get lastFxRefreshAt =>
+      integer().nullable().named('last_fx_refresh_at')();
 
   TextColumn get aiApiEndpoint =>
       text().nullable().named('ai_api_endpoint')();
