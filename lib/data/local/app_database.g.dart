@@ -144,6 +144,40 @@ class $UserPrefTableTable extends UserPrefTable
         type: DriftSqlType.blob,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _aiApiModelMeta = const VerificationMeta(
+    'aiApiModel',
+  );
+  @override
+  late final GeneratedColumn<String> aiApiModel = GeneratedColumn<String>(
+    'ai_api_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _aiApiPromptTemplateMeta =
+      const VerificationMeta('aiApiPromptTemplate');
+  @override
+  late final GeneratedColumn<String> aiApiPromptTemplate =
+      GeneratedColumn<String>(
+        'ai_api_prompt_template',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _aiInputEnabledMeta = const VerificationMeta(
+    'aiInputEnabled',
+  );
+  @override
+  late final GeneratedColumn<int> aiInputEnabled = GeneratedColumn<int>(
+    'ai_input_enabled',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -158,6 +192,9 @@ class $UserPrefTableTable extends UserPrefTable
     lastFxRefreshAt,
     aiApiEndpoint,
     aiApiKeyEncrypted,
+    aiApiModel,
+    aiApiPromptTemplate,
+    aiInputEnabled,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -269,6 +306,33 @@ class $UserPrefTableTable extends UserPrefTable
         ),
       );
     }
+    if (data.containsKey('ai_api_model')) {
+      context.handle(
+        _aiApiModelMeta,
+        aiApiModel.isAcceptableOrUnknown(
+          data['ai_api_model']!,
+          _aiApiModelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ai_api_prompt_template')) {
+      context.handle(
+        _aiApiPromptTemplateMeta,
+        aiApiPromptTemplate.isAcceptableOrUnknown(
+          data['ai_api_prompt_template']!,
+          _aiApiPromptTemplateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('ai_input_enabled')) {
+      context.handle(
+        _aiInputEnabledMeta,
+        aiInputEnabled.isAcceptableOrUnknown(
+          data['ai_input_enabled']!,
+          _aiInputEnabledMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -326,6 +390,18 @@ class $UserPrefTableTable extends UserPrefTable
         DriftSqlType.blob,
         data['${effectivePrefix}ai_api_key_encrypted'],
       ),
+      aiApiModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_api_model'],
+      ),
+      aiApiPromptTemplate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ai_api_prompt_template'],
+      ),
+      aiInputEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ai_input_enabled'],
+      ),
     );
   }
 
@@ -352,8 +428,30 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
   /// Step 8.3：上次汇率自动刷新时间（epoch ms）。null = 从未刷新。
   /// 用于"每日最多一次"节流，[FxRateRefreshService.refreshIfDue] 据此判断。
   final int? lastFxRefreshAt;
+
+  /// 历史遗留列（自 Step 4.2 user_pref 表初次落库即存在，但直到 Step 9.3
+  /// 才被消费）：用户在"我的 → 快速输入 → AI 增强"页配置的 LLM endpoint URL。
   final String? aiApiEndpoint;
+
+  /// 历史遗留列（同上）：API key 的存放位置。
+  ///
+  /// **当前实现（Step 9.3）**：UTF-8 编码后的 raw bytes（即"未加密"），整个 DB 由
+  /// SQLCipher 加密保护，故 at-rest 安全已由 DB 级别覆盖；列名带 `_encrypted`
+  /// 是为 Phase 11 [BianbianCrypto] 字段级加密预留的——届时会用同步密码派生
+  /// 出的 key 重写读写路径，本列名保持不变。
   final Uint8List? aiApiKeyEncrypted;
+
+  /// Step 9.3：AI 增强使用的模型名（如 `'gpt-4o-mini'` / `'qwen-turbo'`）。
+  /// 用户在配置页填写；为空时 [AiInputSettings.hasMinimalConfig] = false。
+  final String? aiApiModel;
+
+  /// Step 9.3：AI 增强使用的 prompt 模板（含 `{NOW}` / `{TEXT}` / `{CATEGORIES}`
+  /// 占位符）。为空时使用 [kDefaultAiInputPromptTemplate] 兜底。
+  final String? aiApiPromptTemplate;
+
+  /// Step 9.3：AI 增强全局开关。0/null = 关闭（默认；确认卡片不显示 AI 增强按钮），
+  /// 1 = 开启（且只有 endpoint + key + model 三件齐全才会真正显示按钮）。
+  final int? aiInputEnabled;
   const UserPrefEntry({
     required this.id,
     required this.deviceId,
@@ -367,6 +465,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     this.lastFxRefreshAt,
     this.aiApiEndpoint,
     this.aiApiKeyEncrypted,
+    this.aiApiModel,
+    this.aiApiPromptTemplate,
+    this.aiInputEnabled,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -402,6 +503,15 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     }
     if (!nullToAbsent || aiApiKeyEncrypted != null) {
       map['ai_api_key_encrypted'] = Variable<Uint8List>(aiApiKeyEncrypted);
+    }
+    if (!nullToAbsent || aiApiModel != null) {
+      map['ai_api_model'] = Variable<String>(aiApiModel);
+    }
+    if (!nullToAbsent || aiApiPromptTemplate != null) {
+      map['ai_api_prompt_template'] = Variable<String>(aiApiPromptTemplate);
+    }
+    if (!nullToAbsent || aiInputEnabled != null) {
+      map['ai_input_enabled'] = Variable<int>(aiInputEnabled);
     }
     return map;
   }
@@ -440,6 +550,15 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       aiApiKeyEncrypted: aiApiKeyEncrypted == null && nullToAbsent
           ? const Value.absent()
           : Value(aiApiKeyEncrypted),
+      aiApiModel: aiApiModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiApiModel),
+      aiApiPromptTemplate: aiApiPromptTemplate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiApiPromptTemplate),
+      aiInputEnabled: aiInputEnabled == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aiInputEnabled),
     );
   }
 
@@ -465,6 +584,11 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       aiApiKeyEncrypted: serializer.fromJson<Uint8List?>(
         json['aiApiKeyEncrypted'],
       ),
+      aiApiModel: serializer.fromJson<String?>(json['aiApiModel']),
+      aiApiPromptTemplate: serializer.fromJson<String?>(
+        json['aiApiPromptTemplate'],
+      ),
+      aiInputEnabled: serializer.fromJson<int?>(json['aiInputEnabled']),
     );
   }
   @override
@@ -483,6 +607,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       'lastFxRefreshAt': serializer.toJson<int?>(lastFxRefreshAt),
       'aiApiEndpoint': serializer.toJson<String?>(aiApiEndpoint),
       'aiApiKeyEncrypted': serializer.toJson<Uint8List?>(aiApiKeyEncrypted),
+      'aiApiModel': serializer.toJson<String?>(aiApiModel),
+      'aiApiPromptTemplate': serializer.toJson<String?>(aiApiPromptTemplate),
+      'aiInputEnabled': serializer.toJson<int?>(aiInputEnabled),
     };
   }
 
@@ -499,6 +626,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     Value<int?> lastFxRefreshAt = const Value.absent(),
     Value<String?> aiApiEndpoint = const Value.absent(),
     Value<Uint8List?> aiApiKeyEncrypted = const Value.absent(),
+    Value<String?> aiApiModel = const Value.absent(),
+    Value<String?> aiApiPromptTemplate = const Value.absent(),
+    Value<int?> aiInputEnabled = const Value.absent(),
   }) => UserPrefEntry(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
@@ -524,6 +654,13 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     aiApiKeyEncrypted: aiApiKeyEncrypted.present
         ? aiApiKeyEncrypted.value
         : this.aiApiKeyEncrypted,
+    aiApiModel: aiApiModel.present ? aiApiModel.value : this.aiApiModel,
+    aiApiPromptTemplate: aiApiPromptTemplate.present
+        ? aiApiPromptTemplate.value
+        : this.aiApiPromptTemplate,
+    aiInputEnabled: aiInputEnabled.present
+        ? aiInputEnabled.value
+        : this.aiInputEnabled,
   );
   UserPrefEntry copyWithCompanion(UserPrefTableCompanion data) {
     return UserPrefEntry(
@@ -557,6 +694,15 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       aiApiKeyEncrypted: data.aiApiKeyEncrypted.present
           ? data.aiApiKeyEncrypted.value
           : this.aiApiKeyEncrypted,
+      aiApiModel: data.aiApiModel.present
+          ? data.aiApiModel.value
+          : this.aiApiModel,
+      aiApiPromptTemplate: data.aiApiPromptTemplate.present
+          ? data.aiApiPromptTemplate.value
+          : this.aiApiPromptTemplate,
+      aiInputEnabled: data.aiInputEnabled.present
+          ? data.aiInputEnabled.value
+          : this.aiInputEnabled,
     );
   }
 
@@ -574,7 +720,10 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ..write('lastSyncAt: $lastSyncAt, ')
           ..write('lastFxRefreshAt: $lastFxRefreshAt, ')
           ..write('aiApiEndpoint: $aiApiEndpoint, ')
-          ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted')
+          ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted, ')
+          ..write('aiApiModel: $aiApiModel, ')
+          ..write('aiApiPromptTemplate: $aiApiPromptTemplate, ')
+          ..write('aiInputEnabled: $aiInputEnabled')
           ..write(')'))
         .toString();
   }
@@ -593,6 +742,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     lastFxRefreshAt,
     aiApiEndpoint,
     $driftBlobEquality.hash(aiApiKeyEncrypted),
+    aiApiModel,
+    aiApiPromptTemplate,
+    aiInputEnabled,
   );
   @override
   bool operator ==(Object other) =>
@@ -612,7 +764,10 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           $driftBlobEquality.equals(
             other.aiApiKeyEncrypted,
             this.aiApiKeyEncrypted,
-          ));
+          ) &&
+          other.aiApiModel == this.aiApiModel &&
+          other.aiApiPromptTemplate == this.aiApiPromptTemplate &&
+          other.aiInputEnabled == this.aiInputEnabled);
 }
 
 class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
@@ -628,6 +783,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
   final Value<int?> lastFxRefreshAt;
   final Value<String?> aiApiEndpoint;
   final Value<Uint8List?> aiApiKeyEncrypted;
+  final Value<String?> aiApiModel;
+  final Value<String?> aiApiPromptTemplate;
+  final Value<int?> aiInputEnabled;
   const UserPrefTableCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -641,6 +799,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.lastFxRefreshAt = const Value.absent(),
     this.aiApiEndpoint = const Value.absent(),
     this.aiApiKeyEncrypted = const Value.absent(),
+    this.aiApiModel = const Value.absent(),
+    this.aiApiPromptTemplate = const Value.absent(),
+    this.aiInputEnabled = const Value.absent(),
   });
   UserPrefTableCompanion.insert({
     this.id = const Value.absent(),
@@ -655,6 +816,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.lastFxRefreshAt = const Value.absent(),
     this.aiApiEndpoint = const Value.absent(),
     this.aiApiKeyEncrypted = const Value.absent(),
+    this.aiApiModel = const Value.absent(),
+    this.aiApiPromptTemplate = const Value.absent(),
+    this.aiInputEnabled = const Value.absent(),
   }) : deviceId = Value(deviceId);
   static Insertable<UserPrefEntry> custom({
     Expression<int>? id,
@@ -669,6 +833,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Expression<int>? lastFxRefreshAt,
     Expression<String>? aiApiEndpoint,
     Expression<Uint8List>? aiApiKeyEncrypted,
+    Expression<String>? aiApiModel,
+    Expression<String>? aiApiPromptTemplate,
+    Expression<int>? aiInputEnabled,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -684,6 +851,10 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       if (lastFxRefreshAt != null) 'last_fx_refresh_at': lastFxRefreshAt,
       if (aiApiEndpoint != null) 'ai_api_endpoint': aiApiEndpoint,
       if (aiApiKeyEncrypted != null) 'ai_api_key_encrypted': aiApiKeyEncrypted,
+      if (aiApiModel != null) 'ai_api_model': aiApiModel,
+      if (aiApiPromptTemplate != null)
+        'ai_api_prompt_template': aiApiPromptTemplate,
+      if (aiInputEnabled != null) 'ai_input_enabled': aiInputEnabled,
     });
   }
 
@@ -700,6 +871,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Value<int?>? lastFxRefreshAt,
     Value<String?>? aiApiEndpoint,
     Value<Uint8List?>? aiApiKeyEncrypted,
+    Value<String?>? aiApiModel,
+    Value<String?>? aiApiPromptTemplate,
+    Value<int?>? aiInputEnabled,
   }) {
     return UserPrefTableCompanion(
       id: id ?? this.id,
@@ -714,6 +888,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       lastFxRefreshAt: lastFxRefreshAt ?? this.lastFxRefreshAt,
       aiApiEndpoint: aiApiEndpoint ?? this.aiApiEndpoint,
       aiApiKeyEncrypted: aiApiKeyEncrypted ?? this.aiApiKeyEncrypted,
+      aiApiModel: aiApiModel ?? this.aiApiModel,
+      aiApiPromptTemplate: aiApiPromptTemplate ?? this.aiApiPromptTemplate,
+      aiInputEnabled: aiInputEnabled ?? this.aiInputEnabled,
     );
   }
 
@@ -758,6 +935,17 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
         aiApiKeyEncrypted.value,
       );
     }
+    if (aiApiModel.present) {
+      map['ai_api_model'] = Variable<String>(aiApiModel.value);
+    }
+    if (aiApiPromptTemplate.present) {
+      map['ai_api_prompt_template'] = Variable<String>(
+        aiApiPromptTemplate.value,
+      );
+    }
+    if (aiInputEnabled.present) {
+      map['ai_input_enabled'] = Variable<int>(aiInputEnabled.value);
+    }
     return map;
   }
 
@@ -775,7 +963,10 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
           ..write('lastSyncAt: $lastSyncAt, ')
           ..write('lastFxRefreshAt: $lastFxRefreshAt, ')
           ..write('aiApiEndpoint: $aiApiEndpoint, ')
-          ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted')
+          ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted, ')
+          ..write('aiApiModel: $aiApiModel, ')
+          ..write('aiApiPromptTemplate: $aiApiPromptTemplate, ')
+          ..write('aiInputEnabled: $aiInputEnabled')
           ..write(')'))
         .toString();
   }
@@ -5320,6 +5511,9 @@ typedef $$UserPrefTableTableCreateCompanionBuilder =
       Value<int?> lastFxRefreshAt,
       Value<String?> aiApiEndpoint,
       Value<Uint8List?> aiApiKeyEncrypted,
+      Value<String?> aiApiModel,
+      Value<String?> aiApiPromptTemplate,
+      Value<int?> aiInputEnabled,
     });
 typedef $$UserPrefTableTableUpdateCompanionBuilder =
     UserPrefTableCompanion Function({
@@ -5335,6 +5529,9 @@ typedef $$UserPrefTableTableUpdateCompanionBuilder =
       Value<int?> lastFxRefreshAt,
       Value<String?> aiApiEndpoint,
       Value<Uint8List?> aiApiKeyEncrypted,
+      Value<String?> aiApiModel,
+      Value<String?> aiApiPromptTemplate,
+      Value<int?> aiInputEnabled,
     });
 
 class $$UserPrefTableTableFilterComposer
@@ -5403,6 +5600,21 @@ class $$UserPrefTableTableFilterComposer
 
   ColumnFilters<Uint8List> get aiApiKeyEncrypted => $composableBuilder(
     column: $table.aiApiKeyEncrypted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get aiApiModel => $composableBuilder(
+    column: $table.aiApiModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get aiApiPromptTemplate => $composableBuilder(
+    column: $table.aiApiPromptTemplate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get aiInputEnabled => $composableBuilder(
+    column: $table.aiInputEnabled,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5475,6 +5687,21 @@ class $$UserPrefTableTableOrderingComposer
     column: $table.aiApiKeyEncrypted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get aiApiModel => $composableBuilder(
+    column: $table.aiApiModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get aiApiPromptTemplate => $composableBuilder(
+    column: $table.aiApiPromptTemplate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get aiInputEnabled => $composableBuilder(
+    column: $table.aiInputEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserPrefTableTableAnnotationComposer
@@ -5539,6 +5766,21 @@ class $$UserPrefTableTableAnnotationComposer
     column: $table.aiApiKeyEncrypted,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get aiApiModel => $composableBuilder(
+    column: $table.aiApiModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get aiApiPromptTemplate => $composableBuilder(
+    column: $table.aiApiPromptTemplate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get aiInputEnabled => $composableBuilder(
+    column: $table.aiInputEnabled,
+    builder: (column) => column,
+  );
 }
 
 class $$UserPrefTableTableTableManager
@@ -5584,6 +5826,9 @@ class $$UserPrefTableTableTableManager
                 Value<int?> lastFxRefreshAt = const Value.absent(),
                 Value<String?> aiApiEndpoint = const Value.absent(),
                 Value<Uint8List?> aiApiKeyEncrypted = const Value.absent(),
+                Value<String?> aiApiModel = const Value.absent(),
+                Value<String?> aiApiPromptTemplate = const Value.absent(),
+                Value<int?> aiInputEnabled = const Value.absent(),
               }) => UserPrefTableCompanion(
                 id: id,
                 deviceId: deviceId,
@@ -5597,6 +5842,9 @@ class $$UserPrefTableTableTableManager
                 lastFxRefreshAt: lastFxRefreshAt,
                 aiApiEndpoint: aiApiEndpoint,
                 aiApiKeyEncrypted: aiApiKeyEncrypted,
+                aiApiModel: aiApiModel,
+                aiApiPromptTemplate: aiApiPromptTemplate,
+                aiInputEnabled: aiInputEnabled,
               ),
           createCompanionCallback:
               ({
@@ -5612,6 +5860,9 @@ class $$UserPrefTableTableTableManager
                 Value<int?> lastFxRefreshAt = const Value.absent(),
                 Value<String?> aiApiEndpoint = const Value.absent(),
                 Value<Uint8List?> aiApiKeyEncrypted = const Value.absent(),
+                Value<String?> aiApiModel = const Value.absent(),
+                Value<String?> aiApiPromptTemplate = const Value.absent(),
+                Value<int?> aiInputEnabled = const Value.absent(),
               }) => UserPrefTableCompanion.insert(
                 id: id,
                 deviceId: deviceId,
@@ -5625,6 +5876,9 @@ class $$UserPrefTableTableTableManager
                 lastFxRefreshAt: lastFxRefreshAt,
                 aiApiEndpoint: aiApiEndpoint,
                 aiApiKeyEncrypted: aiApiKeyEncrypted,
+                aiApiModel: aiApiModel,
+                aiApiPromptTemplate: aiApiPromptTemplate,
+                aiInputEnabled: aiInputEnabled,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

@@ -2,10 +2,36 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/repository/providers.dart'
-    show currentLedgerIdProvider, transactionRepositoryProvider;
+    show
+        categoryRepositoryProvider,
+        currentLedgerIdProvider,
+        transactionRepositoryProvider;
+import '../../domain/entity/category.dart';
 import '../../domain/entity/transaction_entry.dart';
 
 part 'record_providers.g.dart';
+
+/// 当前活跃二级分类列表（与 [_TxTile] / 详情卡片共享）。
+///
+/// 引入动机（修复 2026-05-02 bug）：原 `_TxTile` 直接 `FutureBuilder<List<Category>>`
+/// 包裹 `categoryRepositoryProvider.listActiveAll()`，每次 build 都会生成一个新
+/// Future——`recordMonthSummaryProvider` 失效并导致 `_TxTile` 重建那一帧，
+/// FutureBuilder 的 `snapshot.data` 被重置为 `null`，于是当帧分类列表为空 →
+/// 全部流水回退到 "💸/💰 + 未分类" 占位，下一帧 Future 完成后又恢复正常。
+///
+/// 用 Riverpod `FutureProvider` 替代后，`ref.watch(categoriesListProvider).valueOrNull`
+/// 在重建期间继续返回上一帧的列表（Riverpod 缓存语义），不再有"瞬间未分类"
+/// 闪烁。识别路径下的 QuickConfirm 卡片高度比 FAB sheet 矮，闪烁在视觉上
+/// 更明显，所以 bug 仅在该路径被用户察觉，但 FAB 路径其实也存在同样的
+/// 重建瞬间——本修复一并消除。
+///
+/// 故意手写而非 `@riverpod` 注解：避免 codegen 二次跑 build_runner。分类增删
+/// 改的 UI 流目前仅 `category_manage_page.toggleFavorite` 一处（不影响图标/名称
+/// 显示），future 若加分类编辑请在那里 `ref.invalidate(categoriesListProvider)`。
+final categoriesListProvider = FutureProvider<List<Category>>((ref) async {
+  final repo = await ref.watch(categoryRepositoryProvider.future);
+  return repo.listActiveAll();
+});
 
 /// 记账首页当前选择的月份（年月，day 固定为 1）。
 ///

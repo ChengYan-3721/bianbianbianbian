@@ -7,6 +7,7 @@ import '../features/budget/budget_list_page.dart';
 import '../features/ledger/ledger_edit_page.dart';
 import '../features/record/category_manage_page.dart';
 import '../features/record/record_new_page.dart';
+import '../features/settings/ai_input_settings_page.dart';
 import '../features/settings/multi_currency_page.dart';
 import 'home_shell.dart';
 
@@ -64,6 +65,10 @@ final GoRouter goRouter = GoRouter(
     GoRoute(
       path: '/settings/multi-currency',
       builder: (context, state) => const MultiCurrencyPage(),
+    ),
+    GoRoute(
+      path: '/settings/ai-input',
+      builder: (context, state) => const AiInputSettingsPage(),
     ),
   ],
 );

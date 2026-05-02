@@ -55,6 +55,10 @@ part 'app_database.g.dart';
 /// - v7（Step 8.3）：`fx_rate` 追加 `is_manual INTEGER NOT NULL DEFAULT 0`
 ///   （手动覆盖标记，自动刷新跳过）；`user_pref` 追加 `last_fx_refresh_at
 ///   INTEGER`（上次自动刷新时间，每日节流锚点）。
+/// - v8（Step 9.3）：`user_pref` 追加 `ai_api_model TEXT` /
+///   `ai_api_prompt_template TEXT` / `ai_input_enabled INTEGER DEFAULT 0`。
+///   `ai_api_endpoint` 与 `ai_api_key_encrypted` 是历史遗留列（自 v1 即声明
+///   但未使用），Step 9.3 起被消费，无需迁移。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -83,7 +87,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -147,6 +151,20 @@ class AppDatabase extends _$AppDatabase {
               userPrefTable,
               userPrefTable.lastFxRefreshAt,
             );
+          }
+
+          if (from < 8) {
+            // v7 → v8：user_pref 追加 AI 增强配置 3 列。`ai_api_endpoint`
+            // / `ai_api_key_encrypted` 自 v1 即声明，无需迁移。`ai_input_enabled`
+            // 默认 0（关闭，与新装行为一致）；`ai_api_model` /
+            // `ai_api_prompt_template` 默认 NULL，UI 配置页保存时按用户填
+            // 写值写入，未填走 [kDefaultAiInputPromptTemplate] 兜底。
+            await m.addColumn(userPrefTable, userPrefTable.aiApiModel);
+            await m.addColumn(
+              userPrefTable,
+              userPrefTable.aiApiPromptTemplate,
+            );
+            await m.addColumn(userPrefTable, userPrefTable.aiInputEnabled);
           }
         },
       );

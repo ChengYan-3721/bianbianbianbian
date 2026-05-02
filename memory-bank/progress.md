@@ -1613,3 +1613,255 @@ UI 层：
 - **fxRate 在保存时 freeze 的语义不变（继承 Step 8.2）**：本步只新增"汇率源"的管理，不改"流水保存时把当前 fxRate 写入"的逻辑。账本默认币种变更后，旧流水的 fxRate 仍是历史值；需要"重算所有流水 fxRate"按钮的话，要在 transaction_repository 层加批量更新方法 + UI 二次确认（数据破坏性操作，不能默默改历史）。本步未做。
 - **`fxRateRefreshServiceProvider.overrideWithValue(...)` 的测试模式**：因为服务实例是非 keep 状态的纯对象（无 stream），用 `overrideWithValue` 比 `overrideWith((ref) => fake)` 更直观。注意：当生产代码改为 `@Riverpod(keepAlive: true)` 函数返回 `XxxService` 时，测试必须用 `overrideWithValue(fake)` 而不是 `overrideWith((ref) => fake)`——后者签名不匹配。
 - **本步完成了 Step 8.3；按用户约束：在用户验证测试前不开始 Step 9.1。**
+
+
+
+---
+
+## Phase 9 · 混合 AI 快速输入
+
+### ✅ Step 9.1 本地规则解析器（2026-05-02）
+
+**改动**
+
+新建 `lib/core/util/quick_text_parser.dart`：
+
+- `QuickParseResult`（`@immutable`）：纯数据类，承载本地解析结果——`amount` / `categoryParentKey` / `categoryLabel` / `confidence` / `occurredAt` / `note` / `rawText`。`categoryParentKey` 与 `seeder.dart::categoriesByParent.keys` 同集（`food` / `transport` / `shopping` / `entertainment` / `social` / `housing` / `medical` / `education` / `investment` / `income` / `other`）；`categoryLabel` 与 `budget_providers.dart::kParentKeyLabels` 同义（餐饮 / 交通 / …）。`note` 为剥离已识别片段后的残余文本。
+- `QuickTextParser({clock})`：纯函数式解析器，注入 `DateTime Function()` 钩子让测试锁定参考时间（避免 `今天 / 昨天 / 上周X / N天前` 等相对时间随真实时钟 flaky）。生产路径默认 `DateTime.now`。
+- 解析流程（5 步串行，**故意把时间放在金额之前**）：
+  1. **时间**：依次匹配「内置相对天数关键词（大前天/前天/昨天/今天/明天/后天/大后天，并含口语化"昨儿/今儿"）」→「上周X/这周X/下周X/上个星期X/下个星期X（X ∈ 一/二/.../六/日/天）」→「N 天前」。**先于金额扫描**——避免 `3天前 烧烤 88` 被金额正则先吃掉 `3` 导致 `(\d+)\s*天前` 失配。
+  2. **金额**：先跑阿拉伯数字正则 `[¥￥]?(\d+(?:\.\d+)?)\s*(?:元|块|RMB|CNY|￥|¥)?`（caseInsensitive）；未命中再跑中文数字回退 `[零一二两三四五六七八九十百千万]+` + 可选尾缀 `元 / 块 / ￥ / ¥`。中文数字解析支持 `0..99,999`（递归下降，覆盖 `三十块` / `两万五千元`）。**单字中文数字（如 `一`）若无单位尾缀视为非金额**——避免 `买了一些菜` 中 `一` 误判。
+  3. **分类**：关键词词典（53 个常用词），按"长词优先"扫描——`午饭` / `早饭` / `淘宝` 等不会被泛 `饭` / `饭` 截断。词典覆盖 implementation-plan 重点：餐饮（20 词）+ 交通（13 词）+ 购物（13 词）+ 娱乐（9 词），其余一级分类各放 5-7 个高频词，留长尾给 Step 9.3 LLM 增强。
+  4. **置信度**：base 0；阿拉伯金额 +0.5 / 中文金额 +0.4；分类 +0.4；时间 +0.1；上限 1.0。`午饭 30` = 0.9（≥0.8 验收线），`昨天 午餐 28` = 1.0；`三十块` 仅 0.4（< Step 9.2 阈值 0.6 → UI 高亮"请核对"或显示 AI 增强按钮）。
+  5. **备注**：每识别一段就把对应 substring 替换为单空格，最终 `replaceAll(\s+, ' ').trim()`；空字符串返回 null。
+- 内部辅助类型 `_Range<T>` / `_TimeMatch` / `_CategoryMatch` 私有，仅承载 `(value, start, end)` 元组。
+- `parseChineseNumber(String)` 暴露为 `@visibleForTesting` 静态方法，便于针对中文数字分支单独覆盖。
+- **故意不依赖 Flutter / Riverpod / drift**——`core/util` 是 V0 公共层，下游 `features/record` 在 Step 9.2 会注入 `QuickTextParser` provider，但本文件本身保持纯 Dart。
+- **故意不读 JSON 资产文件**：implementation-plan 提到"分类关键词词典（JSON 文件）"——当前实现选择**const Dart Map** 替代外部 JSON。理由：① 避免 `rootBundle.loadString` 引入异步初始化竞态（解析器要在 UI 输入框 `onChanged` 路径上同步调用）；② 避免 `pubspec.yaml` 加 assets 项；③ 词典体量极小（53 词），编译期常量比运行期 IO 更稳。如果未来 V2 想让用户**自定义**词典，再迁移到"const 默认 + JSON 覆盖"两层结构。
+
+新建 `test/core/util/quick_text_parser_test.dart`（34 用例，覆盖 implementation-plan §9.1 验收的 "20+ 条典型输入"）：
+
+- **`parseChineseNumber` × 5**：个位 / 十位组合 / 百千组合（`一百二十三`）/ 万级（`两万五千`）/ 非法输入返回 null。
+- **金额 × 7**：裸数字 `30` / `¥30` / `30元` / `30.5` / `三十块` / `两万五千元` / 单字中文数字若无尾缀不视为金额。
+- **分类 × 7**：`午饭 30` → 餐饮 + 30 + 置信度 ≥0.8（implementation-plan 验收线）/ `打车 25` → 交通 / `淘宝买衣服 99` → 购物（长词优先）/ `看电影 50` → 娱乐 / `工资 5000` → 收入 / `房租 3500` → 居家 / 未命中词典返回 null。
+- **时间 × 7**：`今天` → 当日 / `昨天打车 25`（金额 + 分类 + 时间三件套，confidence 1.0）/ `前天 50` / `大前天 早饭 12`（不被 `前天` 截断）/ `上周五 100` 基于 2026-05-04 周一 → 2026-05-01 / `3天前 烧烤 88`（修复时间在金额前的关键回归）/ `5 天前` 数字与"天前"间允许空格。
+- **note + confidence × 6**：残留为空 / 残留含中文备注 / 中文金额单维 0.4 < 0.6 / 三件套满分 1.0 / 空输入零置信度 / `rawText` 保留原始 trim 前。
+- **QuickParseResult × 2**：`toString` 含关键字段、`@immutable` 编译期保护占位。
+
+测试基准时间：`DateTime(2026, 5, 4)`（周一），所有相对时间断言均锚定此值。
+
+**验证**
+
+- `flutter analyze` → No issues found。
+- `flutter test test/core/util/quick_text_parser_test.dart` → 34/34 通过。
+- `flutter test`（全量）→ 304/304 通过（270 前 + 34 新 = 304）。
+- `dart run custom_lint` → 仍是 6 条预存 INFO（3 条 `record_new_providers.dart` + 3 条 `multi_currency_page_test.dart` 关于 scoped_providers_should_specify_dependencies），与本步无关。
+- 用户本机验证暂不涉及 `flutter run`——本步仅新增纯 Dart 工具类，UI 接线在 Step 9.2 才发生。implementation-plan §9.1 的两条验收已闭环：① 单元测试覆盖 20+ 条典型输入（实际 34 条）；② "午饭 30" → 金额 30、分类 餐饮、置信度 0.9 ≥ 0.8。
+
+**给后续开发者的备忘**
+
+- **解析顺序：时间 → 金额 → 分类**，绝不能交换前两步。`3天前 烧烤 88` 是关键回归——若让金额先扫描，正则会优先吃掉 `3`，导致 `(\d+)\s*天前` 失配，结果 `amount=3 / occurredAt=null`，与用户意图（`amount=88 / occurredAt=3天前`）相反。当前测试中第 24 条用例就是该回归的钉子。
+- **置信度阈值 0.6 是 Step 9.2 的事**：本步只产出分数；Step 9.2 在确认卡片实现"低置信度 → 高亮请核对 / 显示 AI 增强按钮"。如果未来要调阈值，改 Step 9.2 的常量，不动本文件的评分公式。
+- **置信度评分是加性而非乘性**：单维识别（如仅金额 / 仅分类）不会归零，便于 Step 9.2"部分识别"的 UX——卡片预填能识别的字段，让用户补全剩余。如果改成乘性（`amount * cat * time`），任一维 0 全归零，UX 差。
+- **词典扩展指引**：往 `_keywordDict` 加新词时务必检查"长词优先"是否生效——例如加 `"早午餐"` 后要确认它排在 `"早餐"` / `"午餐"` 之前。`_sortedKeywords` 静态闭包按 `length.compareTo` 倒序排，无需手工维护。
+- **中文数字解析的覆盖边界**：当前支持 `0..99,999`，不支持 `亿`、不支持小数（`三点五元`）、不支持负数。如果用户报告"消费一亿元"被误识别为 `0`，再加 `亿` 单位（10^8）即可；当前不预先实现以保持代码简洁。
+- **Step 9.3 LLM 增强的对接点**：Step 9.2 在确认卡片上展示本地结果；当 `confidence < 0.6` 时显示"✨AI 增强"按钮，按钮调用 LLM 后**用 LLM 返回的 JSON 重写卡片字段**——不动 `QuickParseResult` 本身（保持纯本地结果作为兜底）。
+- **本步完成了 Step 9.1；按用户约束：在用户验证测试前不开始 Step 9.2。**
+
+
+### ✅ Step 9.2 首页快捷输入条接线（2026-05-02）
+
+**改动**
+
+新增 `lib/features/record/quick_input_providers.dart`：
+- `@Riverpod(keepAlive: true) QuickTextParser quickTextParser(Ref ref)`——返回 `QuickTextParser()`，clock 默认 `DateTime.now`。`keepAlive` 让首页输入实例复用同一个 parser；测试可 `quickTextParserProvider.overrideWith((ref) => QuickTextParser(clock: () => fixedNow))` 注入固定时钟，让"昨天 / N天前 / 上周X"断言稳定。
+- `const double quickConfidenceThreshold = 0.6`——implementation-plan §9.2 建议阈值。常量而非 provider，因为阈值是产品决策不随会话/账本变化。Step 9.3 LLM 增强按钮也使用同阈值决定是否暴露。
+
+新增 `lib/features/record/quick_confirm_sheet.dart`：
+- 顶层函数 `Future<bool> showQuickConfirmSheet({context, parsed})`：弹出 modal bottom sheet 包裹 [QuickConfirmCard]，返回 true=保存成功 / false=取消。
+- `QuickConfirmCard`（ConsumerStatefulWidget）：4 个可编辑字段——
+  - **金额**：`TextField` + `numberWithOptions(decimal:true)` + `FilteringTextInputFormatter.allow(r'^\d*\.?\d{0,2}')` 限两位小数。前缀走账本默认币种 symbol（`kBuiltInCurrencies` 查 `currentLedgerDefaultCurrencyProvider` 命中码）。挂 `Key('quick_confirm_amount_field')`。
+  - **分类**：`InkWell` 行显示 `parentLabel / categoryName`，点击弹 `_CategoryPickerList`（`DraggableScrollableSheet(initialChildSize:0.6)` 内的 `ListView` + 按 `_parentKeyOrder` 分组的 ListTile）。每个 ListTile 挂 `Key('quick_confirm_picker_${c.id}')`，已选项 trailing 显示 `Icon(Icons.check)`。
+  - **时间**：`InkWell` 行显示 `yyyy-MM-dd HH:mm`，点击 `showDatePicker(locale: zh_CN, lastDate: now) → showTimePicker` 串联。文本挂 `Key('quick_confirm_time_text')`。
+  - **备注**：`TextField` + 挂 `Key('quick_confirm_note_field')`。
+- 置信度 `< quickConfidenceThreshold` 时顶部展示红色横幅（挂 `Key('quick_confirm_low_conf_banner')`），文案"识别置信度较低，请核对"，色板取苹果红 `#E76F51`。Step 9.3 "AI 增强"按钮将出现在同一区。
+- 初始化路径（`initState`）：
+  - 从 `QuickParseResult.amount` 格式化填入 `_amountController`（`25.0` → `"25"`、`25.50` → `"25.5"`、`25.55` 保持原样）；
+  - `_noteController` 填入 `parsed.note`（剥离已识别片段后的残余）；
+  - `_parentKey` 取自 `parsed.categoryParentKey`；
+  - `_occurredAt` = `parsed.occurredAt` 的日期 + "现在"的时分（解析未识别时回退当前时间）；
+  - `WidgetsBinding.addPostFrameCallback` 触发 `_loadCategories`（fire-and-forget）：从 `categoryRepositoryProvider` 拉全量活跃分类 → 按 `_parentKeyOrder` + `sortOrder` 排序 → 解析的 `parentKey` 命中时默认选其下首个二级分类。
+- 保存路径（`_save`）：
+  - `_canSave` = `amount > 0 && categoryId != null`；不满足时按钮 disabled。
+  - 构造 `TransactionEntry`（`type` 由 `_parentKey == 'income' ? 'income' : 'expense'` 自动判定，与 `record_new_page` 同语义；`currency` 取账本默认币种、`fxRate=1.0` 同币种简化、`accountId/toAccountId` 留空——快速输入暂不暴露账户选择，由后续 LLM 增强或全屏新建页处理）→ `transactionRepository.save` → invalidate 月度汇总 + 4 个 stats provider + budgetProgressFor。
+  - `_saving` 状态守按钮防双击；保存成功 `Navigator.pop(true)`；异常 SnackBar 提示"保存失败：$e"。
+
+修改 `lib/features/record/record_home_page.dart`：
+- `_QuickInputBar` 由 `StatelessWidget` 改为 `ConsumerStatefulWidget`——持有 `TextEditingController _controller` + `bool _busy`。
+- TextField 加 `Key('quick_input_field')` + `textInputAction: TextInputAction.send` + `onSubmitted: (_) => _handleSubmit()`。
+- 识别按钮加 `Key('quick_input_recognize_button')`，`onPressed: _busy ? null : _handleSubmit`。
+- `_handleSubmit()` 流程：trim 后空文本 → `ScaffoldMessenger.showSnackBar('请先输入一段话再点识别')`；非空 → `ref.read(quickTextParserProvider).parse(text)` → `await showQuickConfirmSheet(...)` → 返回 true 时 `_controller.clear()`。`_busy` 在 await 期间锁住按钮，避免重复提交。
+- 顶部 import 增加 `quick_confirm_sheet.dart` + `quick_input_providers.dart`。
+
+**测试**
+
+`test/features/record/quick_confirm_sheet_test.dart`（新建，9 用例）：
+1. **`昨天打车 25` → 金额=25 / 分类=交通/地铁公交 / 时间=2026-05-03**——验收 §9.2 主用例。固定 parser 时钟 `2026-05-04`（与 quick_text_parser_test 对齐）。
+2. **低置信度（仅金额命中）→ 红色横幅 + 保存 disabled**——`30` 输入，confidence=0.5 < 0.6。
+3. **备注字段显示残余文本**——`今天 午饭 30 跟同事` → note=`跟同事`。
+4. **`昨天打车 25` 点保存 → tx 写为 `expense + cat-transport-1`**——validates 默认选 transport 下 sortOrder=0 的分类。
+5. **`工资 5000` → 自动判定 `income` type 并保存**——validates `_parentKey == 'income'` 自动推导 income type。
+6. **用户改写金额 → 保存使用最终值**——`enterText('42.5')` 后 `lastSaved.amount == 42.5`。
+7. **点取消 → 不保存；showQuickConfirmSheet 返回 false**——验证 sheet pop 回值正确。
+8. **点击分类行 → 选择器显示分组 + 已选高亮**——`Icon(Icons.check)` 在 cat-transport-1 的 ListTile trailing。需要 `tester.view.physicalSize = (800, 1600)` 把 DraggableScrollableSheet 的 ListView 视口拉到 960px，让"打车"也在 tree 里（默认 600px 视口下 0.6 高度只能渲染前 4 行，后面的 sliver 是 lazy 的）。
+9. **点击"打车"切换分类 → 卡片标题更新 + 保存 categoryId 切换**——同样需要扩展视口。
+
+`test/features/record/quick_input_bar_test.dart`（新建，2 用例）：
+1. **首页输入"昨天打车 25" → 弹确认卡片 → 保存 → 流水落库**——通过 `BianBianApp` + 完整 ProviderScope override 走完链路。验证：① 输入"昨天打车 25" + 点识别按钮 → 卡片打开；② 卡片金额=25、分类=交通/地铁公交、时间=2026-04-25；③ 点保存 → 卡片关闭、输入框清空、`txRepo.lastSaved` 含 `amount=25 / type=expense / categoryId=cat-trans-1 / fxRate=1.0 / occurredAt 日期=2026-04-25`。RecordMonth 锚定 2026-04 + parser 时钟锚定 2026-04-26 → "昨天" = 2026-04-25 落在测试月内，避免 flaky。
+2. **空文本时点识别 → SnackBar 提示，不弹卡片**——验证防御分支。
+
+需要新建的 fake：`_RecordingTransactionRepository`（区别于 widget_test.dart 里那个 fail 的同名类，记录 lastSaved）+ `_FakeCategoryRepository`（widget_test 没有的）。`_FakeLedgerRepository / _FakeAccountRepository` 复用既有模式。
+
+**验证**
+- `dart run build_runner build --delete-conflicting-outputs` → 52 outputs，0 error。
+- `flutter analyze` → No issues found。
+- `flutter test` → 315/315 通过（前 304 + 9 confirm sheet + 2 integration = 315）。
+- `dart run custom_lint` → 6 条预存 INFO（3 条 `record_new_providers.dart` + 3 条 `multi_currency_page_test.dart`），与本步无关。
+- 用户本机 `flutter run` 待手工验证：
+  1. 首页输入"昨天打车 25"按回车 / 点 "✨ 识别" → 弹出确认卡片，金额预填 25、分类显示"交通 / 地铁公交"（或种子化首条 transport 子类）、时间显示昨天日期 + 当前时分、备注空。
+  2. 卡片置信度高（≥0.6）→ 不显示红色横幅。
+  3. 输入"30"按识别 → 卡片金额 25 替换为 30，分类显示"请选择"占位、保存按钮置灰、顶部红色"识别置信度较低，请核对"横幅可见。
+  4. 点击分类行 → DraggableScrollableSheet 弹出 → 分类按"食/购/行/育/乐/情/住/医/投/收/其"分组展示，每行 emoji + 名称 + 当前选中处 trailing ✓。点选另一个分类 → 卡片更新。
+  5. 点击时间行 → 系统 datePicker → timePicker 串联 → 卡片时间字段更新。
+  6. 修改备注/金额 → 点保存 → 卡片关闭、输入框清空、首页流水列表当日组出现新条目（金额、分类 emoji、时间正确）。
+  7. 点取消 / 关闭按钮 → 卡片关闭、输入框保留原文本（便于用户继续编辑）。
+  8. 空输入直接点识别 → SnackBar "请先输入一段话再点识别"，不弹卡片。
+
+**给后续开发者的备忘**
+- **快速输入暂不支持账户选择**：保存路径里 `accountId / toAccountId` 都为 null。设计意图是"快速一句话记一笔，不强制选账户"——保留账户为"未填写"，事后用户可在流水详情页编辑。如果产品后续要求"快速输入也用上次记录的账户"，可以借鉴 `RecordForm.initDefaultAccount` 的模式：在 `_save` 前读 `SharedPreferences.last_used_account_id` 兜底。
+- **快速输入暂不支持币种切换**：保存写入账本默认币种 + `fxRate=1.0`。Step 8.2 的多币种开关只影响 `record_new_page` 的键盘 CNY 键，不影响快速输入卡片。如果用户在外币账本下用快速输入"打车 25"，会落入"账本默认币种 + amount=25"。这与 record_new_page 行为一致。如果产品要求快速输入也支持币种下拉（例如解析 "USD 25 打车"），需要在 [QuickTextParser] 加币种识别 + 卡片金额前 prefix 改为可点击的币种选择器；当前不做。
+- **`_loadCategories` 在 postFrameCallback 而非 initState 直接调**：如果在 initState 直接 `await ref.read(...)`，会触发 Riverpod 的 "ref read in initState before first build" 警告（虽然实际不会抛错，但破坏 frame 模型）。`addPostFrameCallback` 把 IO 推迟到第一帧之后，干净。
+- **DraggableScrollableSheet 内部 ListView 是 lazy 的**：测试视口默认 600px，0.6 高度 = 360px，只能渲染 4-5 行；后面的项不在 widget tree 里，`find.byKey` 直接 fail。本步采用的解决方案：测试时 `tester.view.physicalSize = const Size(800, 1600)` 把视口拉到 960px 让所有项渲染。生产路径不动。如果未来分类总数 >50 让选择器列表很长，考虑用 `tester.dragUntilVisible` 替代视口扩展。
+- **保存后 invalidate 6 个 provider 与 record_new_page.save 完全一致**——确保首页流水列表、统计页、预算进度、账户余额都即时刷新。Phase 10 同步上线后这些 invalidate 不需要修改（同步引擎走另一路径触发 ref.invalidate）。
+- **Step 9.3 接入路径**：在 [QuickConfirmCard] 内置信度 < 0.6 时**额外**渲染一个"✨ AI 增强"按钮（紧邻"请核对"横幅）。点击调用用户配置的 LLM endpoint，把返回的 JSON 重写卡片字段（amount / categoryId / occurredAt / note）—**不动** [QuickParseResult] 本身（保留本地基线作为兜底）。`features/settings/ai_input_settings.dart` 之类的新文件承载 LLM 配置；当前不预创建。
+- **本步完成了 Step 9.2；按用户约束：在用户验证测试前不开始 Step 9.3。**
+
+
+### ✅ Step 9.2 hotfix：showModalBottomSheet builder 误用外层 context（2026-05-02）
+
+**现象**：用户实机验收时出现红屏 —— `Looking up a deactivated widget's ancestor is unsafe.`，stack 指向 `record_home_page.dart:764`（即 `_DetailAction.edit` 分支二次开 sheet 的 `Theme.of(context).colorScheme.surface`）。复现路径：保存流水（Step 9.2 quick input 或既有 FAB）→ 列表 invalidate → 用户在 `_TxTileState` 上点开详情 → 选"编辑" → 第二层 sheet 在 build 时外层 `_TxTileState` 已被 deactivate（Dismissible / FutureBuilder 重排）→ `Theme.of(outerContext)` 抛错。
+
+**根因**：4 处 `showModalBottomSheet(builder: (sheetContext) => ... Theme.of(context) ...)` 全都用了**外层闭包 context** 而非 builder 注入的 `sheetContext`。Flutter 文档明确："builder 内不要用外层 context 做 ancestor 查找"。这是 Step 9.2 之前就有的潜在 bug；Step 9.2 的快速保存让"保存→列表重建"路径更短，更容易让用户撞上。
+
+**修复**：`record_home_page.dart` 4 处全部把 `Theme.of(context)` 改为 `Theme.of(sheetContext)`：
+1. `RecordHomePage.build` FAB onPressed → 第一层 sheet（line 114）
+2. `_TopBar` 转账按钮 onPressed → 第一层 sheet（line 224）
+3. `_TxTileState` `_DetailAction.edit` → 第二层 sheet（line 764，**用户实机崩的那一行**）
+4. `_TxTileState` `_DetailAction.copy` → 第二层 sheet（line 798）
+
+`Image.errorBuilder` 内 `Theme.of(context)`（line 1094）保留——那个 `context` 是 `_RecordDetailSheet.build` 注入的 sheet 自身的 context，不是外层。
+
+`quick_confirm_sheet.dart` 自身两处 builder（`showQuickConfirmSheet` 与 `_pickCategory`）从一开始就用 `sheetCtx`，无需修补。
+
+**验证**
+- `flutter analyze` → No issues found。
+- `flutter test` → 315/315 仍全绿（修复路径无逻辑变化，颜色源切换为 sheet 自己的 Theme，用户视觉无差别——sheet 在 MaterialApp 主题作用域内）。
+
+**给后续开发者的备忘**
+- **`showModalBottomSheet(builder: (ctx) {...})` 的 `ctx` 才是 sheet 自己的 context**。在 builder 内**绝不能**用闭包捕获的外层 `context` 做 `Theme.of` / `MediaQuery.of` / `Navigator.of` 等 ancestor 查找——sheet 关闭、外层重建期间外层 context 会被 deactivate。这条规则同样适用于 `showDialog` / `showMenu` / `showGeneralDialog` 等所有"内联子树"API。本项目内已知合规位点：`account_list_page._confirmDelete`、`ledger_list_page` 各处删除/编辑菜单——它们 builder 内只用 builder 注入的 context。
+- **回归保护建议**：可以加一个 `flutter analyze` 自定义 lint 规则，在 `showModalBottomSheet`/`showDialog` 的 builder 闭包里禁止使用闭包捕获的 `context`。本步未做（成本/收益不平衡），但若未来再撞同款，写一条规则比反复 review 更稳。
+
+
+### ✅ Step 9.3 LLM 增强（2026-05-02）
+
+**改动**
+
+数据层 / Schema（v7 → v8）：
+- `lib/data/local/tables/user_pref_table.dart`：追加 3 列。
+  - `ai_input_enabled INTEGER NULLABLE DEFAULT 0`：master switch。0/null = 关闭（确认卡片不显示 AI 增强按钮），1 = 开启（且需 endpoint/key/model 三件齐全才真正显示按钮）。
+  - `ai_api_model TEXT NULLABLE`：用户填写的模型名（如 `gpt-4o-mini`）。
+  - `ai_api_prompt_template TEXT NULLABLE`：用户填写的 prompt 模板（含 `{NOW}` / `{TEXT}` / `{CATEGORIES}` 占位符）；为空时使用 `kDefaultAiInputPromptTemplate` 兜底。
+  - 历史遗留列 `ai_api_endpoint TEXT` / `ai_api_key_encrypted BLOB`（自 Step 4.2 user_pref 表初次落库即声明但未消费）：Step 9.3 起被消费。`ai_api_key_encrypted` 在 V1 落 UTF-8 raw bytes（DB 由 SQLCipher 加密保护，故 at-rest 安全已由 DB 级别覆盖；Phase 11 会改为 BianbianCrypto 字段级加密，列名 `_encrypted` 是为该用法预留的）。
+- `lib/data/local/app_database.dart`：`schemaVersion` 从 v7 升 v8；`onUpgrade` 新增 `if (from < 8)` 分支：3 个 `m.addColumn(userPrefTable, ...)`。Schema 版本注释同步追加 v8 行。
+
+Provider 层 / 服务：
+- `lib/features/settings/ai_input_settings_providers.dart`（新建）：
+  - `AiInputSettings`（`@immutable` 数据类）：5 字段 + `hasMinimalConfig` getter（enabled + endpoint/key/model 三件齐全才 true，决定确认卡片是否显示 AI 增强按钮，implementation-plan §9.3 验证 1 的核心守门）+ `effectivePromptTemplate` getter（用户值优先，否则走默认）+ `copyWith` + `==` / `hashCode`。
+  - `AiInputSettingsNotifier`（`@Riverpod(keepAlive: true) class`）：`build()` 从 `user_pref` 加载；`save(AiInputSettings)` 全量覆盖写入 + `invalidateSelf()`。空白字段（empty / whitespace-only）一律落 NULL，便于 `hasMinimalConfig` 用 `isNotEmpty` 判断。API key 经 `_encodeApiKey`（UTF-8 → Uint8List）/ `_decodeApiKey`（反向）转换。
+  - `aiInputEnhanceServiceProvider`（`@Riverpod(keepAlive: true)`）：返回 `AiInputEnhanceService(settings: aiSettings)`，settings 变更（用户在配置页保存）时自动重建。测试可 `overrideWithValue(fakeService)`。
+  - `kDefaultAiInputPromptTemplate`（顶层 const）：默认 prompt 模板。强调"只输出 JSON" + 字段允许 null + snake_case 字段名。
+
+- `lib/features/record/ai_input_enhance_service.dart`（新建）：
+  - `AiEnhanceResult`（`@immutable` 数据类）：4 字段 amount / categoryParentKey / occurredAt / note。LLM 命中视作高置信度，无 confidence 字段。
+  - `AiEnhanceException`（`Exception`，含 message）：所有失败的统一异常类型——UI 层 catch 后展示 SnackBar `'AI 解析失败：$message'`。
+  - `kValidParentKeys`（顶层 const Set）：合法 parent_key 集（与 `seeder.dart::categoriesByParent.keys` 同集），用于校验 LLM 返回的 `category_parent_key`。
+  - `AiInputEnhanceService` 类：构造参数 `settings` + 可注入的 `httpClient` / `clock` / `timeout`（默认 30s）。
+    - `enhance(String rawText)`：① 校验配置完整 → ② 校验 endpoint URL 合法 → ③ 替换 prompt 占位符 → ④ POST OpenAI Chat Completions（`{model, messages: [{role:user, content:prompt}], temperature:0, response_format:{type:'json_object'}}`，`Authorization: Bearer <key>`，30s 超时）→ ⑤ HTTP 200 → 抽取 `choices[0].message.content` → ⑥ 调 `parseEnhanceJson`。任一步失败抛 `AiEnhanceException`（implementation-plan §9.3 验证 2 "网络失败回退本地结果"在此守护）。
+    - `_buildPrompt`：替换 `{NOW}` → `yyyy-MM-dd HH:mm`、`{TEXT}` → 用户原文、`{CATEGORIES}` → `kValidParentKeys.join(' / ')`。
+    - `buildPromptForTesting`：`@visibleForTesting` 暴露给单测验证占位符替换。
+  - `parseEnhanceJson(String)`（顶层 + `@visibleForTesting`）：严格 schema 校验。`amount` 必须 number 且 isFinite 且 > 0；`category_parent_key` 必须在 `kValidParentKeys` 内；`occurred_at` 必须 ISO 日期；`note` 必须 string。任一字段类型 / 取值 / 格式不符抛 `AiEnhanceException`——不返回部分解析结果，避免半成品污染卡片（implementation-plan §9.3 验证 3 "JSON 不符合 schema 不崩溃"在此守护）。
+
+UI 层：
+- `lib/features/settings/ai_input_settings_page.dart`（新建）：`AiInputSettingsPage` ConsumerStatefulWidget。5 字段表单 + 底部"保存"按钮。
+  - 字段：SwitchListTile（开关）+ 4 个 TextField（endpoint URL / API key（默认 obscureText=true，可点眼睛切换）/ model / prompt 模板，多行 6-12 行）。
+  - 控制器在第一次拿到 settings 时一次性 `_hydrate`（`_hydrated` flag 守门，避免后续 settings 变更覆盖用户编辑）。
+  - 保存路径：构造完整 `AiInputSettings` → `notifier.save(...)` → SnackBar `'AI 增强配置已保存'`；失败 → `'保存失败：$e'`。`_saving` 状态守按钮防双击。
+  - 关键 Key：`ai_input_enabled_switch` / `ai_input_endpoint_field` / `ai_input_api_key_field` / `ai_input_show_api_key` / `ai_input_model_field` / `ai_input_prompt_field` / `ai_input_save_button`。
+
+- `lib/features/record/quick_confirm_sheet.dart`（修改）：
+  - `_QuickConfirmCardState` 新增字段 `bool _aiEnhancing = false`。
+  - 新增 `_runAiEnhance()` 方法：调 `aiInputEnhanceServiceProvider.enhance(parsed.rawText)`。
+    - **成功**：setState 用返回值重写 `_amountController` / `_parentKey`（并自动选首个二级分类，与 `_loadCategories` 兜底策略一致）/ `_occurredAt`（保留时分）/ `_noteController` → SnackBar `'AI 已更新'`。
+    - **失败**（catch `AiEnhanceException`）：SnackBar `'AI 解析失败：${e.message}'`，**字段不变**（implementation-plan §9.3 验证 2 "网络失败回退本地结果"）。
+    - **其他异常**：SnackBar `'AI 解析失败：$e'`，同样不变字段。
+  - `build()` 内新增局部变量 `showAiButton = lowConfidence && (aiSettings?.hasMinimalConfig ?? false)`——三个条件同时满足才显示按钮（implementation-plan §9.3 验证 1 "没有配置 API 时按钮不显示"）。
+  - 低置信度横幅 Row 末尾新增 `TextButton.icon(✨ AI 增强)`：挂 `Key('quick_confirm_ai_enhance_button')`，loading 时显示小 spinner + 文字 "解析中…"，完成后回到 `'AI 增强'`。颜色取苹果红与横幅一致。
+
+- `lib/app/home_shell.dart`：`_MeTab` 新增 `ListTile(Icons.auto_awesome, '快速输入 · AI 增强')` → `context.push('/settings/ai-input')`。
+- `lib/app/app_router.dart`：新增 `GoRoute('/settings/ai-input')` → `AiInputSettingsPage`。
+
+**测试**
+
+- `test/features/settings/ai_input_settings_providers_test.dart`（新建，10 用例）：
+  - **AiInputSettings 数据类 × 5**：默认空 / hasMinimalConfig 四件齐全断言（5 case：缺各字段 + 空白 + 全齐）/ effectivePromptTemplate 用户值优先 / `==` 全字段参与 / copyWith 仅修改指定字段。
+  - **DB 集成 × 5**：build 默认 → 全空 / save → 持久化 → 重读校验 5 字段 + DB 直查 user_pref 5 列 + API key BLOB UTF-8 bytes 断言 / save 空白字段一律 NULL / save API key 含中文 / emoji UTF-8 往返 / user_pref 不存在的极端兜底（删除 user_pref 单行后重建 container 仍能返回空 settings 不崩溃）。
+- `test/features/record/ai_input_enhance_service_test.dart`（新建，24 用例）：
+  - **parseEnhanceJson 正常路径 × 4**：全字段命中 / 仅 amount / amount=null 仍可用 / 空字符串等价缺失。
+  - **parseEnhanceJson schema 严格校验 × 9**：content 非 JSON / 数组非对象 / amount 类型非法（字符串）/ amount ≤ 0 / amount 0.0 / category 取值非法（'breakfast'）/ category 类型非法（数字）/ occurred_at 非 ISO（'昨天'）/ note 类型非法（对象）。
+  - **AiInputEnhanceService.enhance × 8**：未配置兜底 / endpoint URL 非法 / 成功路径（验证 Authorization header / model / response_format / prompt 替换）/ HTTP 非 200（429）/ 网络异常（client throws ClientException）/ 缺 choices / content 非 JSON / amount schema 非法。
+  - **buildPromptForTesting × 3**：默认模板三占位符替换 / 用户自定义模板替换 / 空 promptTemplate 走默认。
+  - 注意：http.Response 默认 Latin1 编码，含中文测试响应必须显式 `headers: {'content-type': 'application/json; charset=utf-8'}`。
+- `test/features/settings/ai_input_settings_page_test.dart`（新建，3 用例）：① 入页根据 settings 预填 5 字段（SwitchListTile.value / 4 个 controller.text / API key obscureText=true）；② 切开关 + enterText 4 字段 + 保存 → notifier.lastSaved 收到完整 settings + SnackBar `'AI 增强配置已保存'`；③ 点击眼睛 → API key obscureText 切到 false，再点切回 true。
+- `test/features/record/quick_confirm_sheet_test.dart`（追加 4 用例 = 13 → 17）：
+  - `_overrides` 新增 `aiInputSettingsNotifierProvider.overrideWith(() => _TestAiInputSettings(aiSettings))` + 可选 `aiInputEnhanceServiceProvider.overrideWithValue(aiService)` 注入。
+  - 新增 `_TestAiInputSettings extends AiInputSettingsNotifier`（覆盖 `build` 返回 fixed initial、覆盖 `save` 直接 `state = AsyncValue.data(...)`）+ `_FakeAiEnhanceService implements AiInputEnhanceService`（记录 callCount + lastInput；可注入 result 或 error）。
+  - 4 用例：① 无 AI 配置 + 低置信度 → 横幅在但 AI 按钮不在；② AI 配置完整 + 低/高置信度 → 按钮分别可见/不可见（验证 `showAiButton` 三条件守门）；③ 点 AI → 成功结果改写 amount=88.5 / parentKey=transport（自动选 sortOrder=0 = 地铁公交）/ occurredAt=2026-05-01 / note='AI 推断备注' + SnackBar `'AI 已更新'`；④ 点 AI → 失败 SnackBar `'AI 解析失败：网络请求失败：模拟断网'`，amount 仍 30 / 分类仍 '请选择'（implementation-plan §9.3 验证 2 兜底）。
+
+**依赖**
+
+本步未新增 `pubspec.yaml` 依赖。`http: ^1.2.0` 已在 Step 8.3 引入，本步直接复用。`http/testing.dart` 的 `MockClient` 同样已在 supabase_flutter 间接依赖中。
+
+**验证**
+
+- `dart run build_runner build --delete-conflicting-outputs` → 增量重建 6+ outputs（schema v8 改动 + 新 provider g.dart）。
+- `flutter analyze` → No issues found。
+- `flutter test` → 360/360 通过（315 前 + 4 quick_confirm_sheet AI 按钮 + 24 service + 10 settings provider + 3 settings page + 4 quick_confirm_sheet 重构净增量 = 360）。
+- `dart run custom_lint` → 8 条 INFO（6 条预存 + 2 条新 `ai_input_settings_page_test.dart` 关于 `avoid_public_notifier_properties` / `scoped_providers_should_specify_dependencies`，仅测试 fake 风格，不影响生产）。
+- 用户本机 `flutter run` 待手工验证：
+  1. **未配置时按钮不显示（implementation-plan §9.3 验证 1）**：进入"我的 → 快速输入 · AI 增强"→ 不开启开关；返回首页输入"30" → 弹出确认卡片 → 红色"识别置信度较低"横幅可见 + AI 增强按钮**不显示**。
+  2. **配置后按钮显示**：回到 AI 配置页 → 开启开关 → 填写 endpoint（如 `https://api.openai.com/v1/chat/completions`）+ API key + model（如 `gpt-4o-mini`）→ 保存 → SnackBar `'AI 增强配置已保存'`。返回首页输入"30" → 卡片横幅 + AI 增强按钮（✨）**同时显示**。输入"昨天打车 25"→ 高置信度 → 横幅 + 按钮**都不显示**。
+  3. **点击 AI 增强成功**：低置信度卡片点 ✨ → 按钮变 spinner "解析中…" → LLM 返回结果 → 卡片字段更新 + SnackBar `'AI 已更新'`。
+  4. **网络失败兜底（implementation-plan §9.3 验证 2）**：飞行模式 / 错误 endpoint → 点 ✨ → SnackBar `'AI 解析失败：网络请求失败：...'`，卡片字段保持本地解析值不变。
+  5. **schema 校验（implementation-plan §9.3 验证 3）**：模拟 LLM 返回 `{"amount":"30"}`（字符串）→ SnackBar `'AI 解析失败：amount 字段类型非法...'`，不崩溃。
+  6. **API key 安全**：配置页打开 → API key 字段默认显示 `••••••` 遮蔽；点眼睛图标 → 明文展开；再点 → 重新遮蔽。
+  7. **DB 升级路径**：装过 v7 旧版的设备 → drift 走 `onUpgrade` v7→v8 路径执行 3 条 ADD COLUMN，原 user_pref 行的 `ai_input_enabled` 默认 0（关闭，不影响行为），其他 2 列默认 NULL。
+
+**给后续开发者的备忘**
+
+- **Step 9.3 暂不接入 Phase 11 加密**：API key 当前以 UTF-8 raw bytes 存入 `ai_api_key_encrypted` BLOB 列（实际未加密；DB 由 SQLCipher 加密保护已足够 V1）。Phase 11 引入 BianbianCrypto 字段级加密时，会增加 `_encryptedApiKey(plaintext, syncKey)` 路径，迁移逻辑：① 用户登录同步 → 派生 syncKey → ② 读现有 BLOB 视为 plaintext → ③ 用 syncKey 重新加密写回。本步**不**新增独立 `ai_api_key_plain` 列，避免后续迁移碎片。
+- **endpoint URL 校验只查 `Uri.tryParse + hasAbsolutePath`，未校验 https**：用户可填 `http://` 本地代理（如 LM Studio）。如果产品要求强制 https，加 `if (url.scheme != 'https') throw ...`，但要在 settings page 给出"测试连接"按钮配套验证。
+- **prompt 模板留空 → 走默认**：在 `AiInputSettings.effectivePromptTemplate` 处统一兜底，UI 配置页只显示 hint，不在 onChanged 时强制覆写——保留用户清空的语义（`null`）。
+- **fake service 实现 AiInputEnhanceService 接口**：因 service 是 class 而非 mixin，fake 必须 `implements`（非 `extends`）。`buildPromptForTesting` 在 fake 中抛 `UnimplementedError`——当前 UI 路径不调用，若未来调用需补 mock。
+- **测试中 http.Response 含中文必须显式 utf-8 头**：`http.Response('{"note":"中文"}', 200, headers: {'content-type': 'application/json; charset=utf-8'})`。否则默认 Latin1 编码会在 `resp.body` 抛 `Invalid argument: Contains invalid characters`。
+- **Step 9.3 LLM 增强路径与 Step 9.1 本地 parser 完全解耦**：LLM 失败时本地 `QuickParseResult` 仍是兜底结果——卡片用户始终能保存（手动补全）。这就是"hybrid"的语义：AI 是 nice-to-have 的增强，不是关键路径。
+- **本步完成了 Step 9.3，也完成了 Phase 9 全部三个步骤**。按用户约束：在用户验证测试前不开始 Step 10.1 Supabase Schema 与 RLS。Phase 10 同步上线后会与 Phase 11（字段级加密）紧密耦合——届时可能需要返回 Step 9.3 调整 API key 存储路径（plaintext bytes → BianbianCrypto 加密）。

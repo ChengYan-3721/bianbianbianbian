@@ -53,11 +53,36 @@ class UserPrefTable extends Table {
   IntColumn get lastFxRefreshAt =>
       integer().nullable().named('last_fx_refresh_at')();
 
+  /// 历史遗留列（自 Step 4.2 user_pref 表初次落库即存在，但直到 Step 9.3
+  /// 才被消费）：用户在"我的 → 快速输入 → AI 增强"页配置的 LLM endpoint URL。
   TextColumn get aiApiEndpoint =>
       text().nullable().named('ai_api_endpoint')();
 
+  /// 历史遗留列（同上）：API key 的存放位置。
+  ///
+  /// **当前实现（Step 9.3）**：UTF-8 编码后的 raw bytes（即"未加密"），整个 DB 由
+  /// SQLCipher 加密保护，故 at-rest 安全已由 DB 级别覆盖；列名带 `_encrypted`
+  /// 是为 Phase 11 [BianbianCrypto] 字段级加密预留的——届时会用同步密码派生
+  /// 出的 key 重写读写路径，本列名保持不变。
   BlobColumn get aiApiKeyEncrypted =>
       blob().nullable().named('ai_api_key_encrypted')();
+
+  /// Step 9.3：AI 增强使用的模型名（如 `'gpt-4o-mini'` / `'qwen-turbo'`）。
+  /// 用户在配置页填写；为空时 [AiInputSettings.hasMinimalConfig] = false。
+  TextColumn get aiApiModel =>
+      text().nullable().named('ai_api_model')();
+
+  /// Step 9.3：AI 增强使用的 prompt 模板（含 `{NOW}` / `{TEXT}` / `{CATEGORIES}`
+  /// 占位符）。为空时使用 [kDefaultAiInputPromptTemplate] 兜底。
+  TextColumn get aiApiPromptTemplate =>
+      text().nullable().named('ai_api_prompt_template')();
+
+  /// Step 9.3：AI 增强全局开关。0/null = 关闭（默认；确认卡片不显示 AI 增强按钮），
+  /// 1 = 开启（且只有 endpoint + key + model 三件齐全才会真正显示按钮）。
+  IntColumn get aiInputEnabled => integer()
+      .named('ai_input_enabled')
+      .nullable()
+      .withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};

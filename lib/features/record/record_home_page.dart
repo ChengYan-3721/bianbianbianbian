@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'quick_confirm_sheet.dart';
+import 'quick_input_providers.dart';
 import 'record_new_page.dart';
 import 'record_new_providers.dart';
 import 'record_providers.dart';
@@ -12,7 +14,6 @@ import '../../core/util/currencies.dart';
 import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/providers.dart'
     show
-        categoryRepositoryProvider,
         currentLedgerIdProvider,
         ledgerRepositoryProvider,
         transactionRepositoryProvider;
@@ -109,7 +110,7 @@ class RecordHomePage extends ConsumerWidget {
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(20)),
                 child: Material(
-                  color: Theme.of(context).colorScheme.surface,
+                  color: Theme.of(sheetContext).colorScheme.surface,
                   child: const _RecordBottomSheetPage(),
                 ),
               ),
@@ -219,7 +220,7 @@ class _TopBar extends ConsumerWidget {
                         borderRadius:
                             const BorderRadius.vertical(top: Radius.circular(20)),
                         child: Material(
-                          color: Theme.of(context).colorScheme.surface,
+                          color: Theme.of(sheetContext).colorScheme.surface,
                           child: const _RecordTransferBottomSheetPage(),
                         ),
                       ),
@@ -388,38 +389,131 @@ class _CardChip extends StatelessWidget {
 
 // ---- 快捷输入条 ----
 
-class _QuickInputBar extends StatelessWidget {
+/// Step 9.2：首页顶部快捷输入条。
+///
+/// 用户在 TextField 输入中文短句后回车 / 点 "✨ 识别" 按钮，调用
+/// [quickTextParserProvider] 做本地解析，弹出 [QuickConfirmCard] 作为
+/// "确认卡片"——含可编辑的金额 / 分类 / 时间 / 备注。卡片内确认即落库
+/// 一条流水；置信度 < [quickConfidenceThreshold] 时卡片顶部高亮"请核对"。
+///
+/// 输入框为空 / 全空白时点识别会以 SnackBar 提示，不弹卡片；保存成功后
+/// 输入框自动清空，便于连续多条快速记账。
+class _QuickInputBar extends ConsumerStatefulWidget {
   const _QuickInputBar();
+
+  @override
+  ConsumerState<_QuickInputBar> createState() => _QuickInputBarState();
+}
+
+class _QuickInputBarState extends ConsumerState<_QuickInputBar> {
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  bool _busy = false;
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  void _onFocusChanged() {
+    if (!mounted) return;
+    if (_focused != _focusNode.hasFocus) {
+      setState(() => _focused = _focusNode.hasFocus);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChanged);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSubmit() async {
+    if (_busy) return;
+    final text = _controller.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先输入一段话再点识别')),
+      );
+      return;
+    }
+    // 弹卡片前主动收起键盘——避免确认卡片打开时键盘还从首页 TextField 提起。
+    _focusNode.unfocus();
+    setState(() => _busy = true);
+    final parser = ref.read(quickTextParserProvider);
+    final parsed = parser.parse(text);
+    final saved = await showQuickConfirmSheet(
+      context: context,
+      parsed: parsed,
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (saved) {
+      _controller.clear();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    // 焦点驱动外层圆角矩形的边框颜色 / 宽度——避免 InputDecoration 自带的内
+    // 层高亮与外层不齐导致的"小一圈"视觉。同时 AnimatedContainer 提供 150ms
+    // 过渡。
+    final borderColor = _focused
+        ? colors.primary
+        : colors.primary.withAlpha(120);
+    final borderWidth = _focused ? 1.5 : 1.0;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOut,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: colors.surface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: colors.primary.withAlpha(120), width: 1),
+                border: Border.all(color: borderColor, width: borderWidth),
               ),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
+                      key: const Key('quick_input_field'),
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      textInputAction: TextInputAction.send,
+                      // 点 TextField 外的任何区域都收起键盘 / 取消焦点。Flutter
+                      // 默认不会自动这么做——必须显式 unfocus 主焦点节点，否
+                      // 则用户得切 Tab 才能让键盘消失。
+                      onTapOutside: (_) {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      },
+                      // 显式把所有 *Border 全部置 none，避免 M3 默认 focused 态
+                      // 在内层叠加一个比外框小的圆角矩形（用户报告的"高亮比
+                      // 外框小"现象）。
                       decoration: const InputDecoration(
                         hintText: '写点什么，我来帮你记 🐰',
                         border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        focusedErrorBorder: InputBorder.none,
+                        filled: false,
                         isDense: true,
+                        isCollapsed: true,
                         contentPadding: EdgeInsets.zero,
                       ),
                       style: Theme.of(context).textTheme.bodyMedium,
-                      onSubmitted: (value) {
-                        // Step 3.2 快捷输入条接线
-                      },
+                      onSubmitted: (_) => _handleSubmit(),
                     ),
                   ),
                 ],
@@ -428,9 +522,8 @@ class _QuickInputBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           TextButton.icon(
-            onPressed: () {
-              // Step 3.2 接线
-            },
+            key: const Key('quick_input_recognize_button'),
+            onPressed: _busy ? null : _handleSubmit,
             icon: const Text('✨', style: TextStyle(fontSize: 14)),
             label: const Text('识别'),
             style: TextButton.styleFrom(
@@ -598,7 +691,6 @@ class _TxTileState extends ConsumerState<_TxTile> {
     final amountColor = isTransfer
         ? const Color(0xFF6C8CC8)
         : (isExpense ? const Color(0xFFE76F51) : const Color(0xFFA8D8B9));
-    final repo = ref.watch(categoryRepositoryProvider).valueOrNull;
     // Step 7.2 修复：watch `accountsListProvider`（而非 `accountRepositoryProvider`
     // + FutureBuilder）。后者拿到的是仓库实例本身，删除账户后实例不变 → tile
     // 不会 rebuild → 显示陈旧的账户名。前者在 `_confirmDelete` / `_save` 后已
@@ -606,234 +698,235 @@ class _TxTileState extends ConsumerState<_TxTile> {
     // 最新账户列表，软删账户立即显示"（已删账户）"。
     final accounts =
         ref.watch(accountsListProvider).valueOrNull ?? const <Account>[];
+    // 2026-05-02 修复：分类列表改为 watch `categoriesListProvider` 而非
+    // 仓库实例 + FutureBuilder。原模式每次 build 都生成新 Future，
+    // `recordMonthSummaryProvider` 失效那一帧 `snapshot.data == null` →
+    // 全部流水瞬间回退到"💸/💰 + 未分类"占位（用户识别路径下尤其明显，
+    // 因为 QuickConfirm 卡片矮，没遮住首页）。Riverpod watch 在重建期间
+    // 保留上一帧值 → 闪烁消除。
+    final categories =
+        ref.watch(categoriesListProvider).valueOrNull ?? const <Category>[];
+    Category? matched;
+    final id = tx.categoryId;
+    if (id != null) {
+      for (final c in categories) {
+        if (c.id == id) {
+          matched = c;
+          break;
+        }
+      }
+    }
 
-    return FutureBuilder<List<Category>>(
-      future: repo?.listActiveAll(),
-      builder: (context, snapshot) {
-        final categories = snapshot.data ?? const <Category>[];
-        Category? matched;
-        final id = tx.categoryId;
-        if (id != null) {
-          for (final c in categories) {
-            if (c.id == id) {
-              matched = c;
-              break;
+    final iconText = isTransfer
+        ? '🔁'
+        : (matched?.icon ??
+            (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
+    final nameText = isTransfer ? '转账' : (matched?.name ?? '未分类');
+    final parentKey = _inferParentKey(matched, tx);
+
+    String accountName(String? id) {
+      if (id == null || id.isEmpty) return '账户';
+      for (final a in accounts) {
+        if (a.id == id) return a.name;
+      }
+      // Step 7.2：账户已被软删（不在 listActive 结果里），但流水的
+      // accountId 仍指向它——展示"（已删账户）"占位，避免 UI 误把
+      // 缺失账户当作"未填写"。
+      return '（已删账户）';
+    }
+
+    final transferSubTitle = isTransfer
+        ? '${accountName(tx.accountId)} → ${accountName(tx.toAccountId)}'
+        : null;
+
+    return Dismissible(
+          key: Key('tx_${tx.id}'),
+          direction: DismissDirection.endToStart,
+          confirmDismiss: (_) async {
+            return _confirmDelete(context);
+          },
+          onDismissed: (_) async {
+            if (mounted) {
+              setState(() => _isDismissed = true);
             }
-          }
-        }
-
-        final iconText = isTransfer
-            ? '🔁'
-            : (matched?.icon ??
-                (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
-        final nameText = isTransfer ? '转账' : (matched?.name ?? '未分类');
-        final parentKey = _inferParentKey(matched, tx);
-
-        String accountName(String? id) {
-          if (id == null || id.isEmpty) return '账户';
-          for (final a in accounts) {
-            if (a.id == id) return a.name;
-          }
-          // Step 7.2：账户已被软删（不在 listActive 结果里），但流水的
-          // accountId 仍指向它——展示"（已删账户）"占位，避免 UI 误把
-          // 缺失账户当作"未填写"。
-          return '（已删账户）';
-        }
-
-        final transferSubTitle = isTransfer
-            ? '${accountName(tx.accountId)} → ${accountName(tx.toAccountId)}'
-            : null;
-
-        return Dismissible(
-              key: Key('tx_${tx.id}'),
-              direction: DismissDirection.endToStart,
-              confirmDismiss: (_) async {
-                return _confirmDelete(context);
-              },
-              onDismissed: (_) async {
-                if (mounted) {
-                  setState(() => _isDismissed = true);
-                }
-                final txRepo = await ref.read(transactionRepositoryProvider.future);
-                await txRepo.softDeleteById(tx.id);
-                ref.invalidate(recordMonthSummaryProvider);
-                ref.invalidate(statsLinePointsProvider);
-                ref.invalidate(statsPieSlicesProvider);
-                ref.invalidate(statsRankItemsProvider);
-                ref.invalidate(statsHeatmapCellsProvider);
-                ref.invalidate(budgetProgressForProvider);
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已删除')),
-                );
-              },
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE76F51).withAlpha(36),
-                  borderRadius: BorderRadius.circular(10),
+            final txRepo = await ref.read(transactionRepositoryProvider.future);
+            await txRepo.softDeleteById(tx.id);
+            ref.invalidate(recordMonthSummaryProvider);
+            ref.invalidate(statsLinePointsProvider);
+            ref.invalidate(statsPieSlicesProvider);
+            ref.invalidate(statsRankItemsProvider);
+            ref.invalidate(statsHeatmapCellsProvider);
+            ref.invalidate(budgetProgressForProvider);
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('已删除')),
+            );
+          },
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE76F51).withAlpha(36),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.delete_outline),
+          ),
+          child: InkWell(
+            onTap: () async {
+              final action = await showModalBottomSheet<_DetailAction>(
+                context: context,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                 ),
-                child: const Icon(Icons.delete_outline),
-              ),
-              child: InkWell(
-                onTap: () async {
-                  final action = await showModalBottomSheet<_DetailAction>(
+                builder: (_) => _RecordDetailSheet(
+                  tx: tx,
+                  category: matched,
+                  accountName: accountName(tx.accountId),
+                  toAccountName: tx.type == 'transfer'
+                      ? accountName(tx.toAccountId)
+                      : null,
+                ),
+              );
+              if (!context.mounted || action == null) return;
+
+              switch (action) {
+                case _DetailAction.edit:
+                  await ref.read(recordFormProvider.notifier).preloadFromEntry(
+                        tx,
+                        parentKey: parentKey,
+                        asEdit: true,
+                      );
+                  if (!context.mounted) return;
+                   await showModalBottomSheet<void>(
                     context: context,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    builder: (_) => _RecordDetailSheet(
-                      tx: tx,
-                      category: matched,
-                      accountName: accountName(tx.accountId),
-                      toAccountName: tx.type == 'transfer'
-                          ? accountName(tx.toAccountId)
-                          : null,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (sheetContext) => FractionallySizedBox(
+                      heightFactor: 0.58,
+                      child: ClipRRect(
+                        borderRadius:
+                            const BorderRadius.vertical(top: Radius.circular(20)),
+                        child: Material(
+                          color: Theme.of(sheetContext).colorScheme.surface,
+                          child: _RecordBottomSheetPage(
+                            isTransfer: tx.type == 'transfer',
+                            startAtKeyboard: true,
+                          ),
+                        ),
+                      ),
                     ),
                   );
-                  if (!context.mounted || action == null) return;
-
-                  switch (action) {
-                    case _DetailAction.edit:
-                      await ref.read(recordFormProvider.notifier).preloadFromEntry(
-                            tx,
-                            parentKey: parentKey,
-                            asEdit: true,
-                          );
-                      if (!context.mounted) return;
-                       await showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (sheetContext) => FractionallySizedBox(
-                          heightFactor: 0.58,
-                          child: ClipRRect(
-                            borderRadius:
-                                const BorderRadius.vertical(top: Radius.circular(20)),
-                            child: Material(
-                              color: Theme.of(context).colorScheme.surface,
-                              child: _RecordBottomSheetPage(
-                                isTransfer: tx.type == 'transfer',
-                                startAtKeyboard: true,
-                              ),
-                            ),
+                  if (!context.mounted) return;
+                  ref.invalidate(recordMonthSummaryProvider);
+                  ref.invalidate(statsLinePointsProvider);
+                  ref.invalidate(statsPieSlicesProvider);
+                  ref.invalidate(statsRankItemsProvider);
+                  ref.invalidate(statsHeatmapCellsProvider);
+                  ref.invalidate(budgetProgressForProvider);
+                  break;
+                case _DetailAction.copy:
+                  await ref.read(recordFormProvider.notifier).preloadFromEntry(
+                        tx,
+                        parentKey: parentKey,
+                        asEdit: false,
+                      );
+                  if (!context.mounted) return;
+                   await showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (sheetContext) => FractionallySizedBox(
+                      heightFactor: 0.58,
+                      child: ClipRRect(
+                        borderRadius:
+                            const BorderRadius.vertical(top: Radius.circular(20)),
+                        child: Material(
+                          color: Theme.of(sheetContext).colorScheme.surface,
+                          child: _RecordBottomSheetPage(
+                            isTransfer: tx.type == 'transfer',
+                            startAtKeyboard: true,
                           ),
                         ),
-                      );
-                      if (!context.mounted) return;
-                      ref.invalidate(recordMonthSummaryProvider);
-                      ref.invalidate(statsLinePointsProvider);
-                      ref.invalidate(statsPieSlicesProvider);
-                      ref.invalidate(statsRankItemsProvider);
-                      ref.invalidate(statsHeatmapCellsProvider);
-                      ref.invalidate(budgetProgressForProvider);
-                      break;
-                    case _DetailAction.copy:
-                      await ref.read(recordFormProvider.notifier).preloadFromEntry(
-                            tx,
-                            parentKey: parentKey,
-                            asEdit: false,
-                          );
-                      if (!context.mounted) return;
-                       await showModalBottomSheet<void>(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (sheetContext) => FractionallySizedBox(
-                          heightFactor: 0.58,
-                          child: ClipRRect(
-                            borderRadius:
-                                const BorderRadius.vertical(top: Radius.circular(20)),
-                            child: Material(
-                              color: Theme.of(context).colorScheme.surface,
-                              child: _RecordBottomSheetPage(
-                                isTransfer: tx.type == 'transfer',
-                                startAtKeyboard: true,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                      if (!context.mounted) return;
-                      ref.invalidate(recordMonthSummaryProvider);
-                      ref.invalidate(statsLinePointsProvider);
-                      ref.invalidate(statsPieSlicesProvider);
-                      ref.invalidate(statsRankItemsProvider);
-                      ref.invalidate(statsHeatmapCellsProvider);
-                      ref.invalidate(budgetProgressForProvider);
-                      break;
-                    case _DetailAction.delete:
-                      final ok = await _confirmDelete(context);
-                      if (!ok) return;
-                      final txRepo = await ref.read(transactionRepositoryProvider.future);
-                      await txRepo.softDeleteById(tx.id);
-                      if (!context.mounted) return;
-                      ref.invalidate(recordMonthSummaryProvider);
-                      ref.invalidate(statsLinePointsProvider);
-                      ref.invalidate(statsPieSlicesProvider);
-                      ref.invalidate(statsRankItemsProvider);
-                      ref.invalidate(statsHeatmapCellsProvider);
-                      ref.invalidate(budgetProgressForProvider);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('已删除')),
-                      );
-                      break;
-                  }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: amountColor.withAlpha(36),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          iconText,
-                          style: const TextStyle(fontSize: 18),
-                        ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              nameText,
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            if (transferSubTitle != null)
-                              Text(
-                                transferSubTitle,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withAlpha(150),
-                                    ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        '$sign${_symbolFor(tx.currency)}${_fmt.format(tx.amount)}',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: amountColor,
-                            ),
-                      ),
-                    ],
+                    ),
+                  );
+                  if (!context.mounted) return;
+                  ref.invalidate(recordMonthSummaryProvider);
+                  ref.invalidate(statsLinePointsProvider);
+                  ref.invalidate(statsPieSlicesProvider);
+                  ref.invalidate(statsRankItemsProvider);
+                  ref.invalidate(statsHeatmapCellsProvider);
+                  ref.invalidate(budgetProgressForProvider);
+                  break;
+                case _DetailAction.delete:
+                  final ok = await _confirmDelete(context);
+                  if (!ok) return;
+                  final txRepo = await ref.read(transactionRepositoryProvider.future);
+                  await txRepo.softDeleteById(tx.id);
+                  if (!context.mounted) return;
+                  ref.invalidate(recordMonthSummaryProvider);
+                  ref.invalidate(statsLinePointsProvider);
+                  ref.invalidate(statsPieSlicesProvider);
+                  ref.invalidate(statsRankItemsProvider);
+                  ref.invalidate(statsHeatmapCellsProvider);
+                  ref.invalidate(budgetProgressForProvider);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已删除')),
+                  );
+                  break;
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: amountColor.withAlpha(36),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      iconText,
+                      style: const TextStyle(fontSize: 18),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          nameText,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        if (transferSubTitle != null)
+                          Text(
+                            transferSubTitle,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withAlpha(150),
+                                ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '$sign${_symbolFor(tx.currency)}${_fmt.format(tx.amount)}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: amountColor,
+                        ),
+                  ),
+                ],
               ),
-            );
-      },
-    );
+            ),
+          ),
+        );
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {

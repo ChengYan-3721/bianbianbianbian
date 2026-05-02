@@ -138,6 +138,12 @@ class _MeTab extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/multi-currency'),
           ),
+          ListTile(
+            leading: const Icon(Icons.auto_awesome),
+            title: const Text('快速输入 · AI 增强'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/ai-input'),
+          ),
         ],
       ),
     );
