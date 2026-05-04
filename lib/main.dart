@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 import 'app/app.dart';
 import 'data/local/providers.dart';
 import 'features/settings/settings_providers.dart';
+import 'features/sync/attachment/attachment_orphan_sweeper.dart';
+import 'features/sync/attachment/attachment_providers.dart';
 import 'features/trash/trash_gc_service.dart';
 import 'features/trash/trash_providers.dart';
 
@@ -52,6 +55,20 @@ Future<void> main() async {
         container.invalidate(trashedBudgetsProvider);
       }).catchError((_) {/* 静默降级 */}),
     );
+    // Step 11.3：附件缓存淘汰。冷启动跑一次 LRU prune（500MiB 软上限），
+    // 失败静默——cache 目录不存在或 IO 错误不影响首帧。pruner 内部保留 7 天
+    // 内访问过的文件，即便仍超上限也不再清。
+    unawaited(
+      container
+          .read(attachmentCachePrunerProvider.future)
+          .then<void>((pruner) async {
+        await pruner.prune();
+      }).catchError((_) {/* 静默降级 */}),
+    );
+    // Step 11.4：远端附件孤儿对象 sweep。冷启动 +5 分钟延迟触发，避免与
+    // bootstrap 链 / 首帧渲染抢资源；7 天节流（用 SharedPreferences 记录上次
+    // 完成时间）。failure / 超时 / 未配置云服务 一律静默。
+    unawaited(_scheduleOrphanSweep(container));
     runApp(
       UncontrolledProviderScope(
         container: container,
@@ -69,6 +86,44 @@ Future<void> main() async {
     runApp(
       ProviderScope(child: _BootstrapErrorApp(error: error, stack: stack)),
     );
+  }
+}
+
+/// Step 11.4：附件孤儿 sweep 的延迟 + 节流调度——抽出顶层函数以便 main 干净。
+///
+/// **延迟 5 分钟**：sweep 调用 `listBinary` 走完整云端目录递归，IO 量最大。
+/// 冷启动头几分钟 App 在加载 UI / 首次同步 / 拉账户 etc，不能与之抢网卡。
+///
+/// **7 天节流**：用 [SharedPreferences] 持久化 `kLastOrphanSweepAtPrefKey`
+/// 字段（epoch ms）。冷启动检查"上次 sweep < now-7d 才真跑"——避免每次
+/// 冷启动都 IO 重发现。
+///
+/// 任意环节失败 / 未配置云服务 / [SharedPreferences] 异常 → 静默吞掉。
+/// sweep 是 best-effort 后台任务，失败下次再试。
+Future<void> _scheduleOrphanSweep(ProviderContainer container) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final lastMs = prefs.getInt(kLastOrphanSweepAtPrefKey);
+    final now = DateTime.now();
+    if (lastMs != null) {
+      final last = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      if (now.difference(last) < kOrphanSweepInterval) {
+        return; // 7 天节流命中，跳过本轮
+      }
+    }
+    // 5 分钟延迟——给 App 启动让路。
+    await Future<void>.delayed(const Duration(minutes: 5));
+    final sweeper =
+        await container.read(attachmentOrphanSweeperProvider.future);
+    if (sweeper == null) return; // 未配置云服务
+    final report = await sweeper.sweep(now: DateTime.now());
+    debugPrint('AttachmentOrphanSweeper: $report');
+    await prefs.setInt(
+      kLastOrphanSweepAtPrefKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  } catch (_) {
+    // 静默——后台任务失败不应影响 App。
   }
 }
 

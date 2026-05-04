@@ -1,17 +1,19 @@
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 import 'package:flutter_cloud_sync_icloud/flutter_cloud_sync_icloud.dart';
 import 'package:intl/intl.dart';
 
+import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart' show currentLedgerIdProvider;
 import '../account/account_providers.dart';
 import '../budget/budget_providers.dart';
 import '../ledger/ledger_providers.dart';
 import '../record/record_providers.dart';
 import '../stats/stats_range_providers.dart';
+import 'attachment/attachment_migration.dart';
 import 'sync_provider.dart';
 import 'sync_service.dart';
 
@@ -256,6 +258,42 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
 
     if (confirmed != true) return;
 
+    // Step 11.4：切 backend 时如果当前 backend 已上传过附件，弹"是否迁移"
+    // 二次确认。选迁移 → 把所有 meta.remoteKey 清为 null（保留 localPath）→
+    // 下次同步由 uploadPending 自然把附件重传到新 backend；旧 backend 上的
+    // 对象 7 天宽限后由孤儿 sweep 清掉（前提是切回去再 sweep 一次——切走后
+    // 不再触发旧 backend 的 sweep，所以也保留旧对象不主动删，避免误删）。
+    final db = ref.read(local.appDatabaseProvider);
+    final remoteAttachments = await countAttachmentsWithRemoteKey(db);
+    var migrate = false;
+    if (remoteAttachments > 0) {
+      if (!mounted) return;
+      final choice = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('迁移附件到新后端？'),
+          content: Text(
+            '当前后端已上传 $remoteAttachments 张附件。\n\n'
+            '切换后新附件会上传到 ${_typeLabel(type)}，但已在旧后端的附件不会跨设备访问。\n\n'
+            '选择"迁移"会在下次同步时把这些附件重新上传到新后端（耗时较长，'
+            '取决于网络与图片数量）；选择"暂不迁移"则旧附件保留在旧后端，'
+            '可稍后切回去再用。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('暂不迁移'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('迁移'),
+            ),
+          ],
+        ),
+      );
+      migrate = choice == true;
+    }
+
     try {
       // store.activate 在配置缺失 / 无效时返回 false 且不切换激活类型——必须
       // 检查返回值，否则会出现"显示已切换但实际仍是旧后端"。
@@ -270,12 +308,27 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
         }
         return;
       }
+      // Step 11.4：activate 成功 + 用户选了迁移 → 清掉所有 meta.remoteKey，
+      // 让下次 SnapshotSyncService.upload 走 uploadPending 重新上传到新 backend。
+      // 失败不阻塞切换流程：附件迁移延后用户手动同步即可，最多旧附件停留旧
+      // 后端，UI 显示"未同步"占位。
+      var migratedRows = 0;
+      if (migrate) {
+        try {
+          migratedRows = await clearAllRemoteAttachmentKeys(db);
+        } catch (e, st) {
+          debugPrint('cross-backend attachment migration failed — $e\n$st');
+        }
+      }
       ref.invalidate(activeCloudConfigProvider);
       ref.invalidate(authServiceProvider);
       ref.invalidate(syncServiceProvider);
       if (mounted) {
+        final msg = migratedRows > 0
+            ? '已切换到 ${_typeLabel(type)}（已标记 $migratedRows 条流水的附件待重传）'
+            : '已切换到 ${_typeLabel(type)}';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已切换到 ${_typeLabel(type)}')),
+          SnackBar(content: Text(msg)),
         );
       }
     } catch (e) {

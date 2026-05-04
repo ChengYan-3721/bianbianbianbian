@@ -1,11 +1,17 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/local/app_database.dart';
+import '../../data/local/attachment_meta_codec.dart';
+import '../../data/local/providers.dart' as local;
 import '../../data/repository/account_repository.dart';
 import '../../data/repository/budget_repository.dart';
 import '../../data/repository/category_repository.dart';
 import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/providers.dart';
 import '../../data/repository/transaction_repository.dart';
+import '../sync/attachment/attachment_providers.dart';
 import 'trash_attachment_cleaner.dart';
 import 'trash_providers.dart';
 
@@ -23,8 +29,15 @@ import 'trash_providers.dart';
 ///    冷启动多账本同时过期时，TX 先于 Ledger GC 执行，附件也已被清。
 /// 5. 分类 / 账户：仅硬删行（无附件 / 无级联依赖）。
 ///
-/// 返回 [TrashGcReport]：四类实体各自删了多少条 + 附件目录清理统计——供 UI
-/// 调试或未来"上次清理报告"展示。
+/// **Step 11.4 扩展**：硬删流水时除了 documents 目录还要删远端对象。
+/// 流程在 `TX 循环` 内：① 解码该流水的 BLOB → 收集 `remoteKey != null` 的 meta；
+/// ② 逐条 `attachmentStorage.delete(path: key)`，单条失败 `debugPrint` 后继续，
+/// 不阻塞硬删（孤儿 sweep 会兜底）；③ 删 documents 目录；④ purgeById。
+/// `attachmentStorage == null`（未配置云服务）时跳过远端删除——本地附件仍走
+/// documents 清理。
+///
+/// 返回 [TrashGcReport]：四类实体各自删了多少条 + 附件目录清理 + 远端对象
+/// 删除统计——供 UI 调试或未来"上次清理报告"展示。
 class TrashGcReport {
   const TrashGcReport({
     required this.transactions,
@@ -32,6 +45,8 @@ class TrashGcReport {
     required this.categories,
     required this.accounts,
     required this.ledgers,
+    this.remoteAttachmentsDeleted = 0,
+    this.remoteAttachmentsFailed = 0,
   });
 
   final int transactions;
@@ -39,6 +54,13 @@ class TrashGcReport {
   final int categories;
   final int accounts;
   final int ledgers;
+
+  /// Step 11.4：硬删时通过 [CloudStorageService.delete] 真实删除的远端对象数。
+  final int remoteAttachmentsDeleted;
+
+  /// Step 11.4：远端 delete 抛异常被跳过的对象数（log 已打）。下次孤儿 sweep
+  /// 会按 lastModified 兜底。
+  final int remoteAttachmentsFailed;
 
   bool get isEmpty =>
       transactions == 0 &&
@@ -49,6 +71,7 @@ class TrashGcReport {
   @override
   String toString() =>
       'TrashGcReport(tx=$transactions, att=$attachmentsRemoved, '
+      'remoteDel=$remoteAttachmentsDeleted, remoteFail=$remoteAttachmentsFailed, '
       'cat=$categories, acc=$accounts, ledger=$ledgers)';
 }
 
@@ -61,6 +84,8 @@ class TrashGcService {
     required this.budgetRepository,
     required this.attachmentCleaner,
     Duration retention = kTrashRetention,
+    this.db,
+    this.attachmentStorage,
   }) : _retention = retention;
 
   final TransactionRepository transactionRepository;
@@ -69,6 +94,15 @@ class TrashGcService {
   final LedgerRepository ledgerRepository;
   final BudgetRepository budgetRepository;
   final TrashAttachmentCleaner attachmentCleaner;
+
+  /// Step 11.4：可选的 DB 句柄——读流水的 `attachments_encrypted` BLOB 找出
+  /// `remoteKey` 集合。`null` 时跳过远端删除（保留兼容旧调用 + 单测）。
+  final AppDatabase? db;
+
+  /// Step 11.4：可选的远端存储——`null` 表示未配置云服务或 local-only 模式，
+  /// 此时只删 documents 不删远端。
+  final CloudStorageService? attachmentStorage;
+
   final Duration _retention;
 
   /// 一次性扫描并硬删全部超期软删项。
@@ -80,8 +114,26 @@ class TrashGcService {
     //    DB 行硬删后再去查附件路径会丢失映射；保守做法是用 txId 直接删目录。
     final expiredTx = await transactionRepository.listExpired(cutoff);
     var attachments = 0;
+    var remoteDeleted = 0;
+    var remoteFailed = 0;
     var txCount = 0;
     for (final tx in expiredTx) {
+      // Step 11.4：远端附件删除（best-effort，不阻塞硬删）。
+      // 必须在 purgeById 之前——硬删后 BLOB 就读不到了。
+      if (db != null && attachmentStorage != null) {
+        final remoteKeys = await _collectRemoteKeysForTx(db!, tx.id);
+        for (final key in remoteKeys) {
+          try {
+            await attachmentStorage!.delete(path: key);
+            remoteDeleted++;
+          } catch (e, st) {
+            debugPrint(
+              'TrashGcService: remote delete $key failed — $e\n$st',
+            );
+            remoteFailed++;
+          }
+        }
+      }
       if (await attachmentCleaner.deleteForTransaction(tx.id)) attachments++;
       txCount += await transactionRepository.purgeById(tx.id);
     }
@@ -116,14 +168,45 @@ class TrashGcService {
     return TrashGcReport(
       transactions: txCount,
       attachmentsRemoved: attachments,
+      remoteAttachmentsDeleted: remoteDeleted,
+      remoteAttachmentsFailed: remoteFailed,
       categories: catCount,
       accounts: accCount,
       ledgers: ledgerCount,
     );
   }
+
+  /// 解码指定 txId 行的 `attachments_encrypted`，返回所有 `remoteKey != null`
+  /// 的 key 列表。不存在 / 空 BLOB / 无远端引用 → 返回 const []。
+  ///
+  /// 同 sha256 跨 tx 不去重（Phase 11.2 决策）；本方法只看单条流水，所以
+  /// 列表内同 path 至多出现一次（用户给同一笔流水加了同图两次也只算一次远端
+  /// 对象——和 [AttachmentUploader] 同 sha256 命中 exists 跳过的语义一致）。
+  Future<List<String>> _collectRemoteKeysForTx(
+    AppDatabase database,
+    String txId,
+  ) async {
+    final row = await (database.select(database.transactionEntryTable)
+          ..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (row == null) return const [];
+    final blob = row.attachmentsEncrypted;
+    if (blob == null || blob.isEmpty) return const [];
+    final metas = AttachmentMetaCodec.decode(blob);
+    final out = <String>[];
+    for (final m in metas) {
+      final key = m.remoteKey;
+      if (key != null) out.add(key);
+    }
+    return out;
+  }
 }
 
 /// `keepAlive` 单例。由 main.dart 在 bootstrap 链中 fire-and-forget 触发一次。
+///
+/// Step 11.4：附加注入 `appDatabase` + `attachmentStorageService`（nullable）
+/// 让 GC 路径具备远端 delete 能力。未配置云服务时 storage 解析为 null，
+/// 服务内部跳过远端步骤。
 final trashGcServiceProvider = FutureProvider<TrashGcService>((ref) async {
   final tx = await ref.watch(transactionRepositoryProvider.future);
   final cat = await ref.watch(categoryRepositoryProvider.future);
@@ -131,6 +214,8 @@ final trashGcServiceProvider = FutureProvider<TrashGcService>((ref) async {
   final ledger = await ref.watch(ledgerRepositoryProvider.future);
   final budget = await ref.watch(budgetRepositoryProvider.future);
   final cleaner = ref.watch(trashAttachmentCleanerProvider);
+  final storage = await ref.watch(attachmentStorageServiceProvider.future);
+  final db = ref.watch(local.appDatabaseProvider);
   return TrashGcService(
     transactionRepository: tx,
     categoryRepository: cat,
@@ -138,5 +223,7 @@ final trashGcServiceProvider = FutureProvider<TrashGcService>((ref) async {
     ledgerRepository: ledger,
     budgetRepository: budget,
     attachmentCleaner: cleaner,
+    db: db,
+    attachmentStorage: storage,
   );
 });

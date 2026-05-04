@@ -22,7 +22,10 @@
       "Bash(git rm *)",
       "Bash(rm lib/features/sync/sync_engine.dart)",
       "Bash(grep -oE \"lib\\\\\\\\\\\\\\\\[^:]*\\\\.dart|test\\\\\\\\\\\\\\\\[^:]*\\\\.dart\")",
-      "Bash(git -C D:/Projects/bianbianbianbian checkout HEAD -- pubspec.yaml pubspec.lock)"
+      "Bash(git -C D:/Projects/bianbianbianbian checkout HEAD -- pubspec.yaml pubspec.lock)",
+      "Bash(taskkill /F /IM dart.exe)",
+      "Bash(taskkill /F /IM flutter_tester.exe)",
+      "Bash(cmd.exe *)"
     ]
   }
 }

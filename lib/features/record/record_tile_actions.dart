@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,10 +11,12 @@ import '../../domain/entity/transaction_entry.dart';
 import '../budget/budget_providers.dart';
 import '../settings/settings_providers.dart';
 import '../stats/stats_range_providers.dart';
+import '../sync/attachment/attachment_providers.dart';
 import 'record_home_page.dart' show formatTxAmountForDetail;
 import 'record_new_page.dart';
 import 'record_new_providers.dart';
 import 'record_providers.dart';
+import 'widgets/attachment_thumbnail.dart';
 
 /// Step 3.6 续：流水点击后弹出的详情底部表单可触发的三种动作。
 ///
@@ -139,61 +141,14 @@ class RecordDetailSheet extends ConsumerWidget {
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     final meta = attachments[index];
-                    final localPath = meta.localPath;
-                    if (localPath == null) {
-                      return _BrokenAttachmentTile(size: 84);
-                    }
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () => showDialog<void>(
+                    return AttachmentThumbnail(
+                      meta: meta,
+                      txId: tx.id,
+                      size: 84,
+                      onTap: () => _openFullscreenViewer(
                         context: context,
-                        builder: (dialogContext) {
-                          return Dialog.fullscreen(
-                            backgroundColor: Colors.black,
-                            child: Stack(
-                              children: [
-                                Center(
-                                  child: InteractiveViewer(
-                                    minScale: 0.8,
-                                    maxScale: 5,
-                                    child: Image.file(
-                                      File(localPath),
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, _, _) => const Icon(
-                                        Icons.broken_image_outlined,
-                                        color: Colors.white70,
-                                        size: 42,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 12,
-                                  right: 12,
-                                  child: IconButton(
-                                    tooltip: '关闭',
-                                    color: Colors.white,
-                                    onPressed: () =>
-                                        Navigator.of(dialogContext).pop(),
-                                    icon: const Icon(Icons.close),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          File(localPath),
-                          width: 84,
-                          height: 84,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => _BrokenAttachmentTile(
-                            size: 84,
-                          ),
-                        ),
+                        meta: meta,
+                        txId: tx.id,
                       ),
                     );
                   },
@@ -387,6 +342,9 @@ Future<void> openRecordTileActions({
       final txRepo =
           await ref.read(transactionRepositoryProvider.future);
       await txRepo.softDeleteById(tx.id);
+      // Step 11.4：软删后清 cache 子目录——不动 documents（垃圾桶恢复时
+      // 仍可读原图）+ 不动远端对象（30 天后由 trash GC 硬删）。失败静默。
+      unawaited(_purgeAttachmentCache(ref, tx.id));
       if (!context.mounted) return;
       _invalidateAfterChange(ref);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -403,6 +361,22 @@ void _invalidateAfterChange(WidgetRef ref) {
   ref.invalidate(statsRankItemsProvider);
   ref.invalidate(statsHeatmapCellsProvider);
   ref.invalidate(budgetProgressForProvider);
+}
+
+/// Step 11.4：软删流水时联动清 `<cache>/attachments/<txId>/`。
+///
+/// fire-and-forget，调用方不需要 await——cache 是性能层，清不掉只是空间
+/// 浪费，下一次 [AttachmentCachePruner.prune] 会按 LRU 兜底。
+///
+/// pruner provider 还在 loading 时（启动初期 / 切 backend 期间）也直接吞
+/// 掉——没有 cache 的 App 也是合规状态。
+Future<void> _purgeAttachmentCache(WidgetRef ref, String txId) async {
+  try {
+    final pruner = await ref.read(attachmentCachePrunerProvider.future);
+    await pruner.removeForTransaction(txId);
+  } catch (_) {
+    // 静默——cache 清理失败不影响业务。
+  }
 }
 
 Future<bool> _confirmDelete(BuildContext context) async {
@@ -444,24 +418,50 @@ String inferParentKeyForTx(Category? category, TransactionEntry tx) {
   return 'other';
 }
 
-/// Step 11.2：附件 [AttachmentMeta.localPath] 缺失或加载失败时的占位 tile。
+/// Step 11.3：详情页点击缩略图时的全屏预览。统一封装到 helper，避免在
+/// `RecordDetailSheet` 的 `itemBuilder` 里堆 60 行内联 dialog。
 ///
-/// 触发场景：① 用户手动删除本地文件；② v8→v9 升级后旧路径不存在标记
-/// `missing: true`；③ 远端 download 中（lazy download 在 Step 11.3 接入前
-/// remoteKey-only 的 meta 暂时无法 resolve）。
-class _BrokenAttachmentTile extends StatelessWidget {
-  const _BrokenAttachmentTile({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: const Icon(Icons.broken_image_outlined),
-    );
-  }
+/// 实现走 [AttachmentThumbnail.ensureLocal] 的同一懒下载路径：先点缩略图
+/// 表示用户本地一定已经有文件了（缩略图本身是渲染成功态点上的）；这里再走
+/// 一次 [AttachmentThumbnail] 在大图模式（fit=contain）渲染即可。
+Future<void> _openFullscreenViewer({
+  required BuildContext context,
+  required AttachmentMeta meta,
+  required String txId,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 5,
+                child: AttachmentThumbnail(
+                  meta: meta,
+                  txId: txId,
+                  size: MediaQuery.of(dialogContext).size.shortestSide,
+                  borderRadius: 0,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: IconButton(
+                tooltip: '关闭',
+                color: Colors.white,
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
 }

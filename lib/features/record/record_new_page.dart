@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +9,7 @@ import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
 import '../settings/settings_providers.dart';
 import 'record_new_providers.dart';
+import 'widgets/attachment_thumbnail.dart';
 import 'widgets/number_keyboard.dart';
 
 /// 记一笔底部抽屉页（按 daodao 交互重构）
@@ -865,8 +864,14 @@ class _NoteAttachments extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final paths = ref.watch(recordFormProvider).attachmentMetas;
+    final form = ref.watch(recordFormProvider);
+    final paths = form.attachmentMetas;
     if (paths.isEmpty) return const SizedBox.shrink();
+    // Step 11.3：编辑/新建表单的附件区一般都是用户当前会话内刚选的图，
+    // localPath 必然非空——AttachmentThumbnail 命中本地快路径直接渲染。
+    // 编辑模式下 preloadFromEntry 出来的旧附件如果 localPath 缺失（远端
+    // 下载未完成），AttachmentThumbnail 会自动走懒下载链路。
+    final txId = form.editingEntryId ?? 'pending';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -879,22 +884,12 @@ class _NoteAttachments extends ConsumerWidget {
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               final meta = paths[index];
-              final localPath = meta.localPath;
               return Stack(
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: localPath != null
-                        ? Image.file(
-                            File(localPath),
-                            width: 72,
-                            height: 72,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _AttachmentBrokenTile(
-                              size: 72,
-                            ),
-                          )
-                        : _AttachmentBrokenTile(size: 72),
+                  AttachmentThumbnail(
+                    meta: meta,
+                    txId: txId,
+                    size: 72,
                   ),
                   Positioned(
                     right: -4,
@@ -1147,24 +1142,7 @@ class _CurrencyPicker extends StatelessWidget {
   }
 }
 
-/// Step 11.2：附件缩略图加载失败 / 本地路径丢失时的占位 tile。
-///
-/// 三种触发场景：① 本地文件被用户手动删除；② 远端 download 失败但 UI 在
-/// 渲染期间没等到结果；③ v8→v9 升级后旧路径不存在被标记 `missing: true`。
-/// 统一渲染为浅灰底 + 破图图标，避免 `Image.file` 的红色错误条。
-class _AttachmentBrokenTile extends StatelessWidget {
-  const _AttachmentBrokenTile({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: const Icon(Icons.broken_image_outlined),
-    );
-  }
-}
+// Step 11.2 的 `_AttachmentBrokenTile` 在 Step 11.3 重构后被
+// `widgets/attachment_thumbnail.dart::AttachmentThumbnail` 完全替代——后者
+// 内部已统一处理三态（loading / missing / success），本文件不再保留兜底
+// 占位组件。

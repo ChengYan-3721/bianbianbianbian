@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'dart:async';
+
 import 'month_picker_dialog.dart';
 import 'quick_confirm_sheet.dart';
 import 'quick_input_providers.dart';
@@ -23,6 +25,7 @@ import '../ledger/ledger_providers.dart';
 import '../budget/budget_providers.dart';
 import '../settings/settings_providers.dart';
 import '../stats/stats_range_providers.dart';
+import '../sync/attachment/attachment_providers.dart';
 import '../sync/sync_trigger.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
@@ -1021,6 +1024,14 @@ class _TxTileState extends ConsumerState<_TxTile> {
             final messenger = ScaffoldMessenger.of(context);
             final txRepo = await ref.read(transactionRepositoryProvider.future);
             await txRepo.softDeleteById(tx.id);
+            // Step 11.4：软删后清 cache 子目录（fire-and-forget）。
+            unawaited(() async {
+              try {
+                final pruner =
+                    await ref.read(attachmentCachePrunerProvider.future);
+                await pruner.removeForTransaction(tx.id);
+              } catch (_) {/* 静默——cache 残留不影响业务 */}
+            }());
             if (!context.mounted) return;
             // 触发 provider 失效；新数据落地后 build 阶段会把 tx.id
             // 从 `_locallyDeleted` 里清理掉。配合

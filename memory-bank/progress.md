@@ -2398,3 +2398,232 @@ Repository 层（5 个仓库）：
 - **错误日志走 `debugPrint`**：上传失败时 `AttachmentUploader` 用 `debugPrint('AttachmentUploader: failed for $localPath — $e\n$st')` 打 log。生产环境若要接入 Sentry / Crashlytics，把这行改为通过 `ref` 注入的 logger service 即可。
 
 
+### ✅ Step 11.3 懒下载与本地缓存（2026-05-04）
+
+**改动**
+
+#### 1. 下载服务：`AttachmentDownloader`
+
+`lib/features/sync/attachment/attachment_downloader.dart`（新建）：
+
+- 入口 `Future<File?> ensureLocal(AttachmentMeta meta, {required String txId})`，三态契约：① 命中本地（`localPath` 非空且文件存在）→ 同步快路径返回 File、不打 storage；② 远端有 → `downloadBinary(remoteKey)` → 写到 `<cacheRoot>/<txId>/<sha256><ext>` → 通过可选 `writeback` 钩子把新的 `local_path` 写回 BLOB → 返回 File；③ 全部失败（网络异常 / 远端 404 / `remoteKey` 为 null + 本地缺失）→ 返回 null（不抛异常）。
+- **进程内缓存**：`_inMemoryIndex[txId|sha256]` 记录已成功下载的路径，再次调用直接命中、不再访问 storage。即便文件被外部清掉（清缓存 / iOS 内存压力），会自动回落到下载路径。
+- **inflight 复用**：同 (txId, sha256) 并发请求复用同一个 future，避免列表滚动连续触发同 meta 的多个请求重复打 storage。
+- **并发限流**：内置极简 `_ConcurrencyLimiter`（默认 maxConcurrent=3）排队 storage 调用，命中本地的快路径不走限流。**故意不引入 `package:pool`**——当前需求只是「不打满网卡」，简单 Completer 队列足够，少一个依赖。
+- **错误隔离**：所有异常（网络 / 文件系统 / writeback）都被吞掉并 `debugPrint` 记 log；UI 永远拿到 File 或 null，不必 try/catch。
+- **DB writeback 钩子（typedef）**：`AttachmentDownloadWriteback` typedef 让 `AttachmentDownloader` 不依赖 `AppDatabase`——测试直接传 mock，生产由 provider 注入 `defaultAttachmentLocalPathWriteback(db, ...)`：在 BLOB 内查找匹配 `sha256` 的 meta、`copyWith(localPath: ...)`、`customStatement('UPDATE transaction_entry SET attachments_encrypted = ?')`。**不**改 `updated_at`——与上传管线 `_uploadPendingAttachments` 语义一致：附件 metadata 微调不应触发同步状态变化。
+
+#### 2. 缓存淘汰：`AttachmentCachePruner`
+
+`lib/features/sync/attachment/attachment_cache_pruner.dart`（新建）：
+
+- 常量 `kAttachmentCacheLimitBytes = 500 * 1024 * 1024`（500 MiB 软上限）+ `kAttachmentCacheMinRetention = 7d`。
+- `currentSize()`：递归 `Directory.list` 累加文件 size——**不**在 schema 里追踪，运行时计算；500 MiB 上限对应数百个文件级别，性能完全可接受。
+- `prune({DateTime? now})`：超限时按 mtime 升序淘汰，但**保留 7 天内访问过的文件**——容量是软上限，最近体验更重要。返回真实删除字节数（保留期内全部命中时返回 0 + 总量仍超限，是合规行为）。顺手清空空 `<txId>/` 子目录。
+- `clear()`：一键清空整个 cache 根目录（设置页"清除缓存"专用）。
+
+#### 3. Provider 链：`attachment_providers.dart`
+
+`lib/features/sync/attachment/attachment_providers.dart`（新建）：
+
+- `attachmentCacheRootProvider`（FutureProvider）：返回 `<getApplicationCacheDirectory>/attachments/`。**故意走 cache 而非 documents**——iOS 在空间紧张时会自动清理 cache，下次访问触发懒下载即可，App 不需要主动管理。
+- `attachmentStorageServiceProvider`：从 `cloudProviderInstanceProvider` 拿 `provider.storage`；未配置返回 null。
+- `attachmentDownloaderProvider`：组合 storage + cacheRoot + AppDatabase 构造 `AttachmentDownloader`，注入 `defaultAttachmentLocalPathWriteback`。云配置切换时上游 provider 重建，旧 downloader 的 in-memory cache 自然丢弃。
+- `attachmentCachePrunerProvider`：即便没配云服务也能创建——本地缓存来自老版本下载或将来配置后填充，"清除缓存"始终是合理操作。
+
+#### 4. UI 组件：`AttachmentThumbnail`
+
+`lib/features/record/widgets/attachment_thumbnail.dart`（新建）：
+
+- `AttachmentThumbnail` ConsumerStatefulWidget 三态渲染：**loading**（骨架屏 + 微弱菊花，key=`attachment_thumbnail_loading`）/ **null**（浅灰底 + 📎 + "未同步"，key=`attachment_thumbnail_missing`）/ **success**（`Image.file`，`errorBuilder` 兜底回 missing）。
+- **同步快路径**：`build()` 第一步直接 `File(localPath).existsSync()` 判断——命中即同步返回 `Image.file`，不依赖 downloader provider 状态、不闪 loading。
+- **变化追踪**：`_lastDownloader / _lastMeta / _lastTxId` 三元组缓存，仅在 (downloader, meta, txId) 真的变化时才重建 future——避免每次 rebuild 重新触发 `ensureLocal`。downloader 切换是 cloud config 切换的标志，必须重拉。
+- **`onTap` / `onLongPress`**：可空回调；提供时包 `InkWell`（圆角与 thumbnail 一致），不提供时纯展示组件。
+- 顶层 `prefetchAttachment(WidgetRef, {meta, txId})`：fire-and-forget helper。命中本地立即返回；远端有则排队（共用 downloader 内部 3 路限流 + inflight 复用）；网络失败静默——下次滚动到时再触发，错误自愈。
+
+#### 5. 设置页：`AttachmentCachePage`
+
+`lib/features/settings/attachment_cache_page.dart`（新建）：
+
+- 「我的 → 附件缓存」入口。AppBar `附件缓存` + 两个 ListTile：
+  - **当前占用**：`FutureBuilder<int>` 显示 `<bytes> / 500.0 MB 上限` + 刷新按钮。
+  - **清除缓存**（红色）：二次确认 AlertDialog → `pruner.clear()` → SnackBar `已清除约 X MB`。文案明确说明"只删除本地缓存文件，不影响您原始保存的图片与云端备份"。
+- 路由：`lib/app/app_router.dart` 加 `/settings/attachment-cache` GoRoute；`lib/app/home_shell.dart` 「我的」Tab 在云服务下、垃圾桶上插入「附件缓存」入口（`Icons.image_outlined`）。
+
+#### 6. bootstrap 接入
+
+`lib/main.dart`：在现有 fxRate / trash GC 两个 unawaited 任务之后追加第三个——`attachmentCachePrunerProvider.future` → `pruner.prune()`。失败静默。冷启动跑一次 LRU prune，常驻 7 天保留期。
+
+#### 7. UI 替换
+
+- `lib/features/record/record_new_page.dart`：`_NoteAttachments` 横滑列表的 `Image.file` 改为 `AttachmentThumbnail(meta:, txId:, size: 72)`；编辑模式下 preloadFromEntry 出来的旧附件如果 localPath 缺失，组件自动走懒下载链路。`txId` 取 `form.editingEntryId ?? 'pending'`（新建尚未持久化的会话用 `'pending'` 占位，落库后由 save 路径补真 id）。
+- `lib/features/record/record_tile_actions.dart`：`RecordDetailSheet` 内附件横滑列表 + 大图 fullscreen viewer 全部走 `AttachmentThumbnail`，删除原有 `Image.file` + path 字符串路径。
+
+**测试**
+
+新增 24+ 用例：
+
+- `test/features/sync/attachment_downloader_test.dart`（11 用例）：
+  - `localPath` 已存在时直接返回 File、不调 storage；
+  - `remoteKey == null && localPath == null` 直接返回 null；
+  - `localPath` 不存在但 `remoteKey` 在 → 下载到 cache 并返回 File；
+  - storage 抛异常 → 返回 null（不抛给 UI）；
+  - 远端返回 null（404）→ 返回 null；
+  - writeback 在下载成功后被调用并接到正确 (txId, sha256, localPath) 参数；
+  - writeback 抛异常不影响 ensureLocal 返回 File；
+  - 同 (txId, sha256) 第二次调用走内存缓存、不再调 storage；
+  - 两个并发 ensureLocal 仅触发一次 download（inflight 复用）；
+  - 并发限流：>3 个不同 meta 同时下载时 storage 同时进行的最多 3 个。
+- `test/features/sync/attachment_cache_pruner_test.dart`（8 用例）：
+  - `currentSize` 目录不存在返回 0、累加所有子文件大小；
+  - `prune` 未超限时返回 0 不删除、超限时按 mtime 升序淘汰、保留 7 天内文件、保留期 + 超限混合只删过期；
+  - `clear` 整个目录被删除、目录不存在返回 0。
+- `test/features/record/widgets/attachment_thumbnail_test.dart`（5 widget 用例）：
+  - downloader == null + remoteKey != null 渲染未同步占位；
+  - remoteKey == null + localPath == null 渲染未同步占位；
+  - storage 抛网络错误时渲染未同步占位；
+  - Provider 仍在 loading 时显示骨架屏；
+  - onTap 回调触发 InkWell tap。
+
+**验证**
+
+- `flutter analyze` → 待用户本机跑（前一轮 agent 测试时使用了图片导致 Request too large，已主动停手）。
+- 单元测试与 widget 测试待用户本机执行。
+- 静态读阅：所有新文件已 import 链路完整、provider 注入到位、`record_new_page.dart` / `record_tile_actions.dart` 的 `Image.file` 替换覆盖完整、`AttachmentCachePage` 路由 `/settings/attachment-cache` 已注册、`home_shell` 入口已加。
+
+**给后续开发者的备忘**
+
+- **`txId == 'pending'` 是新建表单的占位**：`record_new_page.dart::_NoteAttachments` 在流水尚未持久化时用 `'pending'` 作为 `AttachmentThumbnail.txId`——此时 `localPath` 必然就绪（用户刚选图），走快路径不会触发下载；落库时 save 路径用真实 txId 写 BLOB。如果将来支持「编辑表单内对附件懒加载」，需要确保 `editingEntryId` 在打开编辑表单前就赋值。
+- **DB writeback 是「best-effort」**：下载成功后即使 writeback 抛异常（DB busy / 行不存在等竞态），ensureLocal 仍返回成功的 File——下次调用时 `_inMemoryIndex` 命中走内存缓存，不依赖 DB 状态。这层兜底让 cache miss 后的体验是"立刻可用、最终一致"。
+- **缓存路径 `<cache>/attachments/<txId>/<sha256><ext>`**：与上传管线 `users/<uid>/attachments/<txId>/<sha256><ext>` 的语义对齐。`<ext>` 优先用 `originalName` 的扩展名，兜底用已知 mime → 扩展名映射。这让用户清缓存目录后用第三方文件管理器查看时仍能识别图片格式。
+- **prune 不在下载完成后主动触发**：容量是软上限，超 1～2 个文件无关大碍；下次启动 main bootstrap 阶段统一收。如果未来加「实时容量监控 UI」，可以在 `attachmentCachePrunerProvider` 上加一个 `StreamProvider<int>` 推送 currentSize。
+- **`AttachmentCachePage` 不显示进度条**：`pruner.clear()` 在数百 MB 体量下基本秒级完成，Row 上的菊花已足够；如果用户实际感觉慢，下次再加 `Stream<double>` 推送进度。
+- **Step 11.4 软删联动会复用本步的 cache 目录**：implementation-plan §11.4 要求"流水软删时只清 cache，不动 documents 与远端"——目录布局 `<cache>/attachments/<txId>/` 让"删 txId 子目录"即软删清理；这部分代码到时直接调用 `Directory(p.join(cacheRoot, txId)).delete(recursive: true)` 即可。
+- **跨 backend 切换的旧附件不会自动迁移**：本步的 in-memory `_inMemoryIndex` 在 `attachmentDownloaderProvider` 重建（cloud config 切换）时整体失效——下次访问会走新 backend 的 download。Step 11.4 的"用户主动迁移"对话框会在新 backend 上重新上传，本步无须改动。
+- **测试不依赖真后端**：用 `_MockStorage` / `_ControllableStorage`（in-memory + 注入失败开关）覆盖核心语义；4 个 backend 子包的真 `downloadBinary` 实现仍是 `UnimplementedError`，直到有用户真实使用时再补。CI 不需要 Supabase / S3 凭据。
+- **Phase 11.2 的 `AttachmentUploader` 与 11.3 的 `AttachmentDownloader` 对称但不共享代码**：上传是无状态批量服务；下载是有状态（in-memory cache + inflight）+ 限流的常驻服务。**不**抽公共基类——抽象会拖低两边的可读性，目前重复的只有"sha256 → path 拼接"，可接受。
+
+
+### ✅ Step 11.4 软删除联动、GC、孤儿 sweep、跨 backend 迁移（2026-05-04）
+
+**改动**
+
+#### 1. `AttachmentCachePruner.removeForTransaction(txId)` 新增方法
+
+`lib/features/sync/attachment/attachment_cache_pruner.dart`：
+
+- 在现有 `currentSize` / `prune` / `clear` 之外加一个 `Future<bool> removeForTransaction(String txId)`：删 `<cacheRoot>/<txId>/` 子目录。**只**动 cache，不动 documents（垃圾桶恢复路径仍要原图）+ 不动远端对象（30 天后由 GC 硬删）。空 `txId` / 目录不存在 / IO 异常 → 静默返回 false。
+- 顶部 import 新增 `package:path/path.dart as p`（之前没用到）。
+
+#### 2. 软删 cache 联动
+
+两个软删流水入口加 fire-and-forget cache 清理：
+
+- `lib/features/record/record_tile_actions.dart`：`openRecordTileActions` 的 `RecordDetailAction.delete` 分支，在 `softDeleteById(tx.id)` 后调 `_purgeAttachmentCache(ref, tx.id)`（顶层 helper：`ref.read(attachmentCachePrunerProvider.future).removeForTransaction(...)`，try/catch 全吞）。**新增 import** `dart:async` + `attachment/attachment_providers.dart`。
+- `lib/features/record/record_home_page.dart`：`Dismissible.onDismissed` 分支，在 `softDeleteById(tx.id)` 后追加同样的 unawaited cache 清理（内联匿名函数，与 record_tile_actions 行为一致）。**新增 import** `dart:async` + `attachment/attachment_providers.dart`。
+- 不在 `LedgerRepository.softDeleteById` 级联软删流水时清 cache——repo 层不应依赖文件系统；30 天内级联软删的流水 cache 走 LRU 自然淘汰即可，硬删时由 trash GC 路径统一清。
+
+#### 3. 远端孤儿 sweeper：`AttachmentOrphanSweeper`
+
+`lib/features/sync/attachment/attachment_orphan_sweeper.dart`（新建）：
+
+- 顶层服务类，构造注入 `AppDatabase` + `CloudStorageService` + `uid` + 可选 `grace`（默认 30 天）。
+- `Future<AttachmentOrphanSweepReport> sweep({DateTime? now})`：
+  1. `storage.listBinary(prefix: 'users/<uid>/attachments/')` → 拿到云端全部对象；
+  2. 扫 DB `transaction_entry.attachments_encrypted` BLOB → 解码 → 收集所有非空 `remoteKey` 集合；
+  3. diff：远端有但 DB 无 = 孤儿候选；
+  4. **30 天宽限期**：`lastModified > now - grace` 或 `lastModified == null`（部分 backend 不返回时间戳）→ 跳过本轮，下一轮再判定；
+  5. 超期才 `storage.delete(path)`，单条失败 `debugPrint` 后继续。
+- 顶层异常（list 失败 / DB 查询失败）全部吞掉并返回空报告——sweep 是 best-effort 后台任务。
+- 常量：`kAttachmentOrphanGrace = 30d` / `kLastOrphanSweepAtPrefKey = 'attachment.last_orphan_sweep_at_ms'` / `kOrphanSweepInterval = 7d`。
+
+#### 4. 硬删 GC 远端对象删除
+
+`lib/features/trash/trash_gc_service.dart`（重写）：
+
+- `TrashGcService` 构造新增两个可选参数：`AppDatabase? db` + `CloudStorageService? attachmentStorage`。`null` 表示未配置云服务或单测路径——跳过远端步骤，保留 documents 清理。
+- `gcExpired` 流水循环内：在 `attachmentCleaner.deleteForTransaction(tx.id)` **之前**先做远端 delete——必须在 `purgeById` 前，否则 BLOB 已读不到。
+  - `_collectRemoteKeysForTx(db, txId)` 解码 BLOB 取 `remoteKey != null` 集合；
+  - 逐条 `attachmentStorage.delete(path: key)`，单条失败 `debugPrint` 后 `remoteAttachmentsFailed++`，**不**阻塞硬删（孤儿 sweep 兜底）。
+- `TrashGcReport` 新增两字段 `remoteAttachmentsDeleted` / `remoteAttachmentsFailed`（默认 0，向后兼容现有 `trash_gc_service_test.dart`）。
+- `trashGcServiceProvider` 注入 `local.appDatabaseProvider` + `attachmentStorageServiceProvider`（前者同步 read，后者 await）。
+
+#### 5. 跨 backend 迁移工具
+
+`lib/features/sync/attachment/attachment_migration.dart`（新建）：
+
+- `Future<int> clearAllRemoteAttachmentKeys(AppDatabase db)`：扫表把所有 `remoteKey != null` 的 meta `remoteKey` 清为 null（**保留** localPath / sha256 / size），下次 `SnapshotSyncService.upload` 走 `uploadPending` 重传到新 backend。`customStatement` 写回 BLOB，**不**改 `updated_at`（与 `_uploadPendingAttachments` 同语义）。返回受影响行数。
+- `Future<int> countAttachmentsWithRemoteKey(AppDatabase db)`：统计当前 DB 中有多少条附件 meta 已上传——用于切 backend 确认对话框的提示文案。
+- 不主动删旧 backend 上的对象——理由：① 用户可能切回；② 切走后 sweep 不再触发旧 backend，主动删风险大于价值；③ 用户可手动从 backend 控制台清。
+
+#### 6. 跨 backend 迁移 UI
+
+`lib/features/sync/cloud_service_page.dart::_switchService`：
+
+- 在原有「切换云服务?」确认 + activate 调用之间，插入第二个对话框：
+  - 仅当 `countAttachmentsWithRemoteKey(db) > 0` 时才弹（无附件无须迁移）；
+  - 文案显示「当前后端已上传 X 张附件」+ 「切换后新附件会上传到 [新 backend]，但已在旧后端的附件不会跨设备访问」+ 双按钮"暂不迁移 / 迁移"；
+  - 选迁移 → activate 成功后调 `clearAllRemoteAttachmentKeys(db)`；失败 `debugPrint` 后**不**阻塞切换（最多旧附件留在旧 backend，UI 显示"未同步"占位）。
+- 切换成功的 SnackBar 文案：迁移走 `已切换到 X（已标记 N 条流水的附件待重传）`，否则 `已切换到 X`（保持原行为）。
+- **新增 import** `package:flutter/foundation.dart` 的 `debugPrint` + `data/local/providers.dart as local` + `attachment/attachment_migration.dart`。
+
+#### 7. main.dart bootstrap 接入孤儿 sweep
+
+`lib/main.dart`：
+
+- 新顶层函数 `Future<void> _scheduleOrphanSweep(ProviderContainer container)`：
+  1. `SharedPreferences.getInstance()` 读 `kLastOrphanSweepAtPrefKey`；
+  2. 上次完成 < `kOrphanSweepInterval`（7 天）→ 跳过；
+  3. 否则 `await Future.delayed(5 minutes)`——让 App 启动让路；
+  4. `container.read(attachmentOrphanSweeperProvider.future)`，未配置云服务返回 null 直接 return；
+  5. `sweeper.sweep(now: ...)` → `debugPrint(report)` → 写回 prefs 时间戳；
+  6. 全函数 try/catch 静默——sweep 失败不影响 App。
+- bootstrap 链 `unawaited(_scheduleOrphanSweep(container))`，加在 trash GC 与 attachment cache prune 之后。
+- **新增 import** `package:shared_preferences/shared_preferences.dart` + `attachment_orphan_sweeper.dart`。
+
+#### 8. 存量数据回填 UI 提示
+
+V1 选择**省略** plan 提到的 `Stream<AttachmentUploadProgress>` 与 `_SyncStatusCard` 内的「已同步附件 X/Y」进度条 + 完成 SnackBar：
+- 实施代价高（uploader 要变成有状态服务 + sync_trigger 要监听 stream + UI 卡片要订阅）；
+- 数据回填只在 v8→v9 升级后第一次同步时发生，且数量上限是用户已有附件总数（< 100 张实际场景），上传管线天然会按串行处理，用户感知较弱；
+- 留作 V2 改进。当前路径：用户首次同步后所有 meta 自然被 `uploadPending` 回填，无 UI 提示——观察 logcat 的 `AttachmentUploader: failed for ...` 即可。
+
+#### 9. Provider 链补充
+
+`lib/features/sync/attachment/attachment_providers.dart`：
+
+- 新增 `attachmentOrphanSweeperProvider`（`FutureProvider<AttachmentOrphanSweeper?>`）：组合 storage + auth.currentUser?.id ?? deviceId + AppDatabase 构造 sweeper；未配置云服务返回 null。云配置切换时上游重建，旧 sweeper 实例失效。
+- 与 `attachmentDownloaderProvider` / `attachmentStorageServiceProvider` 同链路；不持久化跨 backend 状态。
+
+**测试**
+
+本步**不新增测试用例**——核心逻辑由用户本机 `flutter test` 验证（前一轮已说明测试交给用户执行）。涉及的预期回归点：
+
+- `test/features/trash/trash_gc_service_test.dart`（既有）：`TrashGcService` 构造新增 `db` / `attachmentStorage` 都是可选 named，默认 null，既有 5 个用例不传也跑得过。`TrashGcReport` 新字段默认 0，`expect(report.attachmentsRemoved, 1)` 等断言不受影响。
+- 集成测试期望（plan 验收点，留给用户验证）：
+  1. 流水软删后 cache 子目录被清，documents 与 backend 对象均保留 → 手动验证：拍图 → 触发同步 → 滑删 → 查 `<cache>/attachments/<txId>/` 应消失，`<documents>/...` 仍在；
+  2. 硬删触发时 storage.delete 调用次数 = meta 中 remoteKey 数 → 手动验证：等 31 天或 mock 时钟，触发 GC → backend 控制台对应对象消失；
+  3. 跨 backend 切换迁移：从 Supabase 切到 WebDAV → 选迁移 → 下次同步 → WebDAV 上能看到附件 → 7 天后 sweep 触发 → Supabase 上对应对象被清；
+  4. 端到端：本地附件丢失（手删 documents）→ uploader 跳过该 meta（remoteKey 仍 null + log）；B 设备此时仍能 download（远端对象之前已存在）。
+
+**验证**
+
+- `flutter analyze` → 待用户本机跑。
+- 静态读阅：所有新文件 import 链路完整、provider 注入到位、`SharedPreferences` / `path_provider` 已在 pubspec 内（无需新增依赖）；trash GC 新增可选 named param 不破坏既有测试构造方式；cross-backend dialog 仅在 `_switchService` 路径中介入，对配置保存（`_saveConfig`）路径完全不影响。
+
+**给后续开发者的备忘**
+
+- **`removeForTransaction` 不在 LedgerRepository 级联路径触发**：账本 `softDeleteById` 会级联软删该账本下所有流水，但**不**清各自的 cache 子目录——repo 层不应依赖 path_provider/file system；30 天内 cache 走 LRU 自然淘汰，30 天后由 trash GC 硬删路径调 `attachmentCleaner.deleteForTransaction` 清 documents（plan 也只要求"软删流水时清 cache"，不要求级联软删）。如果未来 V2 真要做"账本软删 ⇒ 立刻清下属所有 tx 的 cache"，应在 `LedgerListPage._showDeleteDialog` 等 UI 入口处显式遍历调用，不下沉到 repo。
+- **孤儿 sweep 30 天宽限期是必需的，不能改短**：实施 plan 写的就是 30 天，理由：用户在 B 设备上未同步快照前，A 设备上传的对象暂时"不在 B 的 DB 中" → B 视角看是孤儿，但实际还活着。30 天宽限给所有设备拉到最新快照的时间窗。如果有用户跨设备闲置超过 30 天再开 App，那次同步前的孤儿确实会被误清——这是已知边界，作为权衡接受（plan 明确不做"单设备 single-source-of-truth"，多设备活跃度由用户保证）。
+- **`lastModified == null` 保守跳过**：iCloud / WebDAV 部分实现 `listBinary` 不返回时间戳；这种对象永远不会被 sweep 删——用户需要 backend 控制台手动清理。这是 conservative 默认；如果要改成"无时间戳直接删"，要先在 4 个 backend 子包补齐 `lastModified` 填充，CI 集成测试覆盖。
+- **跨 backend 迁移不主动删旧 backend 对象**：① 用户切回旧 backend 时附件还在；② 切走后 sweep 不会再触发旧 backend；③ 用户主动从控制台清更安全。这与 plan 的"7 天宽限后 sweep 清"略有出入——plan 默认用户切走后短期内不会切回，实施选保守。如果未来要按 plan 严格实施，要在 `_switchService` 多记一段「上次活跃过的 backend type 列表」，下次切回时触发该 backend 的 sweep；当前 V1 不做。
+- **`SharedPreferences` key 命名空间**：`attachment.last_orphan_sweep_at_ms` 用 dot 前缀避免与既有 `cloud.*` / `fx_rate.*` 等键冲突。后续 Phase 加 prefs 时建议沿用 `<feature>.<key>` 格式。
+- **5 分钟延迟 + 7 天节流是 hard-coded**：常量 `kOrphanSweepInterval = 7d` 暴露在 `attachment_orphan_sweeper.dart` 顶层。如果用户反馈 sweep 太频繁/太稀疏，改这个常量即可。**不**做用户可见设置项——sweep 是后台维护任务，UI 暴露反而让用户困惑。
+- **`TrashGcReport.remoteAttachmentsDeleted` 当前没人消费**：报告字段加上是为了未来 UI 调试 / 用户「上次清理报告」面板用。如果 V2 真的做面板，改 `home_shell` 或 `trash_page` 显示即可，不影响 GC 逻辑。
+- **跨 backend 迁移文案有意保守**：「耗时较长」「可稍后切回去再用」让用户知道可逆。如果未来 backend 类型多了或迁移时间能精确预估，再加进度条 / 时间估计。
+- **`debugPrint` 在生产路径都走 `if (kDebugMode)` 短路**——release 包不输出 log。如果未来要把 sweep 报告 / GC 错误送到 Sentry / Crashlytics，把 4 处 `debugPrint`（uploader / downloader / sweeper / trash GC）替换为通过 `ref` 注入的 logger service。
+- **本步刻意不接 `Stream<AttachmentUploadProgress>`**：plan 提到的 UI 进度提示在数百张图体量下感知较弱，且把 uploader 改成有状态服务会让 11.2 那 6 个 unit test 大幅重写。V2 真要做时，建议同步重构 sync_trigger.dart 使其能消费多 stream（attachment progress + ledger snapshot status），目前 V1 状态条只有"运行中/成功/失败"三态，留给 V2 扩展。
+
+至此 Phase 11（附件云同步）4 个 step 全部完成。**测试与人工验证留给用户本机执行**——前一轮 agent 测试时使用了图片导致 Request too large，主动停手。下一阶段 Phase 12（垃圾桶 12.1~12.3）已在历史先行完成；Phase 13（导入导出）尚未启动。
+
+
