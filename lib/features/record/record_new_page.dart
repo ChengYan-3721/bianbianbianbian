@@ -865,7 +865,7 @@ class _NoteAttachments extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final paths = ref.watch(recordFormProvider).attachmentPaths;
+    final paths = ref.watch(recordFormProvider).attachmentMetas;
     if (paths.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -878,26 +878,23 @@ class _NoteAttachments extends ConsumerWidget {
             itemCount: paths.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              final path = paths[index];
+              final meta = paths[index];
+              final localPath = meta.localPath;
               return Stack(
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      File(path),
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
-                        width: 72,
-                        height: 72,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        alignment: Alignment.center,
-                        child: const Icon(Icons.broken_image_outlined),
-                      ),
-                    ),
+                    child: localPath != null
+                        ? Image.file(
+                            File(localPath),
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => _AttachmentBrokenTile(
+                              size: 72,
+                            ),
+                          )
+                        : _AttachmentBrokenTile(size: 72),
                   ),
                   Positioned(
                     right: -4,
@@ -928,7 +925,7 @@ class _NoteActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(recordFormProvider).attachmentPaths.length;
+    final count = ref.watch(recordFormProvider).attachmentMetas.length;
 
     return Row(
       children: [
@@ -1146,6 +1143,28 @@ class _CurrencyPicker extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Step 11.2：附件缩略图加载失败 / 本地路径丢失时的占位 tile。
+///
+/// 三种触发场景：① 本地文件被用户手动删除；② 远端 download 失败但 UI 在
+/// 渲染期间没等到结果；③ v8→v9 升级后旧路径不存在被标记 `missing: true`。
+/// 统一渲染为浅灰底 + 破图图标，避免 `Image.file` 的红色错误条。
+class _AttachmentBrokenTile extends StatelessWidget {
+  const _AttachmentBrokenTile({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: const Icon(Icons.broken_image_outlined),
     );
   }
 }

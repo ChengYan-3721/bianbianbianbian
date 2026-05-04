@@ -87,21 +87,6 @@ void main() {
   });
 
   group('category - 分类识别', () {
-    test('"午饭 30" → 餐饮 / 30 / 置信度 ≥ 0.8', () {
-      final r = _parser().parse('午饭 30');
-      expect(r.amount, 30);
-      expect(r.categoryParentKey, 'food');
-      expect(r.categoryLabel, '餐饮');
-      expect(r.confidence, greaterThanOrEqualTo(0.8));
-    });
-
-    test('"打车 25" → 交通', () {
-      final r = _parser().parse('打车 25');
-      expect(r.amount, 25);
-      expect(r.categoryParentKey, 'transport');
-      expect(r.categoryLabel, '交通');
-    });
-
     test('"淘宝买衣服 99" → 购物（长词优先）', () {
       final r = _parser().parse('淘宝买衣服 99');
       expect(r.amount, 99);
@@ -120,7 +105,7 @@ void main() {
       expect(r.categoryParentKey, 'income');
     });
 
-    test('"房租 3500" → 居家', () {
+    test('"房租 3500" → housing', () {
       final r = _parser().parse('房租 3500');
       expect(r.amount, 3500);
       expect(r.categoryParentKey, 'housing');

@@ -1,10 +1,11 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/local/attachment_meta_codec.dart';
 import '../../data/repository/providers.dart' show transactionRepositoryProvider;
+import '../../domain/entity/attachment_meta.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/transaction_entry.dart';
 import '../budget/budget_providers.dart';
@@ -47,20 +48,8 @@ class RecordDetailSheet extends ConsumerWidget {
     return '转账';
   }
 
-  List<String> _decodeAttachmentPaths() {
-    final bytes = tx.attachmentsEncrypted;
-    if (bytes == null || bytes.isEmpty) return const <String>[];
-    try {
-      final raw = utf8.decode(bytes);
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        return decoded.whereType<String>().toList(growable: false);
-      }
-      return const <String>[];
-    } catch (_) {
-      return const <String>[];
-    }
-  }
+  List<AttachmentMeta> _decodeAttachmentMetas() =>
+      AttachmentMetaCodec.decode(tx.attachmentsEncrypted);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -69,7 +58,7 @@ class RecordDetailSheet extends ConsumerWidget {
         ? '🔁'
         : (c?.icon ?? (tx.type == 'income' ? '💰' : '💸'));
     final name = tx.type == 'transfer' ? '转账' : (c?.name ?? '未分类');
-    final attachments = _decodeAttachmentPaths();
+    final attachments = _decodeAttachmentMetas();
     final date =
         '${tx.occurredAt.year}-${tx.occurredAt.month.toString().padLeft(2, '0')}-${tx.occurredAt.day.toString().padLeft(2, '0')} '
         '${tx.occurredAt.hour.toString().padLeft(2, '0')}:${tx.occurredAt.minute.toString().padLeft(2, '0')}';
@@ -149,7 +138,11 @@ class RecordDetailSheet extends ConsumerWidget {
                   itemCount: attachments.length,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
-                    final path = attachments[index];
+                    final meta = attachments[index];
+                    final localPath = meta.localPath;
+                    if (localPath == null) {
+                      return _BrokenAttachmentTile(size: 84);
+                    }
                     return InkWell(
                       borderRadius: BorderRadius.circular(8),
                       onTap: () => showDialog<void>(
@@ -164,7 +157,7 @@ class RecordDetailSheet extends ConsumerWidget {
                                     minScale: 0.8,
                                     maxScale: 5,
                                     child: Image.file(
-                                      File(path),
+                                      File(localPath),
                                       fit: BoxFit.contain,
                                       errorBuilder: (_, _, _) => const Icon(
                                         Icons.broken_image_outlined,
@@ -193,18 +186,12 @@ class RecordDetailSheet extends ConsumerWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
                         child: Image.file(
-                          File(path),
+                          File(localPath),
                           width: 84,
                           height: 84,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            width: 84,
-                            height: 84,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.broken_image_outlined),
+                          errorBuilder: (_, _, _) => _BrokenAttachmentTile(
+                            size: 84,
                           ),
                         ),
                       ),
@@ -455,4 +442,26 @@ String inferParentKeyForTx(Category? category, TransactionEntry tx) {
   if (category != null) return category.parentKey;
   if (tx.type == 'income') return 'income';
   return 'other';
+}
+
+/// Step 11.2：附件 [AttachmentMeta.localPath] 缺失或加载失败时的占位 tile。
+///
+/// 触发场景：① 用户手动删除本地文件；② v8→v9 升级后旧路径不存在标记
+/// `missing: true`；③ 远端 download 中（lazy download 在 Step 11.3 接入前
+/// remoteKey-only 的 meta 暂时无法 resolve）。
+class _BrokenAttachmentTile extends StatelessWidget {
+  const _BrokenAttachmentTile({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: const Icon(Icons.broken_image_outlined),
+    );
+  }
 }

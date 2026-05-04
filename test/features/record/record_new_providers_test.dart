@@ -12,6 +12,7 @@ import 'package:bianbianbianbian/data/repository/providers.dart'
         ledgerRepositoryProvider,
         transactionRepositoryProvider;
 import 'package:bianbianbianbian/data/repository/transaction_repository.dart';
+import 'package:bianbianbianbian/domain/entity/attachment_meta.dart';
 import 'package:bianbianbianbian/domain/entity/ledger.dart';
 import 'package:bianbianbianbian/domain/entity/transaction_entry.dart';
 import 'package:bianbianbianbian/features/record/record_new_providers.dart';
@@ -420,7 +421,7 @@ void main() {
       expect(repo.lastSaved!.amount, 88);
     });
 
-    test('保存时将 attachmentPaths 序列化到 attachmentsEncrypted(JSON utf8)', () async {
+    test('保存时将 attachmentMetas 序列化到 attachmentsEncrypted(JSON utf8)', () async {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final repo = _FakeTransactionRepository();
@@ -433,7 +434,20 @@ void main() {
 
       final current = container.read(recordFormProvider);
       final injected = current.copyWith(
-        attachmentPaths: const ['/a/1.jpg', '/a/2.jpg'],
+        attachmentMetas: const [
+          AttachmentMeta(
+            size: 100,
+            originalName: '1.jpg',
+            mime: 'image/jpeg',
+            localPath: '/a/1.jpg',
+          ),
+          AttachmentMeta(
+            size: 200,
+            originalName: '2.jpg',
+            mime: 'image/jpeg',
+            localPath: '/a/2.jpg',
+          ),
+        ],
       );
       container.updateOverrides([
         currentLedgerIdProvider.overrideWith(() => _TestCurrentLedgerId('test-ledger')),
@@ -453,8 +467,16 @@ void main() {
       expect(repo.lastSaved, isNotNull);
       final bytes = repo.lastSaved!.attachmentsEncrypted;
       expect(bytes, isNotNull);
+      // 解码 BLOB → List<Map> → 验证关键字段
       final decoded = jsonDecode(utf8.decode(bytes!)) as List<dynamic>;
-      expect(decoded, ['/a/1.jpg', '/a/2.jpg']);
+      expect(decoded, hasLength(2));
+      final first = decoded.first as Map<String, dynamic>;
+      expect(first['original_name'], '1.jpg');
+      expect(first['local_path'], '/a/1.jpg');
+      expect(first['mime'], 'image/jpeg');
+      expect(first['size'], 100);
+      expect(first['remote_key'], isNull);
+      expect(first['sha256'], isNull);
     });
   });
 

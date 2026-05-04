@@ -2262,4 +2262,139 @@ Repository 层（5 个仓库）：
 | `transaction_entry.note_encrypted` / `attachments_encrypted` 列名 | "AES-GCM 加密的 BLOB" | 列名是历史遗留，前者暂未消费、后者装明文元数据 JSON 数组 |
 
 
+---
+
+## Phase 11 · 附件云同步
+
+### ✅ Step 11.1 二进制存储扩展（CloudStorageService）抽象层（追溯记录于 2026-05-04）
+
+**背景**：实施时间早于本条目，本次 Step 11.2 整合期间补录。
+
+**改动**
+
+- `packages/flutter_cloud_sync/lib/src/core/storage_service.dart::CloudStorageService` 抽象类追加三个方法：
+  - `uploadBinary({path, bytes, contentType, metadata})`：原始字节上传，避免给 JSON 走的 `upload(String data)` 用 base64 包装图片产生 +33% 体积。
+  - `downloadBinary({path}) → Uint8List?`：原始字节下载；不存在返回 null。
+  - `listBinary({prefix}) → List<CloudFile>`：递归列出 prefix 下所有对象，供 Step 11.4 孤儿 sweep 使用。
+- `NoopStorageService`（local-only 兜底）实现三个新方法均抛 `UnsupportedError`，保持与既有 `upload`/`download` 的语义一致。
+- 4 个 backend 子包（`flutter_cloud_sync_supabase` / `_s3` / `_webdav` / `_icloud`）+ 死代码 `BeeCountCloudStorageService` 各加占位实现，方法体抛 `UnimplementedError('... not yet implemented (Phase 11.1)')`，保留 TODO 注释指向后续实施。
+
+**验证**
+
+- `flutter analyze` → No issues found（接口扩展不破坏既有调用）。
+- 既有 JSON 快照同步路径（[upload]/[download] string 版本）行为零变化——本步只添加新方法，不动旧方法签名。
+- 真 backend 的二进制实现**故意推迟**到具体使用方落地——Step 11.2 通过 `_MockStorage` 验证 uploader 协议 + 接口语义；真实 `_client.storage.uploadBinary` / `client.write` / `icloud_storage.upload` 等代码留作 Step 11.3 + 11.4 落地时按需补齐（届时也能跑真后端集成测试）。
+
+**给后续开发者的备忘**
+
+- **抽象 ≠ 实现**：本步只完成接口签名 + 占位骨架。Step 11.2 内部使用的 `AttachmentUploader` 通过 mock storage 测试，不依赖任何真 backend；真要把附件传上 Supabase，**必须先填充** `SupabaseStorageService.uploadBinary` 等方法体。
+- **不要给 `upload(String data)` 用 base64 包装绕过 `uploadBinary`**——会导致 +33% 体积、双端编解码消耗，更重要的是 server-side Content-Type 嗅探完全失效（云端控制台看到的是文本）。
+- **`listBinary` 与 `list` 语义不同**：`list` 单层目录、`listBinary` 递归全 prefix。GC sweep 必须用前者；UI 列表（如"该 tx 下有几张图"）继续用后者。
+- **`getMetadata` / `delete` / `exists` 不区分二进制 vs 文本**——这三个方法在 Phase 11.4 GC 路径里复用，无需新增 `*Binary` 变体。
+
+---
+
+### ✅ Step 11.2 附件元数据 schema v9 迁移与上传管线（2026-05-04）
+
+**改动**
+
+#### 1. 领域实体：`AttachmentMeta`
+
+`lib/domain/entity/attachment_meta.dart`（新建，不可变 `@immutable` 数据类）：
+
+| 字段 | 类型 | 含义 |
+| :-- | :-- | :-- |
+| `remoteKey` | `String?` | `users/<uid>/attachments/<txId>/<sha256><ext>`；null = 还没上传 |
+| `sha256` | `String?` | hex 指纹；与 `remoteKey` 同生命周期 |
+| `size` | `int` | 字节数（迁移走 `File.lengthSync()`，新建走 `bytes.length`） |
+| `originalName` | `String` | 用户可见名（`IMG_1234.HEIC`） |
+| `mime` | `String` | HTTP Content-Type，由扩展名 `lookupMimeType` 推断 |
+| `localPath` | `String?` | `<documents>/attachments/<txId>/...` |
+| `missing` | `bool` | v8→v9 升级时本地路径不存在则置 true |
+
+提供 `toJson` / `fromJson` / `copyWith` / `==` / `hashCode`。`toJson` 在 `missing == false` 时**故意不输出** `missing` 字段，减少 JSON 噪音。
+
+#### 2. BLOB 编解码器与迁移函数：`AttachmentMetaCodec`
+
+`lib/data/local/attachment_meta_codec.dart`（新建）：
+
+- `AttachmentMetaCodec.encode(metas) → Uint8List?`：空列表返回 null。
+- `AttachmentMetaCodec.decode(bytes) → List<AttachmentMeta>`：兼容 v8 旧 shape `["path"]`——遇到 String 元素自动包装成 `AttachmentMeta`，触发 `AttachmentMetaUpgradeOps.upgradeLegacyPath`（同步读磁盘 size + 推断 mime + 文件不存在标记 missing）。
+- `migrateAttachmentsBlobV8ToV9(rows, readFileLength) → List<({id, newBlob})>`：纯 Dart 迁移函数，注入 `readFileLength`（生产路径走 `File.lengthSync()`，测试路径走 mock map）。**幂等**：遇到首项已是对象的数组直接跳过——不重复升级；遇空数组也跳过。
+
+#### 3. Schema v8 → v9 迁移
+
+`lib/data/local/app_database.dart`：
+
+- `schemaVersion` 8 → 9。
+- `onUpgrade` 加 `if (from < 9)` 分支调 `_upgradeAttachmentsBlobToV9()`：扫 `transaction_entry where attachments_encrypted IS NOT NULL` → 调 `migrateAttachmentsBlobV8ToV9` → 用 `customStatement('UPDATE ... attachments_encrypted = ? WHERE id = ?')` 写回。
+- **不动列名 / 列类型 / 索引**——纯 BLOB 内容迁移。
+- 顶部 dartdoc 追加 v9 条目；`schemaVersion 9` 注释里**显式说明 plan 文档差异**：implementation-plan §11.2 写「v9 → v10」是因为 plan 起草时假设 Phase 9 会独立铺一个 schema version；实际 Phase 9 复用既有 user_pref 列，schema 没动。所以本步真实跨度是 v8 → v9，语义与 plan 完全一致，序号连续少一格。
+
+#### 4. RecordForm 接入新 shape
+
+`lib/features/record/record_new_providers.dart`：
+
+- `RecordFormData.attachmentPaths: List<String>` → `attachmentMetas: List<AttachmentMeta>`。
+- `_attachPickedFile`：选图后构造 `AttachmentMeta`（仅 localPath/originalName/mime/size，remoteKey/sha256 留 null）写入 state。
+- 单文件 > `kMaxAttachmentBytes (10MB)` 直接返回错误字符串「单张图片不能超过 10MB」——**V1 不引入 `image` 包做 JPEG 压缩**，超限就拒绝；用户后续若要无损压缩可作为独立改动接入。
+- 编/解码统一走 `AttachmentMetaCodec`，下面的 `_encodeAttachmentPaths` / `_decodeAttachmentPaths` 私有 helper 删除。
+- `preloadFromEntry` 走 `AttachmentMetaCodec.decode` 直接拿到 metas 列表。
+
+#### 5. UI 渲染更新
+
+- `lib/features/record/record_new_page.dart::_NoteAttachments`：`paths` → `metas`，渲染 `meta.localPath ?? null` 走 `Image.file` 或占位 `_AttachmentBrokenTile`。
+- `lib/features/record/record_tile_actions.dart::RecordDetailSheet`：内部 `_decodeAttachmentPaths` → `_decodeAttachmentMetas`，附件横滑 `Image.file(File(meta.localPath))`，遇 `localPath == null` 渲染占位 `_BrokenAttachmentTile`。
+- 全屏放大查看与缩略图均处理 `localPath` 缺失场景，不让 UI 撞红屏。
+
+#### 6. 上传管线：`AttachmentUploader`
+
+`lib/features/sync/attachment/attachment_uploader.dart`（新建）：
+
+- 顶层服务（不走 Riverpod provider，避免循环依赖）；构造时注入 `CloudStorageService` + 可选 `readBytes` testing hook。
+- `Future<List<AttachmentMeta>> uploadPending(metas, txId, uid)`：对每个 `meta.remoteKey == null` 的项 → 读字节 → 计算 sha256 → 拼 `users/$uid/attachments/$txId/$sha256$ext` → `exists()` 命中跳过、否则 `uploadBinary()` → 回填 remoteKey/sha256/size。
+- **幂等**：同 sha256 → 同 path → `exists` 命中视为成功，不重传。
+- **错误隔离**：单条失败（网络中断 / 配额超限 / 文件丢失）→ 跳过该条 + 失败 meta 留 `remoteKey = null`，整体不抛异常；下次同步重试。
+
+#### 7. 接入 SnapshotSyncService.upload
+
+`lib/features/sync/sync_service.dart`：
+
+- `upload(ledgerId)` 内部**先**调 `_uploadPendingAttachments(ledgerId)` 再上传 JSON 快照——保证 B 设备拉到的快照里所有 attachmentsEncrypted 已含 remoteKey。
+- `_uploadPendingAttachments` 直接走 `_db.select` 读流水（绕开 repository 层 sync_op 队列），逐行解码 BLOB → 检查是否含 `remoteKey == null` → `AttachmentUploader.uploadPending` → `customStatement('UPDATE ... SET attachments_encrypted = ?')` 写回。**故意不改 `updated_at`**——避免回填触发额外的「本地较新」状态判定。
+
+**测试**
+
+新增 24 用例：
+
+- `test/domain/entity/attachment_meta_test.dart`（12 用例）：
+  - `AttachmentMeta` toJson/fromJson 完整字段往返、null 字段保留、missing 序列化策略、容忍空 JSON。
+  - `copyWith` 把 null 字段升级到非 null、不传参等价。
+  - `AttachmentMetaCodec.encode/decode` 空列表 → null、往返保留、**v8 兼容**（字符串数组解码为 v9 metas）、null/空/非法 JSON 都返回 const empty。
+  - `migrateAttachmentsBlobV8ToV9` v8 升级带 size 推断 + missing 标记、已是 v9 的行幂等跳过、空数组行跳过。
+- `test/features/sync/attachment_uploader_test.dart`（6 用例）：
+  - remoteKey 已填的 meta 透传不调 `uploadBinary`。
+  - 同 sha256 去重——只调一次 uploadBinary、两次 exists、两条结果共享 remoteKey。
+  - 单条失败不影响其他——失败 meta `remoteKey` 留 null、其他正常。
+  - localPath/remoteKey 均为 null 的 meta 跳过上传原样返回。
+  - 远端路径模式 `users/<uid>/attachments/<txId>/<sha256><ext>`。
+
+修改既有 `record_new_providers_test.dart` 的「序列化到 attachmentsEncrypted」测试：从断言 `decoded == ['/a/1.jpg', '/a/2.jpg']` 改为断言 `decoded[0]` 是 Map + `original_name`/`local_path`/`mime`/`size` 字段值正确 + `remote_key`/`sha256` 为 null。
+
+**验证**
+
+- `flutter analyze` → **No issues found**。
+- `flutter test` → **+424 通过 / -9 失败**——9 个失败全部是 Step 11.2 之前已存在的 quick_text_parser 词典不一致问题（"交通"/"出行"、"餐饮"/"饮食"、"居家"/"住房"），与本步完全无关。**git stash 后跑同样 -9**，证明本步零回归。
+- 18 个新增用例（attachment_meta + uploader）全部通过。
+
+**给后续开发者的备忘**
+
+- **schema v9 vs plan 文档 v10**：plan 写 v9→v10，实际是 v8→v9。语义完全一致——之后 Phase 文档勘误时统一以代码为准。Step 11.3 / 11.4 在 plan 里也写「v10」，落地时延续此脚注。
+- **列名 `attachments_encrypted` 是历史遗留，不要重命名**：v1 设计为 AES-GCM 密文（Phase 11 重构后改明文）。重命名要写迁移 + 改 drift `@DataClassName` + 改 entity_mappers + 改所有测试——成本远高于"在文档/注释里说清楚"的价值。
+- **`_uploadPendingAttachments` 直接走 `_db.select` 不走 repository**：repository.save 会触发 sync_op 队列写入 + `updated_at` 刷新，对附件回填来说都是噪音——前者会让"刚上传的快照立刻被排队再传"，后者会让 fingerprint 误判"本地较新"。直走 db 是这两个问题的最简解。
+- **同 sha256 跨 tx 不去重**：当前路径包含 `$txId`，所以同一张图在两笔流水里会传两次。这是有意的——避免 GC 时跨 tx 引用计数；空间代价 < 100 张图的体量级别。如果未来要做内容寻址（同图全局共享），路径要改成 `users/$uid/objects/<sha256>$ext` + 引用表。
+- **超过 10MB 的图直接拒绝**：plan 原计划用 `image` 包做 JPEG q=85 压缩；V1 不接入 image 包（pure-Dart 但 ~300KB 体积、增加 1 个依赖维护点）。如果后续真要接，建议作为「Step 11.2+」补丁，不和本步混。
+- **Step 11.3 起的懒下载会用到 `meta.remoteKey ?? meta.localPath` 决策路径**：本步保证了所有「云端可用、本地丢失」的 meta 都有 remoteKey 可拉，下一步 `AttachmentDownloader.ensureLocal` 直接照此模式即可。
+- **错误日志走 `debugPrint`**：上传失败时 `AttachmentUploader` 用 `debugPrint('AttachmentUploader: failed for $localPath — $e\n$st')` 打 log。生产环境若要接入 Sentry / Crashlytics，把这行改为通过 `ref` 注入的 logger service 即可。
+
 

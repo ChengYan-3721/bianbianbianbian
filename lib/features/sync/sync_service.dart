@@ -1,11 +1,14 @@
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/local/attachment_meta_codec.dart';
 import '../../data/repository/account_repository.dart';
 import '../../data/repository/budget_repository.dart';
 import '../../data/repository/category_repository.dart';
 import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/transaction_repository.dart';
+import '../../domain/entity/attachment_meta.dart';
+import 'attachment/attachment_uploader.dart';
 import 'snapshot_serializer.dart';
 
 /// V1 同步服务：账本快照模型（整库 upload / 整库 download / 指纹比对）。
@@ -125,9 +128,71 @@ class SnapshotSyncService implements SyncService {
 
   @override
   Future<void> upload({required String ledgerId}) async {
+    // Step 11.2：上传 JSON 快照前先把所有 remoteKey == null 的附件上云。
+    // 顺序：附件先 → 快照后。这样 B 设备拉到的快照里所有 attachmentsEncrypted
+    // 已含 remoteKey，可以走 lazy download 路径（Step 11.3）。
+    // 单个附件失败不阻塞快照——uploadPending 会把失败的 meta 留 remoteKey 为
+    // null，下次同步重试。
+    await _uploadPendingAttachments(ledgerId);
+
     final snapshot = await _exportLocal(ledgerId);
     final path = await _path(ledgerId);
     await _manager.upload(data: snapshot, path: path);
+  }
+
+  /// Step 11.2：扫描指定账本下所有流水的附件元数据，把 `remoteKey == null`
+  /// 的项上传到云端，然后把回填的元数据写回 DB。仅在云端可写时调用。
+  ///
+  /// 实现细节：
+  /// 1. 直接从 `_db.transactionEntryTable` 读出（避免穿过 repository 触发
+  ///    sync_op 队列）；
+  /// 2. 单条流水内的多个附件串行上传——已是 fast path（小于 3 张图）；
+  /// 3. 写回时对 `attachments_encrypted` 走 customStatement，**不**改
+  ///    `updated_at`——避免因 metadata 回填触发额外的快照「本地较新」判定。
+  Future<void> _uploadPendingAttachments(String ledgerId) async {
+    final storage = _manager.provider.storage;
+    final user = await _manager.provider.auth.currentUser;
+    final uid = user?.id ?? _deviceId;
+
+    final txRows = await (_db.select(_db.transactionEntryTable)
+          ..where((t) => t.ledgerId.equals(ledgerId))
+          ..where((t) => t.attachmentsEncrypted.isNotNull()))
+        .get();
+
+    for (final row in txRows) {
+      final raw = row.attachmentsEncrypted;
+      if (raw == null || raw.isEmpty) continue;
+      final metas = AttachmentMetaCodec.decode(raw);
+      if (metas.isEmpty) continue;
+
+      final hasPending = metas.any((m) => m.remoteKey == null);
+      if (!hasPending) continue;
+
+      final uploader = AttachmentUploader(storage: storage);
+      final List<AttachmentMeta> updated = await uploader.uploadPending(
+        metas,
+        txId: row.id,
+        uid: uid,
+      );
+
+      // 没有任何 meta 真的被回填（全部失败 / 全部跳过）→ 跳过 DB 写入。
+      final changed = !_metasEqual(updated, metas);
+      if (!changed) continue;
+
+      final encoded = AttachmentMetaCodec.encode(updated);
+      await _db.customStatement(
+        'UPDATE transaction_entry SET attachments_encrypted = ? WHERE id = ?',
+        [encoded, row.id],
+      );
+    }
+  }
+
+  bool _metasEqual(List<AttachmentMeta> a, List<AttachmentMeta> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   @override

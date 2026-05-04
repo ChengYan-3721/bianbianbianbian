@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 import 'package:sqlite3/open.dart' as sqlite3_open;
 
+import 'attachment_meta_codec.dart';
 import 'dao/account_dao.dart';
 import 'dao/budget_dao.dart';
 import 'dao/category_dao.dart';
@@ -59,6 +60,19 @@ part 'app_database.g.dart';
 ///   `ai_api_prompt_template TEXT` / `ai_input_enabled INTEGER DEFAULT 0`。
 ///   `ai_api_endpoint` 与 `ai_api_key_encrypted` 是历史遗留列（自 v1 即声明
 ///   但未使用），Step 9.3 起被消费，无需迁移。
+/// - v9（Step 11.2）：`transaction_entry.attachments_encrypted` BLOB 内 JSON
+///   shape 升级——从 Step 3.5 的 `["<本地路径>", ...]` 字符串数组改为含
+///   `remote_key / sha256 / size / original_name / mime / local_path` 的
+///   `AttachmentMeta` 对象数组（详见 [AttachmentMetaCodec] / [AttachmentMeta]）。
+///   不增列、不改列类型、不重命名（列名 `attachments_encrypted` 是历史遗留，
+///   v1 设计为 AES-GCM 密文，现 V1 同步策略下内容明文）。迁移就地扫表 + 转换
+///   BLOB；本地文件不存在的旧记录标记 `missing: true`，UI 显示占位。
+///
+/// > **plan 文档差异说明**：implementation-plan.md §11.2 写的是「v9 → v10」，
+/// > 是因为 plan 起草时假设 Phase 9（AI 增强）会同时铺一个独立的 schema
+/// > version；实际落地中 Phase 9 与现有 v8 复用了 user_pref 列，schema
+/// > 没动。所以本步真实跨度是 v8 → v9，语义与 plan 完全一致，只是版本号
+/// > 序列连续少一格。后续 Phase 文档勘误时统一以代码为准。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -87,7 +101,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -166,8 +180,58 @@ class AppDatabase extends _$AppDatabase {
             );
             await m.addColumn(userPrefTable, userPrefTable.aiInputEnabled);
           }
+
+          if (from < 9) {
+            // v8 → v9（Step 11.2）：transaction_entry.attachments_encrypted
+            // BLOB 内 JSON shape 从字符串数组升级为 AttachmentMeta 对象数组。
+            // 不动 schema，纯数据迁移：扫所有非空 BLOB → 解码旧 shape →
+            // 包装成新对象数组（remote_key / sha256 留 null 等下次同步回填，
+            // size / mime 现场推断，本地文件不存在的标记 missing: true）→
+            // 写回原行。
+            await _upgradeAttachmentsBlobToV9();
+          }
         },
       );
+
+  /// v8 → v9 迁移的具体实现，抽出方法便于阅读 + 单测注入。
+  ///
+  /// 直接走 [customSelect] / [customStatement]——不走 DAO/companion 因为：
+  /// ① drift 数据类已经是 v9 形态，旧 shape 用不上；② 迁移路径要尽量稳定，
+  /// 不依赖业务层；③ 减少代码生成耦合（drift schema 改动时不连带影响迁移）。
+  Future<void> _upgradeAttachmentsBlobToV9() async {
+    final rows = await customSelect(
+      "SELECT id, attachments_encrypted FROM transaction_entry "
+      'WHERE attachments_encrypted IS NOT NULL',
+    ).get();
+
+    final inputs = <({String id, Uint8List blob})>[];
+    for (final row in rows) {
+      final id = row.read<String>('id');
+      final blob = row.read<Uint8List>('attachments_encrypted');
+      if (blob.isEmpty) continue;
+      inputs.add((id: id, blob: blob));
+    }
+
+    final outputs = migrateAttachmentsBlobV8ToV9(
+      inputs,
+      readFileLength: (path) {
+        try {
+          final f = File(path);
+          if (!f.existsSync()) return null;
+          return f.lengthSync();
+        } catch (_) {
+          return null;
+        }
+      },
+    );
+
+    for (final out in outputs) {
+      await customStatement(
+        'UPDATE transaction_entry SET attachments_encrypted = ? WHERE id = ?',
+        [out.newBlob, out.id],
+      );
+    }
+  }
 
   Future<void> _createTransactionIndexes() async {
     await customStatement(

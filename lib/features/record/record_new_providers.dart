@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:image_picker/image_picker.dart';
+import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -11,7 +11,9 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../data/local/attachment_meta_codec.dart';
 import '../../data/repository/providers.dart';
+import '../../domain/entity/attachment_meta.dart';
 import '../../domain/entity/transaction_entry.dart';
 import '../budget/budget_providers.dart';
 import '../settings/settings_providers.dart';
@@ -23,6 +25,11 @@ part 'record_new_providers.g.dart';
 
 const _lastAccountKey = 'last_used_account_id';
 const _maxAttachments = 3;
+
+/// Step 11.2：单文件大小上限。超过后保存到本地时本应走 JPEG 压缩，但 V1
+/// 不引入 `image` 包（pure-Dart 但体积偏大）；超限文件目前直接拒绝并提示
+/// 用户。后续若需要无损压缩再引入 image 包，作为独立改动。
+const int kMaxAttachmentBytes = 10 * 1024 * 1024;
 
 /// 新建记账页的表单数据。
 class RecordFormData {
@@ -38,7 +45,7 @@ class RecordFormData {
     this.currency = 'CNY',
     this.editingEntryId,
     this.isTransfer = false,
-    this.attachmentPaths = const <String>[],
+    this.attachmentMetas = const <AttachmentMeta>[],
     this.categoryParentKey,
   });
 
@@ -54,7 +61,14 @@ class RecordFormData {
   final String currency;
   final String? editingEntryId;
   final bool isTransfer;
-  final List<String> attachmentPaths;
+
+  /// Step 11.2 起：从 `List<String>` 升级为 `List<AttachmentMeta>`。
+  ///
+  /// 选图后立即落到 `<docs>/attachments/<txId>/...` 并构造一个仅有
+  /// [AttachmentMeta.localPath] 的 meta，[AttachmentMeta.remoteKey] 与
+  /// [AttachmentMeta.sha256] 为 null——下次同步时由
+  /// `AttachmentUploader.uploadPending` 计算并回填。
+  final List<AttachmentMeta> attachmentMetas;
 
   bool get canSave {
     final hasAmount = amount != null && amount! > 0;
@@ -79,7 +93,7 @@ class RecordFormData {
     String? currency,
     String? Function()? editingEntryId,
     bool? isTransfer,
-    List<String>? attachmentPaths,
+    List<AttachmentMeta>? attachmentMetas,
     String? Function()? categoryParentKey,
   }) {
     return RecordFormData(
@@ -94,7 +108,7 @@ class RecordFormData {
       currency: currency ?? this.currency,
       editingEntryId: editingEntryId != null ? editingEntryId() : this.editingEntryId,
       isTransfer: isTransfer ?? this.isTransfer,
-      attachmentPaths: attachmentPaths ?? this.attachmentPaths,
+      attachmentMetas: attachmentMetas ?? this.attachmentMetas,
       categoryParentKey: categoryParentKey != null ? categoryParentKey() : this.categoryParentKey,
     );
   }
@@ -251,7 +265,7 @@ class RecordForm extends _$RecordForm {
 
   void setNote(String note) => state = state.copyWith(note: note);
 
-  bool get canAddAttachment => state.attachmentPaths.length < _maxAttachments;
+  bool get canAddAttachment => state.attachmentMetas.length < _maxAttachments;
 
   Future<String?> pickAndAttachFromGallery() async {
     if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片';
@@ -270,10 +284,10 @@ class RecordForm extends _$RecordForm {
   }
 
   void removeAttachmentAt(int index) {
-    final paths = [...state.attachmentPaths];
-    if (index < 0 || index >= paths.length) return;
-    paths.removeAt(index);
-    state = state.copyWith(attachmentPaths: paths);
+    final metas = [...state.attachmentMetas];
+    if (index < 0 || index >= metas.length) return;
+    metas.removeAt(index);
+    state = state.copyWith(attachmentMetas: metas);
   }
 
   Future<String?> _attachPickedFile(XFile picked) async {
@@ -284,13 +298,21 @@ class RecordForm extends _$RecordForm {
 
     final src = File(picked.path);
     final srcBytes = await src.readAsBytes();
+
+    if (srcBytes.length > kMaxAttachmentBytes) {
+      // V1：超过 10MB 直接拒绝。后续可引入 image 包做 JPEG 压缩。
+      return '单张图片不能超过 10MB';
+    }
+
     final srcHash = base64Encode(srcBytes);
 
     // 去重：同内容图片重复选择时直接提示（兼容系统返回不同临时路径）。
-    for (final existingPath in state.attachmentPaths) {
-      final existing = File(existingPath);
-      if (!await existing.exists()) continue;
-      final existingBytes = await existing.readAsBytes();
+    for (final existing in state.attachmentMetas) {
+      final localPath = existing.localPath;
+      if (localPath == null) continue;
+      final existingFile = File(localPath);
+      if (!await existingFile.exists()) continue;
+      final existingBytes = await existingFile.readAsBytes();
       final existingHash = base64Encode(existingBytes);
       if (existingHash == srcHash) {
         return '同一张图片不能重复添加';
@@ -302,12 +324,24 @@ class RecordForm extends _$RecordForm {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
+    final originalName = p.basename(picked.path);
     final ext = p.extension(picked.path).toLowerCase();
     final normalizedExt = ext.isEmpty ? '.jpg' : ext;
     final filename = '${DateTime.now().microsecondsSinceEpoch}$normalizedExt';
     final targetPath = p.join(dir.path, filename);
     await src.copy(targetPath);
-    state = state.copyWith(attachmentPaths: [...state.attachmentPaths, targetPath]);
+
+    final mime =
+        lookupMimeType(targetPath) ?? 'application/octet-stream';
+    final meta = AttachmentMeta(
+      size: srcBytes.length,
+      originalName: originalName.isEmpty ? filename : originalName,
+      mime: mime,
+      localPath: targetPath,
+    );
+    state = state.copyWith(
+      attachmentMetas: [...state.attachmentMetas, meta],
+    );
     return null;
   }
 
@@ -338,7 +372,8 @@ class RecordForm extends _$RecordForm {
       currency: entry.currency,
       editingEntryId: () => asEdit ? entry.id : const Uuid().v4(),
       isTransfer: entry.type == 'transfer',
-      attachmentPaths: _decodeAttachmentPaths(entry.attachmentsEncrypted),
+      attachmentMetas:
+          AttachmentMetaCodec.decode(entry.attachmentsEncrypted),
       categoryParentKey: () => categoryParentKey,
     );
     await initDefaultAccount();
@@ -348,24 +383,9 @@ class RecordForm extends _$RecordForm {
     state = const RecordFormData();
   }
 
-  Uint8List? _encodeAttachmentPaths(List<String> paths) {
-    if (paths.isEmpty) return null;
-    return Uint8List.fromList(utf8.encode(jsonEncode(paths)));
-  }
-
-  List<String> _decodeAttachmentPaths(Uint8List? bytes) {
-    if (bytes == null || bytes.isEmpty) return const <String>[];
-    try {
-      final raw = utf8.decode(bytes);
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        return decoded.whereType<String>().toList(growable: false);
-      }
-      return const <String>[];
-    } catch (_) {
-      return const <String>[];
-    }
-  }
+  /// Step 11.2：BLOB 编解码统一走 [AttachmentMetaCodec]，保证 v9 新 shape 与
+  /// 历史 v8 旧 shape（字符串数组）兼容——decode 端会把旧 string 自动包装成
+  /// [AttachmentMeta]，encode 端永远输出 v9 形态。
 
   /// 保存流水。返回 `true` 表示成功。
   Future<bool> save() async {
@@ -394,7 +414,7 @@ class RecordForm extends _$RecordForm {
       toAccountId: d.isTransfer ? d.toAccountId : null,
       occurredAt: d.occurredAt ?? DateTime.now(),
       tags: d.note.isEmpty ? null : d.note,
-      attachmentsEncrypted: _encodeAttachmentPaths(d.attachmentPaths),
+      attachmentsEncrypted: AttachmentMetaCodec.encode(d.attachmentMetas),
       updatedAt: DateTime.now(),
       deviceId: '', // repo 会覆写
     );

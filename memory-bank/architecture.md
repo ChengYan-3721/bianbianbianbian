@@ -8,7 +8,7 @@
 
 ---
 
-## 当前文件一览（Phase 12 · 垃圾桶后）
+## 当前文件一览（Phase 11.2 · 附件元数据 + 上传管线后）
 
 ```
 bianbianbianbian/
@@ -28,8 +28,9 @@ bianbianbianbian/
 │  │     └─ quick_text_parser.dart  QuickTextParser + QuickParseResult（Step 9.1，本地中文快速记账文本解析器）
 │  ├─ data/
 │  │  ├─ local/
-│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=8；Phase 10 不动 schema）
+│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=9；Step 11.2 v8→v9 附件 BLOB shape 升级）
 │  │  │  ├─ app_database.g.dart       build_runner 产物
+│  │  │  ├─ attachment_meta_codec.dart Step 11.2 AttachmentMetaCodec（encode/decode + v8 兼容）+ migrateAttachmentsBlobV8ToV9 纯函数
 │  │  │  ├─ db_cipher_key_store.dart  本地 DB 加密密钥的生成/持久化
 │  │  │  ├─ device_id_store.dart      device_id 加载器（secure ↔ user_pref 双向同步）
 │  │  │  ├─ seeder.dart               DefaultSeeder（首次启动默认数据种子化 + Step 8.1 fx_rate 独立判空）
@@ -69,7 +70,8 @@ bianbianbianbian/
 │  │  │  ├─ category.dart              同上
 │  │  │  ├─ account.dart               同上
 │  │  │  ├─ transaction_entry.dart     同上（含 _bytesEqual/_bytesHash 深比较）
-│  │  │  └─ budget.dart                同上
+│  │  │  ├─ budget.dart                同上
+│  │  │  └─ attachment_meta.dart       Step 11.2 AttachmentMeta（remoteKey/sha256/size/originalName/mime/localPath/missing）
 │  │  └─ usecase/               [空] 跨仓库业务用例
 │  └─ features/
 │     ├─ record/                Step 3.2 已重构：新建记账页采用一级/二级分类 + 收藏 + 自动收支判定；Step 3.6/3.7 已接入搜索页 + 月份选择器
@@ -77,7 +79,7 @@ bianbianbianbian/
 │     │  ├─ record_new_page.dart        RecordNewPage + 子组件（一级Tab/收藏/金额/分类/账户/时间/备注/附件/保存）
 │     │  ├─ record_providers.dart       RecordMonth Notifier + recordMonthSummary FutureProvider
 │     │  ├─ record_providers.g.dart     riverpod_generator 产物
-│     │  ├─ record_new_providers.dart   RecordFormData + _parseExpr + RecordForm Notifier（自动判定 income/expense + 本地附件管理）
+│     │  ├─ record_new_providers.dart   RecordFormData + _parseExpr + RecordForm Notifier（自动判定 income/expense；Step 11.2 起 attachmentMetas: List&lt;AttachmentMeta&gt; 替代旧 attachmentPaths，编解码走 AttachmentMetaCodec）
 │     │  ├─ record_new_providers.g.dart riverpod_generator 产物
 │     │  ├─ record_search_filters.dart   Step 3.6 SearchQuery 数据类 + SearchTypeFilter 枚举 + searchTransactions 纯函数（关键词/日期/类型/金额取交集）
 │     │  ├─ record_search_page.dart      Step 3.6 RecordSearchPage（关键词输入 + 日期范围 / 类型 / 金额三段筛选 + 结果列表 + 空查询/空结果两种空态；结果点击复用 record_tile_actions 详情底表）
@@ -111,12 +113,14 @@ bianbianbianbian/
 │     │  ├─ account_providers.g.dart    riverpod_generator 产物
 │     │  ├─ account_list_page.dart      AccountListPage（总资产卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单）
 │     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/初始余额/币种/计入总资产，新建+编辑双模式）
-│     ├─ sync/                  Phase 10 已完成：账本快照模型多后端云同步 + 触发调度
-│     │  ├─ sync_service.dart        SyncService 抽象 + LocalOnlySyncService + SnapshotSyncService（V1）
+│     ├─ sync/                  Phase 10 已完成 + Phase 11.2 新增附件上传管线
+│     │  ├─ sync_service.dart        SyncService 抽象 + LocalOnlySyncService + SnapshotSyncService（V1，upload 内部已接入附件上传前置：扫表 → uploadPending → 写回 BLOB → 上传 JSON 快照）
 │     │  ├─ snapshot_serializer.dart  LedgerSnapshot 数据类 + LedgerSnapshotSerializer + exportLedgerSnapshot/importLedgerSnapshot 纯函数
 │     │  ├─ sync_provider.dart       Riverpod 顶层 provider 链（store→config→cloudProvider→authService→syncService）
 │     │  ├─ sync_trigger.dart        Step 10.7 SyncTrigger Notifier + SyncTriggerState + 5 触发源调度（trigger/scheduleDebounced/startPeriodic/stopPeriodic/cancelTimers）
-│     │  └─ cloud_service_page.dart  「我的→云服务」页（_SyncStatusCard 状态条 + iCloud/WebDAV/S3/Supabase 4 个后端卡 + 配置对话框）
+│     │  ├─ cloud_service_page.dart  「我的→云服务」页（_SyncStatusCard 状态条 + iCloud/WebDAV/S3/Supabase 4 个后端卡 + 配置对话框）
+│     │  └─ attachment/
+│     │     └─ attachment_uploader.dart Step 11.2 AttachmentUploader（uploadPending：sha256 计算 / exists 幂等 / 错误隔离 / remoteKey 回填）
 │     ├─ trash/                 Phase 12 已完成：垃圾桶列表 + 恢复/永久删除/清空 + 启动定时清理
 │     │  ├─ trash_attachment_cleaner.dart  TrashAttachmentCleaner（递归删除 <docs>/attachments/<txId>/）+ DocumentsDirProvider 注入点
 │     │  ├─ trash_providers.dart           kTrashRetention=30d + trashDaysLeft 纯函数 + 5 个 FutureProvider.autoDispose（TX/Cat/Acc/Ledger/Budget）
@@ -155,7 +159,8 @@ bianbianbianbian/
 │  │     └─ budget_repository_test.dart      BudgetRepository 唯一性 + 软删后重建（8 用例，Step 6.1）
 │  ├─ domain/
 │  │  └─ entity/
-│  │     └─ entities_test.dart               5 个实体 roundtrip/copyWith + drift 隔离（17 用例，Step 2.1）
+│  │     ├─ entities_test.dart               5 个实体 roundtrip/copyWith + drift 隔离（17 用例，Step 2.1）
+│  │     └─ attachment_meta_test.dart        Step 11.2 AttachmentMeta + AttachmentMetaCodec + migrateAttachmentsBlobV8ToV9（12 用例：toJson/fromJson 往返、copyWith、v8 兼容、迁移幂等）
 │  ├─ features/
 │  │  ├─ record/
 │  │  │  ├─ record_new_providers_test.dart   RecordForm Notifier 单元测试（含 Step 3.5 附件序列化、Step 8.2 setCurrency/fxRate 写入断言）
@@ -182,7 +187,8 @@ bianbianbianbian/
 │  │  └─ ai_input_settings_providers_test.dart Step 9.3 AiInputSettings 数据类 + DB 集成 roundtrip（10 用例）
 │  │  └─ ai_input_settings_page_test.dart    Step 9.3 AiInputSettingsPage widget 测试（3 用例：预填 / 保存 / API key 显示切换）
 │  ├─ features/sync/
-│  │  └─ sync_trigger_test.dart              Step 10.7 SyncTrigger 单元测试（8 用例：notConfigured / 成功 / SocketException / TimeoutException / failure / skipped / 防抖语义 / cancelTimers）
+│  │  ├─ sync_trigger_test.dart              Step 10.7 SyncTrigger 单元测试（8 用例：notConfigured / 成功 / SocketException / TimeoutException / failure / skipped / 防抖语义 / cancelTimers）
+│  │  └─ attachment_uploader_test.dart       Step 11.2 AttachmentUploader（6 用例：透传已 remoteKey、sha256 去重、单条失败隔离、null path 跳过、远端路径模式断言）
 │  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例；Step 10.7 起所有 BianBianApp 实例均传 enableSyncLifecycle: false）
 ├─ memory-bank/
 │  ├─ design-document.md        产品设计（权威来源）
@@ -1201,7 +1207,12 @@ Phase 10 实施过程中，前一轮的 agent 留下了破坏：① 简化重写
 
 - **Step 10.3-10.6** 已经被 V1 快照模型覆盖（包内 4 个 backend 实现都可用）。后续若要走增量队列模型（V2），实现 sync_op 消费器 + LWW 合并器，并替换 `SnapshotSyncService` 为 `IncrementalSyncService`。
 - **Step 10.7（已完成）**：5 个触发源由 `SyncTrigger` 调度器统一管理；首页顶栏渲染 `_SyncStatusBadge`；下拉刷新走 `trigger()`。Phase 11 附件云同步在 `SnapshotSyncService.upload` 内部前置一段附件二进制上传，`SyncTrigger` 接口完全不动。
-- **Phase 11 附件云同步（待实施）**：见 implementation-plan §11。核心：`CloudStorageService` 加 `uploadBinary` / `downloadBinary` / `listBinary` 三个方法（4 个 backend 实现）+ `attachments_encrypted` BLOB shape v9→v10 升级（路径数组 → 元数据对象数组）+ 上传管线接入 `SnapshotSyncService.upload` 前置阶段 + 懒下载与本地缓存（500MB LRU）+ GC 与 7 天孤儿 sweep。**全程明文**——云端是用户自有空间，无加密层。原 Phase 11「快照加密 + 同步码」整段废弃。
+- **Phase 11 附件云同步（进行中）**：见 implementation-plan §11。
+  - **Step 11.1（已完成 2026-05-04 追溯）**：`CloudStorageService` 抽象类加 `uploadBinary` / `downloadBinary` / `listBinary` 三个方法；4 个 backend 子包加占位实现（`UnimplementedError`，留待真后端集成测试时填充）。
+  - **Step 11.2（已完成 2026-05-04）**：`AttachmentMeta` 领域实体 + `AttachmentMetaCodec`（v8 兼容解码）+ schema v8→v9 BLOB 内容迁移 + `RecordForm.attachmentMetas` 切换 + `AttachmentUploader` 上传管线 + `SnapshotSyncService.upload` 内部前置附件上传。**全程明文**——云端是用户自有空间，无加密层。
+  - **Step 11.3（待实施）**：懒下载与本地缓存（500MB LRU）。
+  - **Step 11.4（待实施）**：软删 / 硬删 GC + 7 天孤儿 sweep + 跨 backend 迁移确认。
+  - 原 Phase 11「快照加密 + 同步码」整段废弃。
 
 ---
 
@@ -1280,5 +1291,55 @@ Step 3.6（首页流水搜索）与 3.7（首页月份选择器）此前在 Phas
   - **`folder[3]` 不参与 RLS**：`users/<uid>/foo.txt` 这种"路径不规范但 uid 正确"的请求会放行——简化策略，路径合规性交给 `AttachmentUploader` 强制。
   - **anon 角色无任何策略**：所有策略 `to authenticated`——未登录的 anon key 持有者读不到任何对象，这是预期行为。
   - **附件不加密**：见上面"加密说明"。即使 RLS 兜底，用户的 Supabase 账户被攻破或 backend 被入侵 = 图片可被读，文档与设置项需明示「附件不加密。请确保使用受信任的云端账户。」
+
+---
+
+## Phase 11.2 架构决策（2026-05-04）
+
+### 数据流
+
+```
+[选图]                                            [触发同步]
+  │                                                 │
+  ▼                                                 ▼
+RecordForm.attachmentMetas    SnapshotSyncService.upload(ledgerId)
+List<AttachmentMeta>          │
+  │                           ├─ 1. _uploadPendingAttachments(ledgerId)
+  │ AttachmentMetaCodec.encode│   │
+  ▼                           │   ├─ 扫 transaction_entry where attachments_encrypted IS NOT NULL
+TransactionEntry              │   ├─ 解 BLOB → List<AttachmentMeta>
+  .attachmentsEncrypted: BLOB │   ├─ 含 remoteKey == null → AttachmentUploader.uploadPending
+  │                           │   │   ├─ 读字节 → sha256
+  ▼                           │   │   ├─ exists(path) ? skip : uploadBinary(path, bytes)
+drift transaction_entry table │   │   └─ 回填 remoteKey/sha256/size
+                              │   ├─ AttachmentMetaCodec.encode
+                              │   └─ customStatement UPDATE set attachments_encrypted = ?
+                              │
+                              └─ 2. exportLedgerSnapshot → manager.upload(snapshot.json)
+                                  （此时所有 attachmentsEncrypted 都已含 remoteKey）
+```
+
+### 决策
+
+1. **schema 版本号 v9 vs plan 文档 v10**：plan 写「v9 → v10」，实际是 v8 → v9。原因：plan 起草期假设 Phase 9（AI 增强）会独立铺一个 schema version，实际 Phase 9 复用 user_pref 列没动 schema。**以代码为准**——后续 Phase 文档勘误。Step 11.3 / 11.4 plan 里的「v10」也是同样错位，落地时延续此脚注。
+
+2. **列名 `attachments_encrypted` 保留不变**：v1 设计为 AES-GCM 密文，Phase 11 重构后改明文。重命名要写迁移 + 改 drift `@DataClassName` + 改 entity_mappers + 改所有测试——**成本远高于"在文档/注释里说清楚"**。同理 `note_encrypted` 列也保留（虽然 Phase 11 + 也未消费）。
+
+3. **`AttachmentUploader` 不是 Riverpod provider**：构造时注入 `CloudStorageService` + 可选 `readBytes` testing hook。理由：① 上传流程完全无状态；② 需要在 `SnapshotSyncService.upload` 内部直接实例化使用，走 ref.read 会引入循环依赖（sync_service 是 syncServiceProvider 的产物）；③ 测试时直接 new 出来注入 mock storage 比 override provider 简单。
+
+4. **`_uploadPendingAttachments` 直接走 `_db.select`，不走 repository.save 写回**：repository 层 save 会触发 sync_op 队列写入 + `updated_at` 刷新——前者会导致"刚上传的快照立刻被排队再传"；后者会让 fingerprint 误判"本地较新"，触发重复上传。直走 `customStatement('UPDATE ... SET attachments_encrypted = ?')` 是这两个问题的最简解。
+
+5. **同 sha256 内容跨 tx 不去重**：当前 path 包含 `$txId`，所以同一张图在两笔流水里会上传两次。这是有意的——避免 GC 时跨 tx 引用计数。如果未来要做内容寻址（同图全局共享），路径要改成 `users/$uid/objects/<sha256>$ext` + 引用表。当前空间代价 < 100 张图的体量级别，不值得复杂化。
+
+6. **超过 10MB 的图直接拒绝（不 JPEG 压缩）**：plan 原计划用 `image` 包做 JPEG q=85 压缩；V1 不接入 image 包（pure-Dart 但 ~300KB 体积、增加 1 个依赖维护点）。`record_new_providers._attachPickedFile` 检查 `bytes.length > kMaxAttachmentBytes` 直接返回错误字符串「单张图片不能超过 10MB」。后续若要无损压缩，建议作为独立改动加入（不和 Step 11.2 混合提交）。
+
+7. **错误隔离粒度 = 单条 meta**：`AttachmentUploader.uploadPending` 单条失败 → 跳过 + meta `remoteKey` 留 null + log debugPrint，下次同步重试。整体不抛异常——保证用户的流水数据始终能上传，附件最多落后一次同步周期。
+
+8. **v8 兼容解码（不破坏旧 BLOB）**：`AttachmentMetaCodec.decode` 遇到顶层是字符串数组（v8 旧 shape）时自动包装成 `AttachmentMeta`，触发 `upgradeLegacyPath`（同步读磁盘 size + 推断 mime + 不存在标记 missing）。这层兼容让运行期解码与 schema 迁移共用同一段代码，也让 dart 代码能容忍部分行尚未完成迁移（如 schema 升级中途崩溃、下次启动 onUpgrade 重跑覆盖）。
+
+9. **mime 推断走 `package:mime` 的 `lookupMimeType`**：纯 Dart、无 native 依赖、覆盖常见图片格式（jpg/png/heic/webp/gif/bmp 等）+ pdf。命中不到回退 `application/octet-stream`——server 端会按 Content-Type 兜底处理。
+
+10. **测试不依赖真后端**：`AttachmentUploader` 的 6 个用例用 `_MockStorage`（in-memory + 注入失败开关）覆盖核心语义；4 个 backend 的真 `uploadBinary` / `downloadBinary` 实现留待 Step 11.3 / 11.4 时按需补齐（届时也能跑真后端集成测试）。CI 不需要 Supabase / S3 凭据。
+
 
 

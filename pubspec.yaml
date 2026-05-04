@@ -59,6 +59,9 @@ dependencies:
   share_plus: ^10.1.4
   http: ^1.2.0
   crypto: ^3.0.3
+  # Step 11.2: MIME 推断（按扩展名 → image/jpeg / image/png …）
+  # 用于 attachment_meta.mime 字段；纯 Dart，不引入 native 依赖。
+  mime: ^2.0.0
   flutter_localizations:
     sdk: flutter
 
