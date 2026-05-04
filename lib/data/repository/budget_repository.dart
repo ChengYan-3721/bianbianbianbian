@@ -28,6 +28,13 @@ abstract class BudgetRepository {
   /// 返回受影响行数。
   Future<int> softDeleteByLedgerId(String ledgerId);
 
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。
+  Future<List<Budget>> listDeleted();
+  Future<void> restoreById(String id);
+  Future<int> purgeById(String id);
+  Future<int> purgeAllDeleted();
+  Future<List<Budget>> listExpired(DateTime cutoff);
+
   /// Step 6.4：仅持久化"懒结算产物"（`carry_balance` / `last_settled_at`），
   /// **不**走 [save] 的 toggle 检测，也**不**入队 `sync_op`——结算只是派生
   /// 数据维护，对端从流水重算即可，不应在网络上交换。
@@ -183,6 +190,36 @@ class LocalBudgetRepository implements BudgetRepository {
         lastSettledAt: Value(lastSettledAt?.millisecondsSinceEpoch),
       ),
     );
+  }
+
+  @override
+  Future<List<Budget>> listDeleted() async {
+    final rows = await _dao.listDeleted();
+    return rows.map(rowToBudget).toList(growable: false);
+  }
+
+  @override
+  Future<void> restoreById(String id) async {
+    final now = _clock();
+    await _dao.restoreById(id, updatedAt: now.millisecondsSinceEpoch);
+  }
+
+  @override
+  Future<int> purgeById(String id) {
+    return _dao.hardDeleteById(id);
+  }
+
+  @override
+  Future<int> purgeAllDeleted() {
+    return (_db.delete(_db.budgetTable)
+          ..where((t) => t.deletedAt.isNotNull()))
+        .go();
+  }
+
+  @override
+  Future<List<Budget>> listExpired(DateTime cutoff) async {
+    final rows = await _dao.listExpired(cutoff.millisecondsSinceEpoch);
+    return rows.map(rowToBudget).toList(growable: false);
   }
 
   Future<BudgetEntry?> _findActiveDuplicate({

@@ -1,14 +1,14 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'month_picker_dialog.dart';
 import 'quick_confirm_sheet.dart';
 import 'quick_input_providers.dart';
 import 'record_new_page.dart';
 import 'record_new_providers.dart';
 import 'record_providers.dart';
+import 'record_tile_actions.dart';
 
 import '../../core/util/currencies.dart';
 import '../../data/repository/ledger_repository.dart';
@@ -23,6 +23,7 @@ import '../ledger/ledger_providers.dart';
 import '../budget/budget_providers.dart';
 import '../settings/settings_providers.dart';
 import '../stats/stats_range_providers.dart';
+import '../sync/sync_trigger.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/ledger.dart';
@@ -47,7 +48,10 @@ String _symbolFor(String code) {
 ///   `amount * fxRate` 即可，无需再读 fx_rate 表。
 ///
 /// 转账（type == 'transfer'）不带正负号；income +、expense -。
-@visibleForTesting
+///
+/// 此前曾标 `@visibleForTesting`，Step 3.6 续作（搜索结果点击复用详情底部
+/// 表单）将 `_RecordDetailSheet` 拆到 `record_tile_actions.dart` 后，需要
+/// 在 lib/ 内跨文件调用，故移除该注解。
 String formatTxAmountForDetail(TransactionEntry tx, String ledgerCurrency) {
   final isExpense = tx.type == 'expense';
   final isTransfer = tx.type == 'transfer';
@@ -205,6 +209,7 @@ class _TopBar extends ConsumerWidget {
                 ),
               ),
               const Spacer(),
+              const _SyncStatusBadge(),
               IconButton(
                 icon: const Icon(Icons.swap_horiz, size: 22),
                 onPressed: () {
@@ -232,7 +237,8 @@ class _TopBar extends ConsumerWidget {
               IconButton(
                 icon: const Icon(Icons.search, size: 22),
                 onPressed: () {
-                  // 搜索占位——Phase 5+ 接入
+                  // Step 3.6：跳转搜索页 `/record/search`。
+                  context.push('/record/search');
                 },
                 visualDensity: VisualDensity.compact,
               ),
@@ -243,6 +249,91 @@ class _TopBar extends ConsumerWidget {
     );
   }
 
+}
+
+// ---- 同步状态徽标（Step 10.7）----
+
+/// 顶栏同步状态小图标 + 上次同步时间（小字）。
+///
+/// 仅当 [SyncTriggerState.isConfigured] 为真时渲染——本地模式下隐藏，避免
+/// 用户被一个永远不变的灰圆点干扰。点击跳转「我的 → 云服务」页。
+class _SyncStatusBadge extends ConsumerWidget {
+  const _SyncStatusBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(syncTriggerProvider);
+    if (!state.isConfigured) return const SizedBox.shrink();
+
+    final colors = Theme.of(context).colorScheme;
+    Widget icon;
+    Color tint;
+    String tooltip;
+    if (state.isRunning) {
+      icon = SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation(colors.tertiary),
+        ),
+      );
+      tint = colors.tertiary;
+      tooltip = '同步中…';
+    } else if (state.lastError != null) {
+      icon = Icon(Icons.cloud_off_outlined, size: 18, color: colors.error);
+      tint = colors.error;
+      tooltip = '同步失败：${state.lastError}';
+    } else if (state.lastSyncedAt != null) {
+      icon = Icon(Icons.cloud_done_outlined, size: 18, color: colors.tertiary);
+      tint = colors.tertiary;
+      tooltip = '上次同步：${_formatRelative(state.lastSyncedAt!)}';
+    } else {
+      icon = Icon(Icons.cloud_outlined,
+          size: 18, color: colors.onSurface.withAlpha(140));
+      tint = colors.onSurface.withAlpha(140);
+      tooltip = '尚未同步';
+    }
+
+    final ts = state.lastSyncedAt;
+    final tsLabel = ts == null ? null : _formatRelative(ts);
+
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => context.push('/sync'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              if (tsLabel != null && !state.isRunning) ...[
+                const SizedBox(width: 4),
+                Text(
+                  tsLabel,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: tint,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatRelative(DateTime t) {
+    final now = DateTime.now();
+    final diff = now.difference(t);
+    if (diff.inSeconds < 60) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+    return DateFormat('MM-dd HH:mm').format(t);
+  }
 }
 
 // ---- 月份切换条 ----
@@ -268,11 +359,28 @@ class _MonthBar extends StatelessWidget {
                 ref.read(recordMonthProvider.notifier).previous(),
             visualDensity: VisualDensity.compact,
           ),
-          Text(
-            monthLabel,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
+          // Step 3.7：点击月份文字弹出年-月选择器，可快速跳转到任意年月。
+          InkWell(
+            key: const Key('record_month_label'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: () async {
+              final picked = await showMonthPicker(
+                context: context,
+                initialMonth: month,
+              );
+              if (picked != null) {
+                ref.read(recordMonthProvider.notifier).jumpTo(picked);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text(
+                monthLabel,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right, size: 24),
@@ -552,6 +660,36 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
   final ScrollController _scrollController = ScrollController();
   final Map<DateTime, GlobalKey> _dayKeys = {};
 
+  /// 已在本地左滑确认删除、但 `recordMonthSummaryProvider` 还未刷新出新
+  /// 数据的流水 ID 集合。两个互相协作的目的：
+  ///
+  /// 1. **绕开 Dismissible 的 framework 断言**：Flutter `Dismissible` 在
+  ///    `_resizeAnimation.status == completed` 后再被父级 rebuild 命中
+  ///    `update → build`，会抛 *"A dismissed Dismissible widget is still
+  ///    part of the tree"*。结合 `skipLoadingOnReload: true`，老数据会在
+  ///    重载窗口里继续渲染，如果不主动从渲染列表里剔除该流水，
+  ///    Dismissible 就会被 `updateChild` 命中并触发断言。
+  /// 2. **消除「闪现」**：把"已折叠的 Dismissible 还活在树里"换成
+  ///    "干脆不渲染该流水"，配合 `skipLoadingOnReload: true` 不让 loading
+  ///    分支抢一次 spinner，整个左滑删除路径就只剩 Dismissible 自带的
+  ///    收起动画，无菊花、无重新挂载。
+  ///
+  /// 时序要求：[_TxTile] 的 `onDismissed` **必须先同步调用**
+  /// `markLocallyDeleted` 再 `await` 后续 DB 写入——这样 setState 在 frame
+  /// 的 build 阶段之前就把 `_TransactionListState` 标脏，build 时父级把该
+  /// 流水从孩子列表里剔除，Dismissible Element 被 unmount 而不是 update，
+  /// 不会进到带断言的 build。
+  ///
+  /// 数据刷新落地后（流水从 `data.dailyGroups` 里消失），build 阶段会把对应
+  /// ID 从集合里清理掉——所以从垃圾桶恢复的流水不会被错误地继续过滤。
+  final Set<String> _locallyDeleted = {};
+
+  void _markLocallyDeleted(String txId) {
+    if (!mounted) return;
+    if (_locallyDeleted.contains(txId)) return;
+    setState(() => _locallyDeleted.add(txId));
+  }
+
   String _dayLabel(DateTime date) {
     final weekdays = RecordHomePage._weekdays;
     final wd = weekdays[date.weekday - 1];
@@ -592,87 +730,210 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
   Widget build(BuildContext context) {
     final summary = widget.summary;
 
+    // 配合 `_locallyDeleted` + 下面的 _dayKeys 稳定化，左滑删除路径的
+    // 渲染时序为：onDismissed 同步把 tx.id 加入 `_locallyDeleted` →
+    // 当帧 build 阶段 `_TransactionListState` 重建 → 流水被过滤掉 →
+    // Dismissible Element 被 unmount（避免 "still part of the tree" 断言）。
+    //
+    // `skipLoadingOnReload: true` —— 软删后我们 invalidate
+    // `recordMonthSummaryProvider`，默认 `when` 会切到 loading 分支用
+    // `CircularProgressIndicator` 替换整个列表，下一帧再回到 data 分支，
+    // 用户视觉上感知为「消失 → 闪现 → 再消失」（中间那次菊花）。
+    // 开启 skipLoadingOnReload 后，重载期间继续以上一帧 data 渲染，
+    // 配合 `_locallyDeleted` 把已删流水保持在过滤态，整个动画只剩
+    // Dismissible 收起动画本身，无闪烁、无菊花。
     return summary.when(
+      skipLoadingOnReload: true,
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('加载失败：$e')),
       data: (data) {
-        if (data.dailyGroups.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+        // 1) 收集当前 data 里的 active id，把已经从 data 中消失的 id
+        //    （= 后端刷新落地）从 `_locallyDeleted` 里清掉。这样
+        //    "用户从垃圾桶恢复某条流水"时，新一次 data 不会被旧的过滤
+        //    集误伤。
+        final activeIds = <String>{};
+        for (final g in data.dailyGroups) {
+          for (final tx in g.transactions) {
+            activeIds.add(tx.id);
+          }
+        }
+        _locallyDeleted.removeWhere((id) => !activeIds.contains(id));
+
+        // 2) 过滤出实际渲染用的分组——把还在 `_locallyDeleted` 里的流水
+        //    剔除（重载窗口期内 data 仍包含它们）。整组被清空时连组一起
+        //    丢掉，避免出现"只剩日期标题"的孤儿。
+        final visibleGroups = <DailyTransactions>[];
+        for (final g in data.dailyGroups) {
+          if (_locallyDeleted.isEmpty) {
+            visibleGroups.add(g);
+            continue;
+          }
+          final kept = g.transactions
+              .where((tx) => !_locallyDeleted.contains(tx.id))
+              .toList(growable: false);
+          if (kept.isNotEmpty) {
+            visibleGroups.add(
+              DailyTransactions(date: g.date, transactions: kept),
+            );
+          }
+        }
+
+        if (visibleGroups.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: () => _onPullToRefresh(context),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               children: [
-                Icon(Icons.coffee_outlined,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary.withAlpha(128)),
-                const SizedBox(height: 12),
-                Text(
-                  '开始记第一笔吧 🐰',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                      ),
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.5,
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.coffee_outlined,
+                            size: 64,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withAlpha(128)),
+                        const SizedBox(height: 12),
+                        Text(
+                          '开始记第一笔吧 🐰',
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withAlpha(160),
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           );
         }
 
-        // 重建当月所有日期的 key 映射，并尝试消费一次性滚动目标
-        _dayKeys.clear();
-        for (final g in data.dailyGroups) {
-          _dayKeys[g.date] = GlobalKey(debugLabel: 'tx_day_${g.date}');
+        // 3) 维护日期 → GlobalKey 映射：保留已有日期的 key，仅为新增日期
+        //    分配新 key、移除已消失日期的 key。
+        //
+        //    不能 `clear()` 后整体重建——每次 `data:` 分支重建都会产生
+        //    全新的 GlobalKey 实例，导致 `Container(key: _dayKeys[date])`
+        //    的 Element 被销毁重建，连带其子树的 `_TxTile` 也被重新挂载。
+        //    虽然过滤集已经把已删流水从渲染列表里剔除，但稳定 key 仍是
+        //    良好实践，避免无关的状态丢失（比如 _TxTile 内部 ConsumerState
+        //    缓存）。
+        final activeDates = visibleGroups.map((g) => g.date).toSet();
+        _dayKeys.removeWhere((date, _) => !activeDates.contains(date));
+        for (final g in visibleGroups) {
+          _dayKeys.putIfAbsent(
+            g.date,
+            () => GlobalKey(debugLabel: 'tx_day_${g.date}'),
+          );
         }
-        _consumeScrollTarget(data.dailyGroups);
+        _consumeScrollTarget(visibleGroups);
 
-        return SingleChildScrollView(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final group in data.dailyGroups)
-                Container(
-                  key: _dayKeys[group.date],
-                  alignment: Alignment.centerLeft,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 4),
-                        child: Text(
-                          _dayLabel(group.date),
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                              ),
+        return RefreshIndicator(
+          onRefresh: () => _onPullToRefresh(context),
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final group in visibleGroups)
+                  Container(
+                    key: _dayKeys[group.date],
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12, bottom: 4),
+                          child: Text(
+                            _dayLabel(group.date),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelMedium
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withAlpha(160),
+                                ),
+                          ),
                         ),
-                      ),
-                      for (final tx in group.transactions)
-                        _TxTile(
-                          key: ValueKey('tx_tile_${tx.id}'),
-                          tx: tx,
-                        ),
-                    ],
+                        for (final tx in group.transactions)
+                          _TxTile(
+                            key: ValueKey('tx_tile_${tx.id}'),
+                            tx: tx,
+                            onLocalDismiss: () => _markLocallyDeleted(tx.id),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
+
+  /// Step 10.7：下拉刷新 = 强制触发一次同步，并把结果落到 SnackBar。
+  /// 未配置云服务时静默退出（不打扰本地模式用户）。
+  Future<void> _onPullToRefresh(BuildContext context) async {
+    final result = await ref.read(syncTriggerProvider.notifier).trigger();
+    if (!context.mounted) return;
+    switch (result.outcome) {
+      case SyncTriggerOutcome.success:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已同步')),
+        );
+      case SyncTriggerOutcome.networkUnavailable:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('网络不可用')),
+        );
+      case SyncTriggerOutcome.failure:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('同步失败：${result.message ?? ''}')),
+        );
+      case SyncTriggerOutcome.skipped:
+        // 前一次还在跑——静默
+        break;
+      case SyncTriggerOutcome.notConfigured:
+        // 本地模式——静默
+        break;
+    }
+  }
 }
 
 class _TxTile extends ConsumerStatefulWidget {
-  const _TxTile({super.key, required this.tx});
+  const _TxTile({
+    super.key,
+    required this.tx,
+    this.onLocalDismiss,
+  });
 
   final TransactionEntry tx;
+
+  /// 左滑确认删除的同步回调——必须由父级在当帧 setState 把对应 tx
+  /// 从渲染列表里剔除，否则 Dismissible 在 `_resizeAnimation` 完成后被
+  /// 父级 rebuild 命中 update→build 会触发 framework 断言
+  /// *"A dismissed Dismissible widget is still part of the tree"*。
+  /// 详见 [_TransactionListState._locallyDeleted]。
+  ///
+  /// 详情页删除路径不走 Dismissible，所以这个回调可空。
+  final VoidCallback? onLocalDismiss;
 
   @override
   ConsumerState<_TxTile> createState() => _TxTileState();
 }
 
 class _TxTileState extends ConsumerState<_TxTile> {
-  bool _isDismissed = false;
-
   String _inferParentKey(Category? category, TransactionEntry tx) {
     if (category != null) return category.parentKey;
     if (tx.type == 'income') return 'income';
@@ -682,9 +943,6 @@ class _TxTileState extends ConsumerState<_TxTile> {
   @override
   Widget build(BuildContext context) {
     final tx = widget.tx;
-    if (_isDismissed) {
-      return const SizedBox.shrink();
-    }
     final isTransfer = tx.type == 'transfer';
     final isExpense = tx.type == 'expense';
     final sign = isTransfer ? '' : (isExpense ? '-' : '+');
@@ -746,19 +1004,35 @@ class _TxTileState extends ConsumerState<_TxTile> {
             return _confirmDelete(context);
           },
           onDismissed: (_) async {
-            if (mounted) {
-              setState(() => _isDismissed = true);
-            }
+            // 第一步必须同步执行：把 tx.id 标记为本地已删，触发父级
+            // setState 在当帧 build 阶段把该流水从渲染列表里剔除——
+            // Dismissible Element 因此被 unmount 而非 update，避开
+            // framework 断言 *"A dismissed Dismissible widget is still
+            // part of the tree"*。
+            //
+            // 此前曾尝试 `addPostFrameCallback` 延后 invalidate，
+            // 或仅靠 `skipLoadingOnReload: true` 保留旧数据——前者根本
+            // 没解决"父级仍在渲染该 Dismissible"的问题，后者直接触发了
+            // 上面那条断言。把同步剔除提到所有 await 之前，配合
+            // `_locallyDeleted` 过滤集才是稳妥写法。
+            widget.onLocalDismiss?.call();
+
+            if (!context.mounted) return;
+            final messenger = ScaffoldMessenger.of(context);
             final txRepo = await ref.read(transactionRepositoryProvider.future);
             await txRepo.softDeleteById(tx.id);
+            if (!context.mounted) return;
+            // 触发 provider 失效；新数据落地后 build 阶段会把 tx.id
+            // 从 `_locallyDeleted` 里清理掉。配合
+            // `skipLoadingOnReload: true`，重载窗口里继续渲染旧 data
+            // 但 tx 已被过滤，不会 spinner 抢一帧。
             ref.invalidate(recordMonthSummaryProvider);
             ref.invalidate(statsLinePointsProvider);
             ref.invalidate(statsPieSlicesProvider);
             ref.invalidate(statsRankItemsProvider);
             ref.invalidate(statsHeatmapCellsProvider);
             ref.invalidate(budgetProgressForProvider);
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
+            messenger.showSnackBar(
               const SnackBar(content: Text('已删除')),
             );
           },
@@ -773,108 +1047,17 @@ class _TxTileState extends ConsumerState<_TxTile> {
           ),
           child: InkWell(
             onTap: () async {
-              final action = await showModalBottomSheet<_DetailAction>(
+              await openRecordTileActions(
                 context: context,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                builder: (_) => _RecordDetailSheet(
-                  tx: tx,
-                  category: matched,
-                  accountName: accountName(tx.accountId),
-                  toAccountName: tx.type == 'transfer'
-                      ? accountName(tx.toAccountId)
-                      : null,
-                ),
+                ref: ref,
+                tx: tx,
+                category: matched,
+                accountName: accountName(tx.accountId),
+                toAccountName: tx.type == 'transfer'
+                    ? accountName(tx.toAccountId)
+                    : null,
+                parentKey: parentKey,
               );
-              if (!context.mounted || action == null) return;
-
-              switch (action) {
-                case _DetailAction.edit:
-                  await ref.read(recordFormProvider.notifier).preloadFromEntry(
-                        tx,
-                        parentKey: parentKey,
-                        asEdit: true,
-                      );
-                  if (!context.mounted) return;
-                   await showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (sheetContext) => FractionallySizedBox(
-                      heightFactor: 0.58,
-                      child: ClipRRect(
-                        borderRadius:
-                            const BorderRadius.vertical(top: Radius.circular(20)),
-                        child: Material(
-                          color: Theme.of(sheetContext).colorScheme.surface,
-                          child: _RecordBottomSheetPage(
-                            isTransfer: tx.type == 'transfer',
-                            startAtKeyboard: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                  if (!context.mounted) return;
-                  ref.invalidate(recordMonthSummaryProvider);
-                  ref.invalidate(statsLinePointsProvider);
-                  ref.invalidate(statsPieSlicesProvider);
-                  ref.invalidate(statsRankItemsProvider);
-                  ref.invalidate(statsHeatmapCellsProvider);
-                  ref.invalidate(budgetProgressForProvider);
-                  break;
-                case _DetailAction.copy:
-                  await ref.read(recordFormProvider.notifier).preloadFromEntry(
-                        tx,
-                        parentKey: parentKey,
-                        asEdit: false,
-                      );
-                  if (!context.mounted) return;
-                   await showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (sheetContext) => FractionallySizedBox(
-                      heightFactor: 0.58,
-                      child: ClipRRect(
-                        borderRadius:
-                            const BorderRadius.vertical(top: Radius.circular(20)),
-                        child: Material(
-                          color: Theme.of(sheetContext).colorScheme.surface,
-                          child: _RecordBottomSheetPage(
-                            isTransfer: tx.type == 'transfer',
-                            startAtKeyboard: true,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                  if (!context.mounted) return;
-                  ref.invalidate(recordMonthSummaryProvider);
-                  ref.invalidate(statsLinePointsProvider);
-                  ref.invalidate(statsPieSlicesProvider);
-                  ref.invalidate(statsRankItemsProvider);
-                  ref.invalidate(statsHeatmapCellsProvider);
-                  ref.invalidate(budgetProgressForProvider);
-                  break;
-                case _DetailAction.delete:
-                  final ok = await _confirmDelete(context);
-                  if (!ok) return;
-                  final txRepo = await ref.read(transactionRepositoryProvider.future);
-                  await txRepo.softDeleteById(tx.id);
-                  if (!context.mounted) return;
-                  ref.invalidate(recordMonthSummaryProvider);
-                  ref.invalidate(statsLinePointsProvider);
-                  ref.invalidate(statsPieSlicesProvider);
-                  ref.invalidate(statsRankItemsProvider);
-                  ref.invalidate(statsHeatmapCellsProvider);
-                  ref.invalidate(budgetProgressForProvider);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('已删除')),
-                  );
-                  break;
-              }
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
@@ -960,274 +1143,14 @@ class _TxTileState extends ConsumerState<_TxTile> {
   }
 }
 
-enum _DetailAction { edit, copy, delete }
-
-class _RecordDetailSheet extends ConsumerWidget {
-  const _RecordDetailSheet({
-    required this.tx,
-    this.category,
-    required this.accountName,
-    this.toAccountName,
-  });
-
-  final TransactionEntry tx;
-  final Category? category;
-  final String accountName;
-  final String? toAccountName;
-
-  String get _typeLabel {
-    if (tx.type == 'income') return '收入';
-    if (tx.type == 'expense') return '支出';
-    return '转账';
-  }
-
-  List<String> _decodeAttachmentPaths() {
-    final bytes = tx.attachmentsEncrypted;
-    if (bytes == null || bytes.isEmpty) return const <String>[];
-    try {
-      final raw = utf8.decode(bytes);
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        return decoded.whereType<String>().toList(growable: false);
-      }
-      return const <String>[];
-    } catch (_) {
-      return const <String>[];
-    }
-  }
-
-  /// Step 8.2：金额展示。
-  ///
-  /// 同币种 → `±¥10.00`；跨币种 → `±USD 10.00（≈ ¥72.00）`。`fxRate` 是
-  /// 该流水保存时算出的"原币 → 账本默认币种"换算因子，所以
-  /// `amount * fxRate` 即折合金额，无需读 fx_rate 表。
-  String _amountText(String ledgerCurrency) =>
-      formatTxAmountForDetail(tx, ledgerCurrency);
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = category;
-    final icon = tx.type == 'transfer'
-        ? '🔁'
-        : (c?.icon ?? (tx.type == 'income' ? '💰' : '💸'));
-    final name = tx.type == 'transfer' ? '转账' : (c?.name ?? '未分类');
-    final attachments = _decodeAttachmentPaths();
-    final date =
-        '${tx.occurredAt.year}-${tx.occurredAt.month.toString().padLeft(2, '0')}-${tx.occurredAt.day.toString().padLeft(2, '0')} '
-        '${tx.occurredAt.hour.toString().padLeft(2, '0')}:${tx.occurredAt.minute.toString().padLeft(2, '0')}';
-    final ledgerCurrency =
-        ref.watch(currentLedgerDefaultCurrencyProvider).valueOrNull ?? 'CNY';
-    final amountText = _amountText(ledgerCurrency);
-    final amountColor = tx.type == 'expense'
-        ? const Color(0xFFE76F51)
-        : tx.type == 'income'
-            ? const Color(0xFFA8D8B9)
-            : const Color(0xFF6C8CC8);
-
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text(icon, style: const TextStyle(fontSize: 22)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ),
-                Text(
-                  amountText,
-                  key: const Key('detail_amount'),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: amountColor,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _DetailKV(label: '类型', value: _typeLabel),
-            _DetailKV(
-              label: tx.type == 'transfer' ? '转出' : '钱包',
-              value: accountName,
-            ),
-            if (tx.type == 'transfer')
-              _DetailKV(label: '转入', value: toAccountName ?? '账户'),
-            _DetailKV(label: '时间', value: date),
-            _DetailKV(label: '备注', value: (tx.tags == null || tx.tags!.isEmpty) ? '—' : tx.tags!),
-            if (attachments.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    '图片',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                        ),
-                  ),
-                ),
-              ),
-            if (attachments.isNotEmpty) const SizedBox(height: 6),
-            if (attachments.isNotEmpty)
-              SizedBox(
-                height: 84,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: attachments.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final path = attachments[index];
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () => showDialog<void>(
-                        context: context,
-                        builder: (dialogContext) {
-                          return Dialog.fullscreen(
-                            backgroundColor: Colors.black,
-                            child: Stack(
-                              children: [
-                                Center(
-                                  child: InteractiveViewer(
-                                    minScale: 0.8,
-                                    maxScale: 5,
-                                    child: Image.file(
-                                      File(path),
-                                      fit: BoxFit.contain,
-                                      errorBuilder: (_, _, _) => const Icon(
-                                        Icons.broken_image_outlined,
-                                        color: Colors.white70,
-                                        size: 42,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  top: 12,
-                                  right: 12,
-                                  child: IconButton(
-                                    tooltip: '关闭',
-                                    color: Colors.white,
-                                    onPressed: () => Navigator.of(dialogContext).pop(),
-                                    icon: const Icon(Icons.close),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          File(path),
-                          width: 84,
-                          height: 84,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Container(
-                            width: 84,
-                            height: 84,
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.broken_image_outlined),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(_DetailAction.copy),
-                    child: const Text('复制'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(_DetailAction.edit),
-                    child: const Text('编辑'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () => Navigator.of(context).pop(_DetailAction.delete),
-                    child: const Text('删除'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailKV extends StatelessWidget {
-  const _DetailKV({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-                  ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _RecordBottomSheetPage extends ConsumerWidget {
-  const _RecordBottomSheetPage({
-    this.isTransfer = false,
-    this.startAtKeyboard = false,
-  });
-
-  final bool isTransfer;
-  final bool startAtKeyboard;
+  const _RecordBottomSheetPage();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SafeArea(
+    return const SafeArea(
       top: false,
-      child: RecordNewPage(
-        isTransfer: isTransfer,
-        startAtKeyboard: startAtKeyboard,
-      ),
+      child: RecordNewPage(),
     );
   }
 }

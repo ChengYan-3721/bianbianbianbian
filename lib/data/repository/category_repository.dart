@@ -15,6 +15,13 @@ abstract class CategoryRepository {
   Future<Category> save(Category entity);
   Future<void> toggleFavorite(String id, bool isFavorite);
   Future<void> softDeleteById(String id);
+
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。
+  Future<List<Category>> listDeleted();
+  Future<void> restoreById(String id);
+  Future<int> purgeById(String id);
+  Future<int> purgeAllDeleted();
+  Future<List<Category>> listExpired(DateTime cutoff);
 }
 
 class LocalCategoryRepository implements CategoryRepository {
@@ -126,5 +133,36 @@ class LocalCategoryRepository implements CategoryRepository {
         enqueuedAt: now.millisecondsSinceEpoch,
       );
     });
+  }
+
+  @override
+  Future<List<Category>> listDeleted() async {
+    final rows = await _dao.listDeleted();
+    return rows.map(rowToCategory).toList(growable: false);
+  }
+
+  @override
+  Future<void> restoreById(String id) async {
+    final now = _clock();
+    final nowMs = now.millisecondsSinceEpoch;
+    await _dao.restoreById(id, updatedAt: nowMs);
+  }
+
+  @override
+  Future<int> purgeById(String id) {
+    return _dao.hardDeleteById(id);
+  }
+
+  @override
+  Future<int> purgeAllDeleted() {
+    return (_db.delete(_db.categoryTable)
+          ..where((t) => t.deletedAt.isNotNull()))
+        .go();
+  }
+
+  @override
+  Future<List<Category>> listExpired(DateTime cutoff) async {
+    final rows = await _dao.listExpired(cutoff.millisecondsSinceEpoch);
+    return rows.map(rowToCategory).toList(growable: false);
   }
 }

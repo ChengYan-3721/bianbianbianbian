@@ -21,6 +21,22 @@ class BudgetDao extends DatabaseAccessor<AppDatabase> with _$BudgetDaoMixin {
         .get();
   }
 
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。所有已软删的预算，按 `deleted_at`
+  /// 倒序——最近删的靠前。
+  Future<List<BudgetEntry>> listDeleted() {
+    return (select(budgetTable)
+          ..where((t) => t.deletedAt.isNotNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.deletedAt)]))
+        .get();
+  }
+
+  /// **垃圾桶定时清理专用**（Phase 12 Step 12.3）。`deleted_at <= cutoff` 的全部软删行。
+  Future<List<BudgetEntry>> listExpired(int cutoffMs) {
+    return (select(budgetTable)
+          ..where((t) => t.deletedAt.isNotNull() & t.deletedAt.isSmallerOrEqualValue(cutoffMs)))
+        .get();
+  }
+
   /// Upsert by primary key。调用方负责设置 `updated_at` / `device_id`。
   Future<void> upsert(BudgetTableCompanion entry) {
     return into(budgetTable).insertOnConflictUpdate(entry);
@@ -63,5 +79,15 @@ class BudgetDao extends DatabaseAccessor<AppDatabase> with _$BudgetDaoMixin {
   /// 业务路径必须走 [softDeleteById]。
   Future<int> hardDeleteById(String id) {
     return (delete(budgetTable)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// **垃圾桶恢复专用**（Phase 12 Step 12.2）。
+  Future<int> restoreById(String id, {required int updatedAt}) {
+    return (update(budgetTable)..where((t) => t.id.equals(id))).write(
+      BudgetTableCompanion(
+        deletedAt: const Value(null),
+        updatedAt: Value(updatedAt),
+      ),
+    );
   }
 }

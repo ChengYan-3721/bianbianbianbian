@@ -5,6 +5,8 @@ import 'dart:async';
 import 'app/app.dart';
 import 'data/local/providers.dart';
 import 'features/settings/settings_providers.dart';
+import 'features/trash/trash_gc_service.dart';
+import 'features/trash/trash_providers.dart';
 
 Future<void> main() async {
   // path_provider / flutter_secure_storage 在 runApp 前就会被 AppDatabase 打开，
@@ -34,6 +36,20 @@ Future<void> main() async {
         if (!ok) return;
         container.invalidate(fxRatesProvider);
         container.invalidate(fxRateRowsProvider);
+      }).catchError((_) {/* 静默降级 */}),
+    );
+    // Step 12.3：垃圾桶定时清理。冷启动时跑一次"硬删 deleted_at < now-30d 的
+    // 全部软删项 + 清流水附件目录"。失败静默——不影响首帧。
+    unawaited(
+      container.read(trashGcServiceProvider.future).then((service) async {
+        final report = await service.gcExpired(now: DateTime.now());
+        if (report.isEmpty) return;
+        // GC 真实清理了数据 → invalidate 受影响 provider 让首屏拿到最新视图。
+        container.invalidate(trashedTransactionsProvider);
+        container.invalidate(trashedCategoriesProvider);
+        container.invalidate(trashedAccountsProvider);
+        container.invalidate(trashedLedgersProvider);
+        container.invalidate(trashedBudgetsProvider);
       }).catchError((_) {/* 静默降级 */}),
     );
     runApp(

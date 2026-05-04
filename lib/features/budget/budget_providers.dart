@@ -19,14 +19,14 @@ BudgetClock budgetClock(Ref ref) => DateTime.now;
 /// 键集来自 `seeder.dart` 的 `categoriesByParent.keys`。
 const Map<String, String> kParentKeyLabels = {
   'income': '收入',
-  'food': '餐饮',
+  'food': '饮食',
   'shopping': '购物',
-  'transport': '交通',
+  'transport': '出行',
   'education': '教育',
   'entertainment': '娱乐',
   'social': '人情',
-  'housing': '居家',
-  'medical': '医疗',
+  'housing': '住房',
+  'medical': '医药',
   'investment': '投资',
   'other': '其他',
 };

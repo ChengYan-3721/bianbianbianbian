@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
@@ -37,6 +38,34 @@ class CategoryManagePage extends ConsumerStatefulWidget {
 class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
   List<Category>? _categories;
 
+  Future<void> _openAddCategory(String parentKey) async {
+    final saved = await context.push<bool>(
+      '/record/categories/edit?parentKey=$parentKey',
+    );
+    if (saved == true && mounted) {
+      setState(() => _categories = null);
+    }
+  }
+
+  Future<void> _openReorderOrEdit() async {
+    final route = widget.parentKey == null
+        ? '/record/categories/favorites/reorder'
+        : '/record/categories/reorder?parentKey=${widget.parentKey}';
+    final changed = await context.push<bool>(route);
+    if (changed == true && mounted) {
+      setState(() => _categories = null);
+    }
+  }
+
+  Future<void> _refreshCategories() async {
+    final repo = await ref.read(categoryRepositoryProvider.future);
+    final fresh = widget.parentKey == null
+        ? await repo.listActiveAll()
+        : await repo.listActiveByParentKey(widget.parentKey!);
+    if (!mounted) return;
+    setState(() => _categories = fresh);
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = ref.watch(categoryRepositoryProvider).valueOrNull;
@@ -59,13 +88,7 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
                 fontWeight: FontWeight.w700,
               ),
             ),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(widget.parentKey == null ? '收藏排序功能待接入' : '编辑排序删除功能待接入'),
-                ),
-              );
-            },
+            onPressed: _openReorderOrEdit,
             child: Text(widget.parentKey == null ? '排序' : '编辑'),
           ),
         ],
@@ -109,6 +132,8 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
             return _GlobalCategoryManageLayout(
               grouped: grouped,
               onToggleFavorite: onToggleFavorite,
+              onAddCategory: _openAddCategory,
+              onEditCategory: _refreshCategories,
             );
           }
 
@@ -120,12 +145,27 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
                 showHeaderAction: false,
                 categories: grouped[widget.parentKey!] ?? const <Category>[],
                 onToggleFavorite: onToggleFavorite,
+                onEditCategory: _refreshCategories,
               ),
               const SizedBox(height: 12),
             ],
           );
         },
       ),
+      bottomNavigationBar: widget.parentKey == null
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: () => _openAddCategory(widget.parentKey!),
+                    child: const Text('添加新的分类'),
+                  ),
+                ),
+              ),
+            ),
       floatingActionButton: null,
     );
   }
@@ -142,10 +182,14 @@ class _GlobalCategoryManageLayout extends StatefulWidget {
   const _GlobalCategoryManageLayout({
     required this.grouped,
     required this.onToggleFavorite,
+    required this.onAddCategory,
+    required this.onEditCategory,
   });
 
   final Map<String, List<Category>> grouped;
   final Future<void> Function(String id, bool toValue) onToggleFavorite;
+  final Future<void> Function(String parentKey) onAddCategory;
+  final Future<void> Function() onEditCategory;
 
   @override
   State<_GlobalCategoryManageLayout> createState() => _GlobalCategoryManageLayoutState();
@@ -207,12 +251,9 @@ class _GlobalCategoryManageLayoutState extends State<_GlobalCategoryManageLayout
                 parentKey: _selectedParentKey,
                 showHeaderAction: true,
                 categories: categories,
-                onHeaderTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('添加分类功能将在后续步骤接入')),
-                  );
-                },
+                onHeaderTap: () => widget.onAddCategory(_selectedParentKey),
                 onToggleFavorite: widget.onToggleFavorite,
+                onEditCategory: widget.onEditCategory,
               ),
               const SizedBox(height: 12),
             ],
@@ -231,6 +272,7 @@ class _ParentSection extends StatelessWidget {
     required this.onToggleFavorite,
     this.showHeaderAction = false,
     this.onHeaderTap,
+    this.onEditCategory,
   });
 
   final Future<void> Function(String id, bool toValue) onToggleFavorite;
@@ -240,6 +282,7 @@ class _ParentSection extends StatelessWidget {
   final bool showHeaderAction;
   final VoidCallback? onHeaderTap;
   final List<Category> categories;
+  final Future<void> Function()? onEditCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -281,6 +324,7 @@ class _ParentSection extends StatelessWidget {
                   _CategoryRow(
                     category: categories[i],
                     onToggleFavorite: onToggleFavorite,
+                    onEdit: onEditCategory,
                   ),
                   if (i != categories.length - 1) const Divider(height: 1),
                 ],
@@ -297,14 +341,15 @@ class _CategoryRow extends StatelessWidget {
   const _CategoryRow({
     required this.category,
     required this.onToggleFavorite,
+    this.onEdit,
   });
 
   final Category category;
   final Future<void> Function(String id, bool toValue) onToggleFavorite;
+  final Future<void> Function()? onEdit;
 
   @override
   Widget build(BuildContext context) {
-
     return ListTile(
       leading: Text(category.icon ?? '📁', style: const TextStyle(fontSize: 20)),
       title: Text(category.name),
@@ -318,15 +363,14 @@ class _CategoryRow extends StatelessWidget {
         ),
         onPressed: () => onToggleFavorite(category.id, !category.isFavorite),
       ),
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('编辑分类功能将在后续步骤接入')),
+      onTap: () async {
+        final saved = await context.push<bool>(
+          '/record/categories/edit',
+          extra: category,
         );
-      },
-      onLongPress: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('删除分类功能将在后续步骤接入')),
-        );
+        if (saved == true) {
+          await onEdit?.call();
+        }
       },
     );
   }

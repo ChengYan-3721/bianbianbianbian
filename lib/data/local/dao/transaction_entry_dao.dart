@@ -43,6 +43,23 @@ class TransactionEntryDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。所有已软删的流水（全账本），
+  /// 按 `deleted_at` 倒序——最近删的靠前。
+  Future<List<TransactionEntryRow>> listDeleted() {
+    return (select(transactionEntryTable)
+          ..where((t) => t.deletedAt.isNotNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.deletedAt)]))
+        .get();
+  }
+
+  /// **垃圾桶定时清理专用**（Phase 12 Step 12.3）。所有 `deleted_at <= cutoff`
+  /// 的软删行——比 [listDeleted] 多了"超期"过滤，供 GC 任务批量识别。
+  Future<List<TransactionEntryRow>> listExpired(int cutoffMs) {
+    return (select(transactionEntryTable)
+          ..where((t) => t.deletedAt.isNotNull() & t.deletedAt.isSmallerOrEqualValue(cutoffMs)))
+        .get();
+  }
+
   /// 某账本下未软删流水的条数，供账本列表展示"流水总数"。
   Future<int> countActiveByLedger(String ledgerId) async {
     final query = selectOnly(transactionEntryTable)
@@ -79,5 +96,17 @@ class TransactionEntryDao extends DatabaseAccessor<AppDatabase>
   /// 任务在调用本方法前一步负责删除。
   Future<int> hardDeleteById(String id) {
     return (delete(transactionEntryTable)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// **垃圾桶恢复专用**（Phase 12 Step 12.2）。把软删行清回活跃态——
+  /// 写 `deleted_at = null` 并刷新 `updated_at`。返回受影响行数（正常 1 / 不存在 0）。
+  Future<int> restoreById(String id, {required int updatedAt}) {
+    return (update(transactionEntryTable)..where((t) => t.id.equals(id)))
+        .write(
+      TransactionEntryTableCompanion(
+        deletedAt: const Value(null),
+        updatedAt: Value(updatedAt),
+      ),
+    );
   }
 }

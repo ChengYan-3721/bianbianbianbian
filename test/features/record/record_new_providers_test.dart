@@ -35,6 +35,17 @@ class _FakeTransactionRepository implements TransactionRepository {
 
   @override
   Future<int> softDeleteByLedgerId(String ledgerId) async => 0;
+
+  @override
+  Future<List<TransactionEntry>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) async {}
+  @override
+  Future<int> purgeById(String id) async => 0;
+  @override
+  Future<int> purgeAllDeleted() async => 0;
+  @override
+  Future<List<TransactionEntry>> listExpired(DateTime cutoff) async => const [];
 }
 
 class _TestCurrentLedgerId extends CurrentLedgerId {
@@ -63,6 +74,17 @@ class _FakeLedgerRepository implements LedgerRepository {
   @override
   Future<Ledger> setArchived(String id, bool archived) =>
       fail('unexpected archive');
+
+  @override
+  Future<List<Ledger>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) => fail('unexpected restore');
+  @override
+  Future<int> purgeById(String id) => fail('unexpected purge');
+  @override
+  Future<int> purgeAllDeleted() => fail('unexpected purgeAll');
+  @override
+  Future<List<Ledger>> listExpired(DateTime cutoff) async => const [];
 }
 
 Ledger _testLedger({String defaultCurrency = 'CNY'}) => Ledger(

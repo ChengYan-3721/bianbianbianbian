@@ -9,6 +9,18 @@ import '../local/dao/transaction_entry_dao.dart';
 import 'entity_mappers.dart';
 import 'repo_clock.dart';
 
+/// 账本名称重复——同一个名字在未软删的账本中只能出现一次。
+///
+/// Why: 删除账本后即使云端有备份也找不回来（V1 同步是按 ledgerId 寻址的，
+/// 普通用户也只能感知名字），允许重名会让用户在切换/恢复时分不清是谁。
+/// 已软删的账本不视为冲突——名字可以被新账本立即复用。
+class LedgerNameConflictException implements Exception {
+  const LedgerNameConflictException(this.name);
+  final String name;
+  @override
+  String toString() => 'LedgerNameConflictException: 已存在同名账本「$name」';
+}
+
 /// 账本仓库——对 UI 层以 [Ledger] 领域实体为契约。
 ///
 /// 所有仓库的共同职责（Step 2.2）：
@@ -36,6 +48,26 @@ abstract class LedgerRepository {
 
   /// 归档/取消归档账本。返回更新后的实体快照。
   Future<Ledger> setArchived(String id, bool archived);
+
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。
+  Future<List<Ledger>> listDeleted();
+
+  /// **垃圾桶恢复**（Phase 12 Step 12.2）。账本恢复时会**级联**恢复同一次
+  /// 软删事务中被一并软删的流水/预算——以"`deleted_at == ledger.deletedAt`"
+  /// 精确匹配同时间戳的级联子项，避免误恢复用户单独软删的流水。
+  Future<void> restoreById(String id);
+
+  /// **垃圾桶永久删除**（Phase 12 Step 12.2）。级联硬删该账本下所有流水/预算
+  /// （含已软删行）。**附件文件**由 `TrashCleaner` 在调用本方法**之前**统一清理。
+  /// 返回硬删的账本行数（0 = 该 id 不存在）。
+  Future<int> purgeById(String id);
+
+  /// **垃圾桶一键清空**（Phase 12 Step 12.2）。硬删全部 `deleted_at` 非空的
+  /// 账本——但**不**级联清理流水/预算（孤儿流水/预算交由 TX/Budget GC 路径处理）。
+  Future<int> purgeAllDeleted();
+
+  /// **垃圾桶定时清理**（Phase 12 Step 12.3）。
+  Future<List<Ledger>> listExpired(DateTime cutoff);
 }
 
 class LocalLedgerRepository implements LedgerRepository {
@@ -78,6 +110,13 @@ class LocalLedgerRepository implements LedgerRepository {
     final now = _clock();
     final stamped = entity.copyWith(updatedAt: now, deviceId: _deviceId);
     await _db.transaction(() async {
+      final dup = await _findActiveByName(
+        name: stamped.name,
+        excludeId: stamped.id,
+      );
+      if (dup != null) {
+        throw LedgerNameConflictException(stamped.name);
+      }
       await _dao.upsert(ledgerToCompanion(stamped));
       await _syncOp.enqueue(
         entity: 'ledger',
@@ -168,5 +207,91 @@ class LocalLedgerRepository implements LedgerRepository {
       );
       return updated;
     });
+  }
+
+  /// 查找同名活跃账本（未软删，且排除指定 id）。
+  /// 名字按字面比较——大小写、空格敏感（`'生活'` 与 `' 生活'` 视为不同）；UI 层
+  /// 在传入前已 trim。
+  Future<LedgerEntry?> _findActiveByName({
+    required String name,
+    required String excludeId,
+  }) {
+    return (_db.select(_db.ledgerTable)
+          ..where((t) => t.name.equals(name))
+          ..where((t) => t.deletedAt.isNull())
+          ..where((t) => t.id.isNotIn([excludeId]))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  @override
+  Future<List<Ledger>> listDeleted() async {
+    final rows = await _dao.listDeleted();
+    return rows.map(rowToLedger).toList(growable: false);
+  }
+
+  @override
+  Future<void> restoreById(String id) async {
+    final now = _clock();
+    final nowMs = now.millisecondsSinceEpoch;
+    await _db.transaction(() async {
+      final row = await (_db.select(_db.ledgerTable)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (row == null) return;
+      final cascadeAt = row.deletedAt;
+      if (cascadeAt == null) return; // 已活跃，幂等
+
+      // 级联恢复同时间戳的流水（与软删事务中写入的 deleted_at 完全相等）。
+      await (_db.update(_db.transactionEntryTable)
+            ..where((t) => t.ledgerId.equals(id))
+            ..where((t) => t.deletedAt.equals(cascadeAt)))
+          .write(
+        TransactionEntryTableCompanion(
+          deletedAt: const Value(null),
+          updatedAt: Value(nowMs),
+          deviceId: Value(_deviceId),
+        ),
+      );
+      // 级联恢复同时间戳的预算。
+      await (_db.update(_db.budgetTable)
+            ..where((t) => t.ledgerId.equals(id))
+            ..where((t) => t.deletedAt.equals(cascadeAt)))
+          .write(
+        BudgetTableCompanion(
+          deletedAt: const Value(null),
+          updatedAt: Value(nowMs),
+          deviceId: Value(_deviceId),
+        ),
+      );
+      // 账本本身恢复。
+      await _dao.restoreById(id, updatedAt: nowMs);
+    });
+  }
+
+  @override
+  Future<int> purgeById(String id) async {
+    return _db.transaction(() async {
+      // 级联硬删该账本下全部流水（含已软删 + 活跃的——账本被永久删则其下流水皆为孤儿）。
+      await (_db.delete(_db.transactionEntryTable)
+            ..where((t) => t.ledgerId.equals(id)))
+          .go();
+      await (_db.delete(_db.budgetTable)..where((t) => t.ledgerId.equals(id)))
+          .go();
+      return _dao.hardDeleteById(id);
+    });
+  }
+
+  @override
+  Future<int> purgeAllDeleted() {
+    return (_db.delete(_db.ledgerTable)
+          ..where((t) => t.deletedAt.isNotNull()))
+        .go();
+  }
+
+  @override
+  Future<List<Ledger>> listExpired(DateTime cutoff) async {
+    final rows = await _dao.listExpired(cutoff.millisecondsSinceEpoch);
+    return rows.map(rowToLedger).toList(growable: false);
   }
 }

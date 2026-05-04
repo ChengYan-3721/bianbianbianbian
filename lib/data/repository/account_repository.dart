@@ -24,6 +24,13 @@ abstract class AccountRepository {
 
   Future<Account> save(Account entity);
   Future<void> softDeleteById(String id);
+
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。
+  Future<List<Account>> listDeleted();
+  Future<void> restoreById(String id);
+  Future<int> purgeById(String id);
+  Future<int> purgeAllDeleted();
+  Future<List<Account>> listExpired(DateTime cutoff);
 }
 
 class LocalAccountRepository implements AccountRepository {
@@ -104,5 +111,35 @@ class LocalAccountRepository implements AccountRepository {
         enqueuedAt: now.millisecondsSinceEpoch,
       );
     });
+  }
+
+  @override
+  Future<List<Account>> listDeleted() async {
+    final rows = await _dao.listDeleted();
+    return rows.map(rowToAccount).toList(growable: false);
+  }
+
+  @override
+  Future<void> restoreById(String id) async {
+    final now = _clock();
+    await _dao.restoreById(id, updatedAt: now.millisecondsSinceEpoch);
+  }
+
+  @override
+  Future<int> purgeById(String id) {
+    return _dao.hardDeleteById(id);
+  }
+
+  @override
+  Future<int> purgeAllDeleted() {
+    return (_db.delete(_db.accountTable)
+          ..where((t) => t.deletedAt.isNotNull()))
+        .go();
+  }
+
+  @override
+  Future<List<Account>> listExpired(DateTime cutoff) async {
+    final rows = await _dao.listExpired(cutoff.millisecondsSinceEpoch);
+    return rows.map(rowToAccount).toList(growable: false);
   }
 }

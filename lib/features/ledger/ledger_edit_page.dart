@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/ledger.dart';
 
@@ -203,6 +204,11 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
         ref.invalidate(currentLedgerIdProvider);
       }
       Navigator.of(context).pop(true);
+    } on LedgerNameConflictException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已存在同名账本「${e.name}」，请换一个')),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

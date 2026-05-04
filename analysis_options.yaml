@@ -12,6 +12,10 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   plugins:
     - custom_lint
+  exclude:
+    # vendored 上游包（来自 BeeCount，本项目不维护其代码风格）。
+    # 这些包通过 path: dependency 集成；它们自己跑 flutter analyze 才有意义。
+    - packages/**
 
 linter:
   # The lint rules applied to this project can be customized in the

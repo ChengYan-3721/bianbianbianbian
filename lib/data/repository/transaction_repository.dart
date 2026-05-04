@@ -21,6 +21,28 @@ abstract class TransactionRepository {
   /// 批量软删除某账本下所有未软删流水（用于账本级联删除）。
   /// 返回受影响行数。
   Future<int> softDeleteByLedgerId(String ledgerId);
+
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。所有已软删流水（全账本），按
+  /// `deletedAt` 倒序——最近删的靠前。
+  Future<List<TransactionEntry>> listDeleted();
+
+  /// **垃圾桶恢复**（Phase 12 Step 12.2）。`deleted_at = null` + 刷新
+  /// `updated_at`；不存在则静默返回。**不**入队 `sync_op`——快照模型下
+  /// 同步走整体覆盖（`scheduleDebounced` 由调用方触发）。
+  Future<void> restoreById(String id);
+
+  /// **垃圾桶永久删除**（Phase 12 Step 12.2）。仅硬删 DB 行，**不**清理附件
+  /// 文件——附件目录由 `TrashCleaner` 在调用本方法**之前**负责删除。
+  /// 返回硬删行数（0 = 该 id 不存在或已被清理）。
+  Future<int> purgeById(String id);
+
+  /// **垃圾桶一键清空**（Phase 12 Step 12.2）。硬删全部 `deleted_at` 非空的
+  /// 流水。同样**不**清附件——调用方负责。返回硬删行数。
+  Future<int> purgeAllDeleted();
+
+  /// **垃圾桶定时清理**（Phase 12 Step 12.3）。返回 `deleted_at <= cutoff`
+  /// 的全部软删流水（仅查询，不删除）——调用方据此先清附件、再调 [purgeById]。
+  Future<List<TransactionEntry>> listExpired(DateTime cutoff);
 }
 
 class LocalTransactionRepository implements TransactionRepository {
@@ -136,5 +158,43 @@ class LocalTransactionRepository implements TransactionRepository {
       }
       return count;
     });
+  }
+
+  @override
+  Future<List<TransactionEntry>> listDeleted() async {
+    final rows = await _dao.listDeleted();
+    return rows.map(rowToTransactionEntry).toList(growable: false);
+  }
+
+  @override
+  Future<void> restoreById(String id) async {
+    final now = _clock();
+    final nowMs = now.millisecondsSinceEpoch;
+    await _db.transaction(() async {
+      final row = await (_db.select(_db.transactionEntryTable)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (row == null) return;
+      await _dao.restoreById(id, updatedAt: nowMs);
+      // 同步路径：快照模型整体覆盖，无需 sync_op；触发由调用方负责。
+    });
+  }
+
+  @override
+  Future<int> purgeById(String id) {
+    return _dao.hardDeleteById(id);
+  }
+
+  @override
+  Future<int> purgeAllDeleted() async {
+    return (_db.delete(_db.transactionEntryTable)
+          ..where((t) => t.deletedAt.isNotNull()))
+        .go();
+  }
+
+  @override
+  Future<List<TransactionEntry>> listExpired(DateTime cutoff) async {
+    final rows = await _dao.listExpired(cutoff.millisecondsSinceEpoch);
+    return rows.map(rowToTransactionEntry).toList(growable: false);
   }
 }

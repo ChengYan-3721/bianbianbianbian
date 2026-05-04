@@ -5,8 +5,7 @@
 | 文档版本 | v1.0 |
 | 创建日期 | 2026-04-19 |
 | 技术栈 | Flutter 3.x（iOS / Android） |
-| 后端 | Supabase（官方托管 + 用户自建，双模兼容） |
-| 参考产品 | 叨叨记账（UI / 交互）、BeeCount（开源 Flutter 记账 + Supabase 同步方案） |
+| 参考产品 | 叨叨记账（UI / 交互）、BeeCount（开源 Flutter 记账） |
 
 ---
 
@@ -18,7 +17,7 @@
 ### 1.2 产品理念
 - **离线优先（Offline-First）**：所有记账操作在本地完成，不依赖网络；云同步是可选增强能力。
 - **零注册门槛**：App 开箱即用，用户不需要注册手机号 / 邮箱 / 微信；想要多设备同步时，填一串"同步凭证"即可。
-- **数据主权**：数据文件始终保存在用户本地；云端只是一份加密备份/镜像。支持导出完整数据、支持自建 Supabase。
+- **数据主权**：数据文件始终保存在用户本地；云端只是一份明文镜像，由用户自有的云账户承载。支持导出完整数据、支持自建 Supabase。
 - **温馨可爱**：主视觉参考叨叨记账的手绘 / 奶油色 / 小动物元素，让记账不再是冷冰冰的数字。
 
 ### 1.3 目标用户
@@ -43,17 +42,17 @@
 | 主要交互 | 对话式聊天 | 传统表单 | 传统表单 | **传统表单 + 顶部快捷文本条（混合 AI）** |
 | 视觉风格 | 温馨可爱 | 极简 | 极简 Material | **温馨可爱（近叠叠）** |
 | 离线使用 | ✅ | ✅ | ✅ | ✅ |
-| 云同步 | 官方账号 | 官方账号 | 用户自建 Supabase | **官方托管 + 自建 Supabase 双模** |
+| 云同步 | 官方账号 | 官方账号 | 5 后端任选 | **4 后端任选（iCloud / WebDAV / S3 / Supabase），全部 BYO** |
 | 多账本 | ❌ | ✅ | ✅ | ✅ |
 | 多币种 | ❌ | ❌ | 部分 | ✅ |
 | 数据导入导出 | 部分 | ✅ | ✅ | ✅ |
 | 应用锁 / 加密 | ❌ | 部分 | ❌ | ✅ |
-| 开源 | ❌ | ❌ | ✅ | 待定 |
+| 开源 | ❌ | ❌ | ✅ | ✅ |
 
 ### 2.1 差异化卖点
 1. **"一串字符即同步"**：不注册手机号，用户只要记住一段"同步凭证"（邮箱 + 自设密码，或导出的同步码），换手机时输入即可恢复全部数据。
-2. **双模后端**：小白用官方托管的 Supabase，极客可一键切换到自建实例。
-3. **账本 × 币种 × 加密** 三件套一次满足。
+2. **多后端任选**：iCloud（苹果用户零配置）/ WebDAV（NAS）/ S3（Cloudflare R2、阿里云 OSS、自建 MinIO）/ Supabase（跨平台 + 邮箱密码登录），用户自有空间，明文存放。
+3. **账本 × 币种 × 多后端云同步** 三件套一次满足，加上"附件本体也跟着同步"是相对竞品的实质差异。
 
 ---
 
@@ -62,7 +61,7 @@
 1. **本地 SQLite 为单一事实来源（Source of Truth）**，云端是可选镜像。
 2. **所有写操作先写本地，再异步同步到云端**；网络不可用时无感继续使用。
 3. **每条记录带 `updated_at` + `device_id` + `deleted_at`（软删除）**，用于后续冲突解决与垃圾桶恢复。
-4. **端到端思路上的"加密可选"**：敏感字段（备注、附件）在上传云端前用用户派生密钥加密，Supabase 只看得到密文。
+4. **数据放在用户自有空间**：4 种云后端（iCloud / WebDAV / S3 / Supabase）均由用户自己持有；账本快照与附件本体均**明文**上传，依赖各 backend 的账号隔离与 ACL 即可。如果未来要在此之上加端到端加密，作为独立增强阶段重新评估。
 5. **视觉上**：大圆角、奶油白底、手绘插画、分类图标一律圆形贴纸风。
 
 ---
@@ -146,7 +145,7 @@
 - 金额支持 `12.5+3` 这类算式。
 - 分类默认提供 18 个常用，用户可在"我的 → 分类管理"增删改并自定义图标与颜色。
 - "再记一笔"开关：保存后自动打开空表单，便于连续输入。
-- 图片附件：存本地私有目录；同步时先加密再上传 Supabase Storage。
+- 图片附件：先复制到 App 沙盒私有目录（`<documents>/attachments/<tx_id>/...`）；启用云同步时，文件本体**原样明文**异步上传到当前 backend 的对象存储（路径 `users/<uid>/attachments/<txId>/<sha256><ext>`），新设备懒加载下载。详见 §5.5.6。
 
 #### 5.1.3 混合 AI 解析细节
 | 步骤 | 处理方 | 说明 |
@@ -192,52 +191,93 @@
 
 ### 5.5 云同步
 
-#### 5.5.1 同步模型
-- **后端**：Supabase（Postgres + Auth + Storage）。
-- **双模式**：
-  - **官方托管**：我们部署一个 Supabase 实例（同时自行承担成本）；用户用 `邮箱 + 密码` 作为"同步凭证"，本质上是 Supabase Auth 的用户。
-  - **用户自建**：用户在设置里填自己的 `SUPABASE_URL` + `ANON_KEY` + 同步凭证，即可切换到私有实例。
-- **"同步凭证"设计**：
-  - UI 上弱化"账号"概念，统一称之为"同步凭证"。
-  - 用户首次开启同步时，默认选择"创建凭证"——填邮箱 + 密码（邮箱仅用于找回，不做营销、不强制验证）。
-  - 生成后可"导出为同步码"（一段 Base64 字符串，包含邮箱 hint + 刷新 token），在新设备上粘贴即可直接恢复，无需再记密码。
+云同步是**可选**功能，本地数据为单一事实来源；云端只是镜像备份。V1 采用**账本快照模型**——把账本视作一个 JSON 文件，每次上传/下载是整体覆盖。多设备双向增量同步留给 V2，届时通过同一个 `SyncService` 接口替换实现，UI 不需要改。
 
-#### 5.5.2 同步流程
+#### 5.5.1 同步模型与架构
 
-```
-本地写入 ──→ local_ops_queue（待同步队列）
-                │
-         网络可用 + 同步开关 ON
-                ▼
-        批量 push 到 Supabase
-                │
-                ▼
-        pull 远端 since `last_sync_at`
-                │
-                ▼
-        冲突检测 → 合并 → 回写本地
-                │
-                ▼
-        更新 last_sync_at
-```
+- **核心原则**：本地优先（offline-first）；云同步未配置或断网时所有功能照常使用。
+- **快照单位**：以"账本"（ledger）为单位上传/下载——一个账本对应云端一个 JSON 文件。
+- **范围**：账本本体 + 该账本下所有未软删流水/预算 + 全局共享的所有未软删 categories/accounts。**不**包含 `fx_rate / user_pref / sync_op / 已软删条目`。
+- **指纹**：每次上传前对序列化后的 JSON 计算 SHA256 作为指纹，写入云端文件 metadata；`getStatus` 通过比对本地与云端指纹判断「已同步 / 本地较新 / 云端较新 / 云端无备份」。
+- **覆盖恢复**：下载后**物理删除**当前账本现有的 transactions / budgets（含已软删）→ 用云端快照逐条 insertOrReplace 写回；categories / accounts 是全局资源，**只 upsert 不删**（避免破坏其他账本依赖）。
+- **不入 sync_op**：import 路径绕过 repository 层 `save`，避免「刚下载的数据立刻又被排队上传」循环。
+- **路径约定**：`users/<userId>/ledgers/<ledgerId>.json`。Supabase 的 userId 来自 `auth.uid()`（RLS 策略依赖 `(storage.foldername)[2] = auth.uid()`）；其他后端无 auth，userId 退化为 `deviceId`。
 
-- **触发时机**：App 启动、回到前台、记账后 5 秒静默、手动下拉、每 15 分钟定时。
-- **批量大小**：单次 push ≤ 500 条，避免大事务。
-- **幂等键**：`(device_id, local_uuid)` 保证重试不重复。
+#### 5.5.2 支持的同步方案
 
-#### 5.5.3 冲突解决（Last-Write-Wins + 软删除）
-- 每条记录字段：`id (uuid) / updated_at / deleted_at / device_id / content_hash`。
-- 合并规则：
-  1. 同一 `id` 的记录，以 `updated_at` 较新的为准；
-  2. 若 `deleted_at` 不为空，视为已删除但保留 30 天进垃圾桶；
-  3. 若 `updated_at` 相等且 `content_hash` 不同，按 `device_id` 字典序决定胜者，并在本地生成"冲突记录"副本，提示用户人工确认。
-- 垃圾桶内的记录 30 天后自动硬删除，云端同步清理。
+应用 V1 直接接入下列 4 种后端（vendored 的 `packages/flutter_cloud_sync*` 子包提供具体实现）。
 
-#### 5.5.4 数据加密
-- 敏感字段（`note`、`attachments`）使用 **AES-256-GCM** 本地加密后再上传。
-- 密钥派生：`PBKDF2(用户同步密码, salt=device_salt, iter=100000)`，**密钥永不上云**。
-- 换设备时：用户输入同步密码 → 本地派生密钥 → 解密云端数据。
-- 用户忘密码 = 无法解密（这是特性不是 bug），UI 中显著提示。
+##### 方案一：iCloud（推荐 iOS/macOS 用户）
+
+- **适用场景**：苹果生态用户，追求零配置。
+- **优势**：零配置（已登录 Apple ID 即可）、原生集成、隐私由 iCloud Drive 沙盒保护。
+- **实现**：原生 plugin 读写应用专属 iCloud Drive 私有目录，跨设备由 iCloud 自身的同步机制传播。
+
+##### 方案二：Supabase（推荐新手）
+
+- **适用场景**：跨平台用户（iOS + Android），希望快速启用云同步。
+- **优势**：URL + anon key 即可，邮箱密码登录，全托管。
+- **配置**：
+  - **后端**：用户在自己的 Supabase 项目里跑一次 `docs/supabase-setup.sql`（脚本幂等），创建 `beecount-backups`（账本快照）+ `attachments`（附件本体）两个私有 Storage Bucket，并对每个 bucket 的 4 个操作（SELECT / INSERT / UPDATE / DELETE）配置 RLS 策略：
+    ```sql
+    ((storage.foldername(name))[1] = 'users'::text
+     AND ((storage.foldername(name))[2] = (auth.uid())::text))
+    ```
+  - **客户端**：用户在 App 内填入 URL 和 anon key，邮箱/密码 `signUp` 或 `signIn`，登录后即可同步。
+
+##### 方案三：WebDAV（推荐 NAS 用户）
+
+- **适用场景**：拥有 NAS（群晖、绿联）或私有云（Nextcloud、坚果云）的用户。
+- **优势**：完全私有化，WebDAV 协议成熟。
+- **配置**：用户在 App 内填写 URL、用户名、密码、远程路径（如 `/BeeCount`）；无独立 auth 步骤。
+
+##### 方案四：S3 协议存储（推荐追求灵活性的用户）
+
+- **适用场景**：希望利用主流云厂商免费额度（如 Cloudflare R2 的 10GB）或自建 MinIO。
+- **优势**：S3 协议是事实标准，覆盖 Cloudflare R2 / AWS S3 / 阿里云 OSS / 腾讯云 COS / MinIO 等。
+- **配置**：endpoint + region + accessKey + secretKey + bucket + useSSL + port。
+
+#### 5.5.3 冲突与并发（V1 简化）
+
+- V1 不实现 Last-Write-Wins 增量合并——快照是整体覆盖语义，"冲突"退化为"用户在云服务页选上传 vs 下载"。
+- 多设备并发写：后上传者覆盖前者；本地数据不丢（用户可手动从某台设备重新上传）。
+- 软删除（`deleted_at`）状态在快照内**不**保留——只保留活跃实体。这意味着：在 A 设备删了一条流水后从 B 设备恢复，A 设备会把它找回来。设计上的简化，V2 增量队列模型解决。
+- 每条记录仍保留 `id (uuid) / updated_at / deleted_at / device_id` 字段——为 V2 切换增量模型预留。
+
+#### 5.5.4 数据加密策略（V1 仅本地 DB at-rest）
+
+- **本地**：SQLite 由 SQLCipher 加密，密钥存于系统 Keystore / Keychain（`DbCipherKeyStore`），仅保护"本机 `bbb.db` 文件"。
+- **云端**：账本快照 JSON 与附件本体均**明文**上传——4 种 backend 均为用户自有空间，账号隔离 + RLS / ACL 已经提供数据机密性。
+- **故意不做的事**（决策记录，2026-05-03）：
+  - ❌ 字段级加密（`note_encrypted` / `attachments_encrypted`）：列名是历史遗留，内容现为明文（前者暂未消费，后者装附件元数据 JSON 数组）。
+  - ❌ 同步密码 / 派生密钥 / 同步码：用户跨设备恢复靠手动重输 backend 配置（V1 可接受）。
+  - ❌ 端到端加密（E2EE）：如果未来要做，作为独立 Phase 重新评估，与本阶段无依赖。
+- **附带影响**：用户的云端账户被攻破或 backend 被入侵 = 全部账本数据 + 附件可被读。云服务页 UI 在用户配置 backend 时显著提示「数据明文上传到您的云端账户。请确保使用受信任的云端服务并妥善保管凭据。」
+
+#### 5.5.5 触发时机
+
+- **当前已实施**：5 个触发源由 `SyncTrigger` 统一调度（详见实现）：① 冷启动；② 前台恢复（`AppLifecycleState.resumed`）；③ 记账后防抖 5 秒；④ 首页下拉刷新；⑤ 前台 15 分钟定时器。后台 / 离线静默；网络恢复后用户主动触发。
+- **「我的 → 云服务」页**：保留手动触发的上传 / 下载 / 删除按钮，作为同步状态的兜底入口。
+
+#### 5.5.6 附件云同步（Phase 11 待实施）
+
+- **触发**：流水保存或编辑后，复用 `SyncTrigger.scheduleDebounced(5s)`——快照上传前先扫该账本下所有 `remote_key == null` 的附件元数据，逐个上传到 `users/<uid>/attachments/<txId>/<sha256><ext>`，再上传 JSON 快照。两者**串行**，避免快照引用尚未上传完的对象。
+- **下载**：`importLedgerSnapshot` 只写本地 DB 元数据；UI 渲染缩略图时按需懒加载远端字节到 `<cache>/attachments/<txId>/`。
+- **元数据 shape**（`transaction_entry.attachments_encrypted` BLOB，schema v10 起）：
+  ```json
+  [{
+    "remote_key": "users/<uid>/attachments/<txId>/<sha256>.jpg",
+    "sha256": "<hex 64>",
+    "size": 12345,
+    "original_name": "IMG_20260503_201823.jpg",
+    "mime": "image/jpeg",
+    "local_path": "<docs>/attachments/<txId>/IMG_xxx.jpg"
+  }]
+  ```
+  从 v9 升级时，旧的 `["path"]` 数组被包装为含 `local_path` 的对象数组，`remote_key` 为 null，等下次同步上传时回填。
+- **GC**：流水软删时只清本地 cache，保留 documents 与远端对象（垃圾桶可恢复）；30 天后硬删时统一删 documents 与远端。每周一次孤儿对象 sweep（远端有但 DB 无的、超 30 天宽限期）。
+- **跨 backend 切换**：弹确认对话框选择是否迁移已有附件到新 backend；旧 backend 上的对象由孤儿 sweep 清理。
+- **大小约束**：客户端单文件 ≤ 10MB（超出转 JPEG q=85 压缩）；服务端不重复约束。
 
 ### 5.6 资产账户（V1 轻量版）
 
@@ -262,7 +302,7 @@
 - 格式：
   - **CSV**（Excel 友好，含完整字段）；
   - **JSON**（结构化全量备份，含账本 / 分类 / 账户 / 流水 / 预算）；
-  - **加密备份包（.bbbak）**：使用用户密码加密的 JSON，适合跨设备迁移且不走云。
+  - **`.bbbak` 备份包**（Phase 13 待实施，是否加密待定）：本地导出 JSON 全量备份，适合跨设备迁移且不走云。
 - 范围：可选"当前账本"或"全部账本"，时间区间可选。
 
 #### 5.8.2 导入
@@ -396,8 +436,8 @@ CREATE TABLE transaction_entry (
   account_id TEXT,
   to_account_id TEXT,              -- 转账时目标账户
   occurred_at INTEGER NOT NULL,    -- 发生时间
-  note_encrypted BLOB,             -- AES-GCM 加密
-  attachments_encrypted BLOB,      -- JSON 密文
+  note_encrypted BLOB,             -- 列名历史遗留，V1 暂未消费（曾计划字段级加密，Phase 11 已废弃该方案）
+  attachments_encrypted BLOB,      -- 列名历史遗留，装附件元数据 JSON 数组（明文 bytes）：[{remote_key, sha256, size, original_name, mime, local_path}]
   tags TEXT,                       -- 逗号分隔
   content_hash TEXT,
   updated_at INTEGER NOT NULL,
@@ -435,10 +475,18 @@ CREATE TABLE sync_op (
 );
 ```
 
-### 7.2 Supabase 表设计（同构镜像）
-- 表结构与本地一致，额外列：`user_id UUID REFERENCES auth.users` + RLS（Row-Level Security）。
-- 每张业务表开启 RLS，策略：`user_id = auth.uid()`。
-- Storage：`attachments` Bucket，路径 `user_id/{entity_id}/{filename}.enc`，对象是本地已加密后的 blob。
+### 7.2 云端存储（Supabase 后端示例）
+
+V1 采用账本快照模型——**云端不建数据库表**，所有数据以 JSON / 二进制对象的形式存放在 backend 的对象存储中。
+
+- **Supabase**（4 backend 之一，最复杂的一个，其他 backend 路径约定相同）：
+  - 两个私有 Storage Bucket：`beecount-backups`（账本快照）+ `attachments`（附件本体）。
+  - 路径约定：
+    - 备份：`users/<auth.uid()>/ledgers/<ledgerId>.json`（一个账本一个 JSON 对象）
+    - 附件：`users/<auth.uid()>/attachments/<txId>/<sha256><ext>`（明文，原始扩展名保留）
+  - RLS 策略：每个 bucket 的 4 个操作各一条策略，统一校验 `folder[1] = 'users' AND folder[2] = auth.uid()::text`，初始化脚本见 `docs/supabase-setup.sql`。
+- **iCloud / WebDAV / S3**：路径约定相同（`<uid>` 退化为 `deviceId`），目录由各 backend 客户端按需创建；无 RLS 概念，依赖各服务自身的账号隔离。
+- **加密**：4 backend 均**明文存放**——云端是用户自有空间，账号隔离已提供机密性。详见 §5.5.4。
 
 ---
 
@@ -454,17 +502,18 @@ CREATE TABLE sync_op (
 │      State Mgmt: Riverpod 2.x         │
 ├──────────────────────────────────────┤
 │             Use Cases                 │
-│  记账 / 统计 / 预算 / 同步 / 加密      │
+│  记账 / 统计 / 预算 / 同步 / 锁屏      │
 ├──────────────────────────────────────┤
 │             Repositories              │
 │  LedgerRepo / TxRepo / SyncRepo / ... │
 ├──────────────┬───────────────────────┤
 │ LocalDataSource│  RemoteDataSource    │
-│   drift/SQLite │   supabase_flutter   │
-│   (SQLCipher)  │                      │
+│   drift/SQLite │   flutter_cloud_sync │
+│   (SQLCipher)  │   (4 backend 抽象)   │
 └──────────────┴───────────────────────┘
           ↕                    ↕
-  Isar/Drift DB        Supabase (PG/Auth/Storage)
+  Drift DB (本机)     iCloud / WebDAV / S3 / Supabase Storage
+                     （账本快照 JSON + 附件本体明文）
 ```
 
 ### 8.2 主要依赖
@@ -474,12 +523,12 @@ CREATE TABLE sync_op (
 | 路由 | `go_router` |
 | 状态管理 | `flutter_riverpod` |
 | 本地数据库 | `drift` + `sqlcipher_flutter_libs` |
-| 云端 | `supabase_flutter` |
+| 云端 | `flutter_cloud_sync` 系列子包（Supabase / WebDAV / S3 / iCloud），vendored 在 `packages/` |
 | 本地存储 | `shared_preferences` + `flutter_secure_storage` |
 | 图表 | `fl_chart` |
 | 图标字体 | 自绘 SVG + `flutter_svg` |
 | 生物识别 | `local_auth` |
-| 加密 | `cryptography`（AES-GCM、PBKDF2） |
+| 哈希 | `crypto`（SHA256，用于快照指纹） |
 | 国际化 | `flutter_localizations` + `intl`（V1 仅简中，预留 i18n） |
 | 日期选择 | `syncfusion_flutter_datepicker` 或轻量自制 |
 | 通知 | `flutter_local_notifications` |
@@ -490,7 +539,7 @@ CREATE TABLE sync_op (
 lib/
 ├─ app/                  路由、主题、国际化
 ├─ core/                 通用工具、常量、错误
-│   ├─ crypto/          AES/PBKDF2 封装
+│   ├─ crypto/          SHA256（快照指纹）+ Phase 13 备份包用的可选加密包装
 │   ├─ network/         Supabase client
 │   └─ util/
 ├─ data/
@@ -525,19 +574,20 @@ lib/
 4. 不强制开启同步，直达首页。
 
 ### 9.2 启用云同步
-1. 我的 → 云同步 → 开启。
-2. 选择：**官方托管** / **自建 Supabase**。
-3. 二选一：
-   - **新建凭证**：填邮箱 + 密码 → Supabase Auth signUp → 派生加密密钥。
-   - **已有凭证**：粘贴同步码 或 邮箱 + 密码登录。
-4. 首次同步：拉取云端全量 → 合并本地 → 回写 → 完成。
-5. 之后后台自动同步。
+1. 我的 → 云服务 → 选择后端（iCloud / WebDAV / S3 / Supabase）。
+2. 填入对应配置：
+   - **iCloud**：零配置（已登录 Apple ID 即可）。
+   - **WebDAV / S3**：URL + 凭据。
+   - **Supabase**：URL + anon key + 邮箱 + 密码（首次走 `signUp`，已注册走 `signIn`）。**前提**：用户先在自己的 Supabase 项目跑过一次 `docs/supabase-setup.sql`。
+3. 切换激活后端 → 触发首次上传，将本地账本快照 + 附件本体明文上传到对应路径。
+4. 之后由 `SyncTrigger` 5 个触发源自动同步。
 
 ### 9.3 换新手机
 1. 新手机安装 App → 引导页（可跳过）。
-2. 我的 → 云同步 → 已有凭证 → 粘贴同步码 / 输邮箱密码。
-3. 全量拉取 + 解密 → 覆盖本地空库。
-4. 完成，用户无感继续使用。
+2. 我的 → 云服务 → 选择同一后端 → 填入相同配置（Supabase 需重新输入邮箱密码登录）。
+3. 点"下载"按钮 → 拉取账本 JSON 快照 + 写回本地 DB；附件元数据填入 `attachments_encrypted`，`local_path` 为 null。
+4. 用户浏览到含附件的流水时，UI 自动从云端拉对应字节到本地 cache，显示图片。
+5. 完成。无需密码派生、无需同步码——直接用 backend 配置 + 凭据即可恢复。
 
 ---
 
@@ -611,8 +661,8 @@ lib/
 
 | # | 风险 / 待决策 | 影响 | 当前倾向 |
 | :-- | :-- | :-- | :-- |
-| R1 | 官方托管的 Supabase 成本与合规（中国大陆访问） | 高 | 官方使用海外节点 + 自建方案作为国内用户兜底；App 内明示 |
-| R2 | 用户忘记同步密码 → 云端数据无法解密 | 中 | 在启用加密时强提醒 + 支持导出明文本地备份 |
+| R1 | Supabase 在中国大陆访问受限 | 中 | iCloud / WebDAV / S3 三个 backend 兜底，用户可选；UI 里把 4 个后端平等展示，不暗示推荐 |
+| R2 | 云端账户被入侵 / 凭据泄露 → 数据可被读 | 中 | V1 不加密云端数据，依赖 backend 自身账号隔离；UI 在配置 backend 时显著提示「请使用受信任的云端账户」；如有强需求，作为独立 Phase 加端到端加密 |
 | R3 | 多币种汇率不准 | 低 | 内置快照 + 手动覆盖，免费 API 日刷新 |
 | R4 | AI API 费用由谁承担 | 中 | V1 完全由用户自带 Key；官方不代付 |
 | R5 | 图标 / 插画版权 | 高 | 全部自绘或使用可商用素材；上线前做一次版权清查 |
@@ -624,19 +674,19 @@ lib/
 ## 14. 附录
 
 ### 14.1 术语表
-- **同步凭证**：面向用户的术语，实质 = Supabase Auth 用户（邮箱 + 密码）+ 派生加密密钥。
-- **同步码**：加密后的短字符串，包含登录信息 hint + 刷新 token，用于新设备快速恢复。
+- **同步凭证**：面向用户的术语，实质 = 当前激活 backend 的配置（URL / key / 邮箱密码 / 路径），用户在新设备上手动重输即可恢复。**不**派生加密密钥、**不**生成同步码（V1 已废弃这两个概念）。
+- **快照**：以"账本"为单位的 JSON 文件，整体覆盖式上传/下载，是 V1 同步的最小单元。
 - **账本**：用户自定义的流水集合容器，相互独立。
 - **账户**：流水的"资金出入口"标签（现金 / 银行卡等），仅做归类不做严格对账。
-- **bbbak**：本产品的加密备份文件格式（bian-bian BAcKup）。
+- **bbbak**：本产品计划中的备份文件格式（bian-bian BAcKup），Phase 13 落地时再决定是否加密。
 
 ### 14.2 开源参考
-- **BeeCount**（<https://github.com/TNT-Likely/BeeCount>）：本项目的云同步方案主要参考，采用 Flutter + Supabase，支持用户自建后端。本项目在其基础上增加"官方托管"模式、加密字段、混合 AI 输入。
+- **BeeCount**（<https://github.com/TNT-Likely/BeeCount>）：云同步抽象（`flutter_cloud_sync` 系列子包）的源头，本项目以 vendored 形式纳管在 `packages/`，并扩展为 4 后端 + 附件二进制对象支持。本项目放弃了 BeeCount Cloud 集中托管模式，专注 BYO 路径。
 - **叨叨记账**：UI / 视觉风格与情绪化交互主要参考。
 
 ### 14.3 可讨论的设计假设
-- 数据加密默认开启还是可选开启？本文默认"开启但可关"。
-- 官方托管 Supabase 是否限制免费额度（如单用户流水条数）？本文未限制，待运营评估。
+- 数据加密：V1 不做云端加密。如果未来用户群里出现"我希望即使云端账户被攻破也无法读到我的数据"的需求，再作为独立 Phase 评估（增加 PBKDF2 / AES-GCM 包装层 + 同步密码 UX）。
+- 各 backend 是否限制免费额度（Supabase Storage / iCloud Drive / Cloudflare R2）？本文未限制，由用户自行管理；Phase 11 上线时在云服务页加"附件占用"显示。
 - AI API 是否支持我们自部署的聚合代理？本文倾向只让用户自填 Key，避免资金成本与合规风险。
 
 ---

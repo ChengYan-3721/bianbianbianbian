@@ -233,7 +233,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         const SizedBox(height: 12),
                         SizedBox(height: 300, child: _CategoryPieCard()),
                         const SizedBox(height: 12),
-                        SizedBox(height: 360, child: _RankingCard()),
+                        _RankingCard(),
                         const SizedBox(height: 12),
                         const SizedBox(
                           height: 320,
@@ -930,6 +930,7 @@ class _RankingCard extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               '收支排行榜',
@@ -938,26 +939,25 @@ class _RankingCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            Expanded(
-              child: rankAsync.when(
-                loading: () =>
-                    const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(
-                  child: Text(
-                    '排行榜加载失败：$e',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+            rankAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(
+                child: Text(
+                  '排行榜加载失败：$e',
+                  style: theme.textTheme.bodyMedium,
                 ),
-                data: (items) {
-                  if (items.isEmpty) {
-                    return _RankingEmptyState();
-                  }
-                  return _RankingList(
-                    items: items,
-                    moneyFmt: moneyFmt,
-                  );
-                },
               ),
+              data: (items) {
+                if (items.isEmpty) {
+                  return _RankingEmptyState();
+                }
+                final top10 = items.take(10).toList(growable: false);
+                return _RankingList(
+                  items: top10,
+                  moneyFmt: moneyFmt,
+                );
+              },
             ),
           ],
         ),
@@ -1005,96 +1005,100 @@ class _RankingList extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final maxAmount = items.isNotEmpty ? items.first.amount : 1.0;
 
-    return ListView.separated(
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 2),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final ratio = maxAmount > 0 ? item.amount / maxAmount : 0.0;
-        final prefix = item.isIncome ? '+' : '-';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < items.length; index++) ...[
+          if (index > 0) const SizedBox(height: 2),
+          Builder(builder: (context) {
+            final item = items[index];
+            final ratio = maxAmount > 0 ? item.amount / maxAmount : 0.0;
+            final prefix = item.isIncome ? '+' : '-';
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 24,
-                child: Text(
-                  '${index + 1}',
-                  style: textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: index < 3
-                        ? item.categoryColor
-                        : Theme.of(context).colorScheme.onSurface.withAlpha(150),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: item.categoryColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  item.categoryName,
-                  style: textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 4,
-                child: Stack(
-                  children: [
-                    Container(
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withAlpha(150),
-                        borderRadius: BorderRadius.circular(4),
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    child: Text(
+                      '${index + 1}',
+                      style: textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: index < 3
+                            ? item.categoryColor
+                            : Theme.of(context).colorScheme.onSurface.withAlpha(150),
                       ),
                     ),
-                    FractionallySizedBox(
-                      widthFactor: ratio.clamp(0.0, 1.0),
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: item.categoryColor,
-                          borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: item.categoryColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      item.categoryName,
+                      style: textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 4,
+                    child: Stack(
+                      children: [
+                        Container(
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withAlpha(150),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
-                      ),
+                        FractionallySizedBox(
+                          widthFactor: ratio.clamp(0.0, 1.0),
+                          child: Container(
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: item.categoryColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 72,
-                child: Text(
-                  '$prefix¥${moneyFmt.format(item.amount)}',
-                  style: textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: item.isIncome
-                        ? Theme.of(context).extension<BianBianSemanticColors>()!.success
-                        : Theme.of(context).extension<BianBianSemanticColors>()!.danger,
                   ),
-                  textAlign: TextAlign.right,
-                ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      '$prefix¥${moneyFmt.format(item.amount)}',
+                      style: textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: item.isIncome
+                            ? Theme.of(context).extension<BianBianSemanticColors>()!.success
+                            : Theme.of(context).extension<BianBianSemanticColors>()!.danger,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
+            );
+          }),
+        ],
+      ],
     );
   }
 }

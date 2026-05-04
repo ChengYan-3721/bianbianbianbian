@@ -144,6 +144,18 @@ class _MeTab extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/ai-input'),
           ),
+          ListTile(
+            leading: const Icon(Icons.cloud_sync_outlined),
+            title: const Text('云服务'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/sync'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: const Text('垃圾桶'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/trash'),
+          ),
         ],
       ),
     );

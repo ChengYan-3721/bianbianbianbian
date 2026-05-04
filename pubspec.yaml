@@ -58,8 +58,21 @@ dependencies:
   image_picker: ^1.1.2
   share_plus: ^10.1.4
   http: ^1.2.0
+  crypto: ^3.0.3
   flutter_localizations:
     sdk: flutter
+
+  # 云同步
+  flutter_cloud_sync:
+    path: ./packages/flutter_cloud_sync
+  flutter_cloud_sync_s3:
+    path: ./packages/flutter_cloud_sync_s3
+  flutter_cloud_sync_webdav:
+    path: ./packages/flutter_cloud_sync_webdav
+  flutter_cloud_sync_supabase:
+    path: ./packages/flutter_cloud_sync_supabase
+  flutter_cloud_sync_icloud:
+    path: ./packages/flutter_cloud_sync_icloud
 
 dev_dependencies:
   flutter_test:

@@ -56,6 +56,17 @@ class _FakeCategoryRepository implements CategoryRepository {
 
   @override
   Future<void> softDeleteById(String id) => fail('unexpected delete');
+
+  @override
+  Future<List<Category>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) => fail('unexpected restore');
+  @override
+  Future<int> purgeById(String id) => fail('unexpected purge');
+  @override
+  Future<int> purgeAllDeleted() => fail('unexpected purgeAll');
+  @override
+  Future<List<Category>> listExpired(DateTime cutoff) async => const [];
 }
 
 class _FakeAccountRepository implements AccountRepository {
@@ -78,6 +89,17 @@ class _FakeAccountRepository implements AccountRepository {
 
   @override
   Future<void> softDeleteById(String id) => fail('unexpected delete');
+
+  @override
+  Future<List<Account>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) => fail('unexpected restore');
+  @override
+  Future<int> purgeById(String id) => fail('unexpected purge');
+  @override
+  Future<int> purgeAllDeleted() => fail('unexpected purgeAll');
+  @override
+  Future<List<Account>> listExpired(DateTime cutoff) async => const [];
 }
 
 class _FakeLedgerRepository implements LedgerRepository {
@@ -100,6 +122,17 @@ class _FakeLedgerRepository implements LedgerRepository {
   @override
   Future<Ledger> setArchived(String id, bool archived) =>
       fail('unexpected archive');
+
+  @override
+  Future<List<Ledger>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) => fail('unexpected restore');
+  @override
+  Future<int> purgeById(String id) => fail('unexpected purge');
+  @override
+  Future<int> purgeAllDeleted() => fail('unexpected purgeAll');
+  @override
+  Future<List<Ledger>> listExpired(DateTime cutoff) async => const [];
 }
 
 class _FakeTransactionRepository implements TransactionRepository {
@@ -121,6 +154,17 @@ class _FakeTransactionRepository implements TransactionRepository {
 
   @override
   Future<int> softDeleteByLedgerId(String ledgerId) async => 0;
+
+  @override
+  Future<List<TransactionEntry>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) async {}
+  @override
+  Future<int> purgeById(String id) async => 0;
+  @override
+  Future<int> purgeAllDeleted() async => 0;
+  @override
+  Future<List<TransactionEntry>> listExpired(DateTime cutoff) async => const [];
 }
 
 // ---- 测试辅助 ----

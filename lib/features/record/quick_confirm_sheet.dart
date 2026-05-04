@@ -21,14 +21,14 @@ import 'record_providers.dart';
 /// 而不 import 上层 feature——保持 record/quick 与 budget/ 的解耦。
 const Map<String, String> _parentKeyLabels = {
   'income': '收入',
-  'food': '餐饮',
+  'food': '饮食',
   'shopping': '购物',
-  'transport': '交通',
+  'transport': '出行',
   'education': '教育',
   'entertainment': '娱乐',
   'social': '人情',
-  'housing': '居家',
-  'medical': '医疗',
+  'housing': '住房',
+  'medical': '医药',
   'investment': '投资',
   'other': '其他',
 };

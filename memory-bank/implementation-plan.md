@@ -221,6 +221,19 @@
   - 选图保存后，重启应用能读回并渲染缩略图。
   - 软删除流水时附件不立刻删，由垃圾桶阶段统一处理。
 
+### Step 3.6 首页流水搜索
+- **做什么**：点击首页顶栏的搜索图标，跳转到一个新的搜索页面 `/record/search`。页面包含搜索框、日期范围、类型、金额范围等筛选器。搜索关键词将匹配流水的备注、分类名、账户名。
+- **验证**：
+  - 单元测试：搜索"午餐"能找到备注为"和同事的午餐"的流水。
+  - UI 测试：设置金额范围 100-200，结果列表中的流水金额都在此范围内。
+  - 搜索页能正确处理空结果，显示"没有找到相关流水"的提示。
+
+### Step 3.7 首页月份选择器优化
+- **做什么**：点击首页顶栏的月份显示区域，弹出一个自定义的年月选择器，允许用户快速跳转到任意年份和月份。左右切换按钮功能保持不变。
+- **验证**：
+  - UI 测试：在选择器中选择 "2025-01"，首页数据应刷新为 2025年1月的统计和流水。
+  - 选择器弹出后，默认高亮当前选择的月份。
+
 ---
 
 ## 阶段 4 · 多账本（Phase 4 — Multi-Ledger）
@@ -365,91 +378,192 @@
 
 ---
 
-## 阶段 10 · 云同步核心（Phase 10 — Sync Core）
+## 阶段 10 · 多后端云同步（Phase 10 — Multi-Backend Sync）
 
-### Step 10.1 Supabase Schema 与 RLS
-- **做什么**：在 Supabase（官方实例 + 自建都需遵循）里创建与本地表同构的业务表（`ledger / category / account / transaction_entry / budget`），每张表额外加 `user_id UUID NOT NULL REFERENCES auth.users`，开启 RLS，策略统一为 `user_id = auth.uid()`。`attachments` Storage Bucket 策略同。
+V1 采用**账本快照模型**（与「蜜蜂记账云同步方案.md」一致）：账本视为一个 JSON 文件，每次上传/下载是整体覆盖。**不**实现「sync_op 队列 + LWW 增量合并」（保留为 V2 形态——届时通过同一个 `SyncService` 接口替换实现，UI 不需要改）。
+
+后端覆盖 4 种：iCloud（仅 iOS）/ WebDAV / S3 / Supabase，由 vendored 子包 `packages/flutter_cloud_sync*` 提供（来自 BeeCount）。**故意不开启 BeeCount Cloud**——它是 BeeCount 内部服务，本项目用户用不到。
+
+### Step 10.1 + 10.2 同步抽象 + 配置 UI + 快照引擎（已完成 2026-05-03）
+
+- **做什么**：
+  - 在 `lib/features/sync/` 下定义 `SyncService` 抽象（`upload(ledgerId)` / `downloadAndRestore(ledgerId)` / `getStatus(ledgerId, {forceRefresh})` / `deleteRemote(ledgerId)` / `clearCache()`，全部用 `String ledgerId`）；提供 `LocalOnlySyncService` 兜底（未配置时所有写操作抛 `UnsupportedError`，状态返回 `notConfigured`）与 `SnapshotSyncService` V1 实现（包装包内 `CloudSyncManager<LedgerSnapshot>`）。
+  - `snapshot_serializer.dart`：`LedgerSnapshot` 数据类（`version: 1`，含 ledger / categories / accounts / transactions / budgets + `exportedAt + deviceId`，`fromJson` 校验版本号）+ `LedgerSnapshotSerializer`（`DataSerializer<LedgerSnapshot>` 实现，`fingerprint = sha256(utf8(data))`）+ `exportLedgerSnapshot` / `importLedgerSnapshot` 顶层纯函数。
+  - 「我的 → 云服务」页（`cloud_service_page.dart`）：顶部 `_SyncStatusCard`（标题行 + 状态行 + 操作行：上传 FilledButton / 下载 OutlinedButton 二次确认 / 删除云端 IconButton 二次确认；`_busy` 状态守门防双击）+ 4 个后端选择卡 + 配置对话框。
+  - Riverpod 链（普通 `Provider` / `FutureProvider`，不走 `@riverpod` 代码生成）：`cloudServiceStoreProvider → activeCloudConfigProvider → 3 个 backend 配置 provider → cloudProviderInstanceProvider →  authServiceProvider → syncServiceProvider`。切换激活后端 / 保存配置后调 `ref.invalidate(activeCloudConfigProvider)` 链式重建。
+  - **不动 schema**：云配置由 `flutter_cloud_sync` 包通过 `SharedPreferences` 持久化；user_pref 不增列，schema 保持 v8（Phase 11 附件云同步会升到 v10，仅改 `attachments_encrypted` BLOB 内 JSON shape，不动云配置存储）。代价：配置在 Android 是明文 XML、iOS 是 NSUserDefaults plist——V1 接受这个权衡，因为 4 个 backend 均为用户自有空间，配置存储加密价值低于改动成本。
+  - 路径约定 `users/<userId>/ledgers/<ledgerId>.json`——Supabase 的 userId 来自 `auth.uid()`（RLS 策略依赖）；其他后端无 auth，userId 退化为 `deviceId`。
+  - `importLedgerSnapshot` **故意绕过 repository 层 save**——避免 import 触发 sync_op 队列累积，形成「刚下载的数据立刻又被排队上传」循环；直接走 `db.batch + InsertMode.insertOrReplace`。categories / accounts 是全局资源，只 upsert 不 delete（避免破坏其他账本依赖）。
+  - 新增依赖：`crypto: ^3.0.3`（用于 SHA256 指纹）。
 - **验证**：
-  - 用 A 用户登录尝试 select B 用户的行，应被 RLS 拒绝。
-  - 未登录匿名客户端 select 任何表应返回空或 401。
-  - 建表脚本保存到 `supabase/schema.sql`，可幂等重跑。
+  - 「我的 → 云服务」可见 4 个后端卡片（iOS 才有 iCloud），active 默认是 local，状态卡不显示。
+  - 配置任一非 iCloud 后端 → 切换激活 → 状态卡显示。点上传 → SnackBar「已上传到云端」。点刷新 → 状态变「已同步」。
+  - 在另一台设备配同样的后端 → 点下载（二次确认）→ SnackBar「已恢复 N 条流水」→ 切到记账页能看到从云端来的流水。
+  - 断网时上传 → SnackBar「操作失败：…」，本地数据不受影响。
+  - 点删除云端（二次确认）→ SnackBar「云端备份已删除」→ 状态变「云端无备份」。
+  - 校验 `snapshot.ledger.id == 当前 ledgerId`，防止误恢复别人的备份。
 
-### Step 10.2 Supabase 客户端双模配置
-- **做什么**：在 `lib/core/network/` 封装 `SupabaseClientProvider`，支持两种构造来源：
-  - 官方托管：URL/anonKey 来自 `--dart-define` 编译期注入（`SUPABASE_URL_OFFICIAL`、`SUPABASE_ANON_KEY_OFFICIAL`）；
-  - 用户自建：URL/anonKey 来自 `user_pref`。
-  - 切换模式时销毁旧 client、重建新 client、清理已登录会话。
+### Step 10.3-10.6 各 backend 实现（由 vendored 包提供，无需重做）
+
+由 `packages/flutter_cloud_sync_supabase / _webdav / _icloud / _s3` 实现 `CloudProvider` 接口，本项目层不需要单独实施。`provider_factory.createCloudServices(config)` 根据 active config 实例化对应 `CloudProvider` + `CloudAuthService`。配置项与「蜜蜂记账云同步方案.md」对齐：
+
+| 后端 | 必填配置 | Auth 方式 | 备注 |
+| :-- | :-- | :-- | :-- |
+| **Supabase** | URL + anon key | 邮箱/密码 `signUp` / `signIn` | RLS 策略约束 `(storage.foldername)[2] = auth.uid()` |
+| **WebDAV** | URL + username + password + remotePath | 无（凭据直连） | 路径下用 `users/<deviceId>/...` 前缀统一目录 |
+| **iCloud** | 无（仅 iOS） | 系统 Apple ID | 应用私有沙盒，零配置 |
+| **S3** | endpoint + region + accessKey + secretKey + bucket + useSSL + port | AK/SK 签名 | 覆盖 Cloudflare R2 / AWS S3 / MinIO 等 |
+
+子包内部仍带 `BeeCountCloudProvider`（独立 BeeCount 后端的实现），**项目层未暴露 UI 入口**，视为死代码保留。
+
+### Step 10.7 同步触发与 UI 状态
+
+- **做什么**：
+  - 当前仅手动触发（云服务页按钮）。后续接入：
+    1. App 启动（main bootstrap 链中追加一次后台 `upload` / `getStatus`）；
+    2. 前台恢复（`WidgetsBindingObserver.didChangeAppLifecycleState == resumed`）；
+    3. 记账后防抖（保存流水后 5 秒静默触发 `upload`）；
+    4. 首页下拉刷新；
+    5. 定时器（每 15 分钟一次，仅前台）。
+  - 统一通过 `ref.read(syncServiceProvider.future).then((s) => s.upload(...))` 调度。
+  - 在首页顶栏增加同步状态指示（小图标 + 上次同步时间），点击跳转「我的 → 云服务」。
 - **验证**：
-  - 集成测试：在测试用的空 Supabase 实例上能完成 signUp → signIn → signOut。
-  - UI："我的 → 云同步 → 后端"可切换两模式，切换后显示新 URL。
-
-### Step 10.3 同步凭证 UX
-- **做什么**：在"我的 → 云同步"提供"创建凭证"与"恢复凭证"两种入口：
-  - 创建：邮箱 + 密码（仅本地校验长度），调用 `signUp`；成功后派生加密密钥（见阶段 11）并持久化。
-  - 恢复：两种子入口——"邮箱密码登录"、"粘贴同步码"。
-  - 成功后显示"当前凭证状态"（已登录的邮箱 hint + 最近同步时间）。
-- **验证**：
-  - 错误邮箱/密码给出可读错误。
-  - 已登录状态下再次进入页面显示 hint 与"登出/切换凭证"。
-
-### Step 10.4 同步队列消费
-- **做什么**：实现 `SyncEngine`（单例 Provider），核心职责：
-  - Push：从 `sync_op` 表取未处理项，分表批量 upsert / delete 到 Supabase（单批 ≤ 500），成功则清空对应项；
-  - Pull：按 `updated_at > last_sync_at` 拉取每张表变更；
-  - 合并：按设计文档 §5.5.3 规则（LWW + device_id 字典序 + 冲突副本）写入本地；
-  - 更新 `user_pref.last_sync_at`。
-- **验证**：
-  - 集成测试：两台"设备"（两套独立本地 DB 指向同一个 Supabase）互相同步后，任一方新增/修改/软删的流水最终在对方能看到。
-  - 集成测试：同一条记录在两端 `updated_at` 相同但内容不同→ 生成一条冲突副本（原记录保留胜者内容）。
-
-### Step 10.5 触发时机
-- **做什么**：按设计文档 §5.5.2，下列事件触发同步：
-  - App 启动；
-  - 前台恢复；
-  - 记账/编辑保存后 5 秒静默（防抖）；
-  - 用户下拉首页；
-  - 每 15 分钟定时（使用 `Timer.periodic`，仅在前台）。
-  - 网络不可用时不触发，网络恢复自动补偿。
-- **验证**：
-  - 断网时不报红、不重试；恢复网络后 30 秒内自动跑一次。
-  - 下拉后顶部显示"同步中…" → "已同步 X 条"。
-
-### Step 10.6 同步状态 UI
-- **做什么**：首页顶栏右侧或"我的 → 云同步"显示同步状态：
-  - 空闲 / 同步中 / 失败（红点 + 最后错误信息，可点开查看）/ 已关闭。
-- **验证**：模拟断网下同步，UI 显示失败；查看错误面板可见"Network unreachable"。
+  - 断网时手动下拉应显示「网络不可用」。
+  - 同步过程中 UI 显示「同步中…」。
+  - 成功或失败后 UI 状态更新。
+  - 后台恢复时不重复触发（前一次未完成时跳过）。
 
 ---
 
-## 阶段 11 · 字段级加密与同步码（Phase 11 — Encryption & Sync Code）
+## 阶段 11 · 附件云同步（Phase 11 — Attachment Cloud Sync）
 
-### Step 11.1 密钥派生与持久化
-- **做什么**：开启同步并成功登录后，向用户再请求一次"同步密码"（可复用登录密码，但 UI 强提示"这是加密密码，忘记无法找回"）；使用 PBKDF2(SHA256, 100k) 派生 32 字节密钥；派生用的 salt 存 `user_pref.enc_salt`（16 字节随机）；派生后的密钥存 `flutter_secure_storage`（key：`sync_enc_key`），同时在内存中缓存 session。
-- **验证**：
-  - 第二次启动时能无感读回密钥。
-  - 清除密钥后再次打开同步流程要求重新输入密码。
+> **2026-05-03 重构背景**：原 Phase 11 设计的「快照加密 + 派生密钥 + 同步码」整段废止。理由：① Phase 10 的 4 个 backend（iCloud / WebDAV / S3 / Supabase）云端均为**用户自有空间**，明文上传可接受，加密层是过度工程；② 用户主动跳过原 Phase 11 直接做了 Phase 12；③ 真正未解决的痛点是「换设备图片丢失」——`attachments_encrypted` BLOB 当前只装本地绝对路径数组，文件本体根本没上云。本阶段只解决这件事：让附件文件本体跟随快照同步到 4 个后端，新设备懒加载下载，明文直传无加密。
+>
+> **与 Phase 10 的关系**：本阶段不动 `LedgerSnapshot` JSON 结构、不动 `SyncService` / `SyncTrigger` 接口、不引入 sync_op 增量队列。所有改动收敛在「`attachments_encrypted` BLOB shape 升级 + 附件文件本体走对象存储」两件事上。
+>
+> **不做的事**（决策记录）：
+> - ❌ 加密：云是用户自有的，明文足够。后人若要加密层，作为独立 Phase 加在本阶段之上。
+> - ❌ 同步码 / refresh token：Phase 10 已用 `flutter_cloud_sync` 包通过 SharedPreferences 持久化云配置，跨设备恢复靠用户手动重输配置（V1 可接受）。
+> - ❌ 缩略图预生成：直接传原图；客户端在保存时若 > 10MB 转 JPEG q=85 压缩。
+> - ❌ 列名重命名：`transaction_entry.attachments_encrypted` 列名保留（Phase 11 之前所有代码、迁移脚本、测试都引用此名）；语义改为"附件元数据 JSON 数组（明文）"——文档与注释里强调"列名是历史遗留，内容已不加密"。
 
-### Step 11.2 敏感字段加密
-- **做什么**：在仓库层对 `note` 与 `attachments` 做"写入 drift 前加密、从 drift 读出后解密"的透明处理（即上层看到的仍是明文）。加密后字节内容写入现有的 `note_encrypted` / `attachments_encrypted` 列。
-- **验证**：
-  - 单元测试：同一明文加密两次结果不同（nonce 随机），解密都能还原。
-  - 直接用 DB 工具查表只能看到密文。
-  - 未开同步时仍保持明文（通过 `user_pref.encryption_enabled` 开关控制）。
-
-### Step 11.3 附件加密
-- **做什么**：上传 Supabase Storage 前，把本地附件文件先加密为 `.enc` 临时文件再上传；下载时反向解密到私有目录。
-- **验证**：
-  - 上传的对象字节与本地明文文件不同。
-  - 新设备下载后能正常显示原图。
-
-### Step 11.4 同步码导出 / 导入
+### Step 11.1 二进制存储扩展（CloudStorageService.uploadBinary）
+- **背景**：`packages/flutter_cloud_sync/lib/src/core/storage_service.dart` 的 `CloudStorageService.upload` 当前签名只接受 `String data`——给 JSON 快照用足够，给图片用就要 base64 包装（+33% 体积、两端编解码开销）。本步直接扩展接口。
 - **做什么**：
-  - 导出：把"邮箱 hint + 当前 refresh token + enc_salt"打包成 JSON，用一个固定的 app 常量密钥（非用户密钥）做对称加密后 Base64 编码，即得"同步码"。UI 提供复制、显示二维码。
-  - 导入：在"恢复凭证 → 粘贴同步码"处反解，用 refresh token 调 Supabase 登录，`enc_salt` 写入本地后提示用户输入"同步密码"完成密钥派生。
+  - 在 `CloudStorageService` 抽象类加 3 个方法（保留旧 `upload` 不动以维持 JSON 快照路径不变）：
+    ```dart
+    Future<void> uploadBinary({
+      required String path,
+      required Uint8List bytes,
+      String? contentType,           // image/jpeg 等，用于 HTTP Content-Type 头
+      Map<String, String>? metadata,
+    });
+    Future<Uint8List?> downloadBinary({required String path}); // 不存在返回 null
+    Future<List<CloudFile>> listBinary({required String prefix}); // GC sweep 用
+    ```
+    > `delete` / `exists` / `getMetadata` 复用现有方法，不区分二进制 vs 文本。
+  - 4 个 storage service 实现类各加二进制方法：
+    - `SupabaseStorageService`：`storage.from(bucket).uploadBinary(path, bytes, fileOptions: FileOptions(upsert: true, contentType: ...))` / `download(path)` 拿 `Uint8List` / `list(prefix)`。
+    - `S3StorageService`：用 `minio.putObject(bucket, key, Stream.value(bytes), bytes.length, metadata: {...})` / `getObject` 流式读全 / `listObjects(prefix, recursive: true)`。
+    - `WebDAVStorageService`：`client.write(path, bytes)` / `client.read(path)` / `client.readDir(prefix)`。WebDAV 需要先 `client.mkdirAll(parentDir)` 创建父目录，封装在 service 内一次完成。
+    - `ICloudStorageService`：iCloud 走 `icloud_storage.upload(filePath: tempFile, destinationRelativePath: ...)`——iCloud SDK 不接受字节流，要求落到临时文件后再 upload；service 内部 `Directory.systemTemp.createTemp` + `writeAsBytes` + 调 SDK + 删临时文件。
+    - 其余 mocks（`MockStorageService` / `MockCloudStorageService` / `BeeCountCloudStorageService` 死代码）按编译要求加占位实现（`UnsupportedError`）。
+  - 路径约定（与 Phase 10 现有约定对齐）：
+    - 备份：`users/<uid>/ledgers/<ledgerId>.json`（**不变**）
+    - 附件：`users/<uid>/attachments/<txId>/<sha256><ext>`，`<ext>` 保留原始扩展名（`.jpg` / `.png` / `.heic` / `.pdf` 等），方便服务器侧 Content-Type 推断与用户在 cloud console 直接预览。
+    - `<uid>` 与现有 `_path()` 方法一致：Supabase 走 `auth.uid()`、其它后端取 `deviceId`。
+  - 路由 provider：`@Riverpod(keepAlive: true) Future<CloudStorageService?> attachmentStorageService(...)` → 直接返回 `cloudProviderInstanceProvider` 拿到的 `provider.storage`（不需要再造一层）。无云端配置时返回 null，调用方走"附件仅本地"分支。
 - **验证**：
-  - 导出后的字符串长度合理（≤ 512 字符）。
-  - 错误或过期的同步码给出明确提示。
-  - 集成测试：设备 A 导出 → 设备 B 导入 → 数据可见。
+  - 单元测试：4 个 storage service 各跑一遍 `uploadBinary` → `downloadBinary` 往返，bytes byte-equal（mock 真实 backend 用 `MockStorageService`；CI nightly 跑真 Supabase）。
+  - 单元测试：`downloadBinary` 对不存在的 path 返回 null（不抛异常）。
+  - 单元测试：`listBinary(prefix)` 返回 `CloudFile.path` 列表，命中规则路径，命中数与 putObject 次数一致。
+  - `flutter_cloud_sync` 包内的 storage_service_test.dart（若存在）补充二进制相关用例；不存在则在主项目 `test/features/sync/binary_storage_smoke_test.dart` 写一遍 mock。
+
+### Step 11.2 附件元数据 schema v10 迁移与上传管线
+- **背景**：`attachments_encrypted` BLOB 当前装的是 `jsonEncode(["<docs>/attachments/<tx>/x.jpg", ...])`——纯本地路径数组。换设备后这些路径不存在，UI 也无法找回文件。本步把 BLOB shape 升级为含远端 key 的对象数组，并接入上传管线。
+- **做什么**：
+  - **schema v9 → v10 迁移**（`lib/data/local/app_database.dart::onUpgrade` 加 `if (from < 10)` 分支）：
+    - 不加列、不改列类型，只改 BLOB 内 JSON shape：
+      ```json
+      // 旧 v9（明文路径数组）
+      ["<docs>/attachments/tx-abc/IMG_1.jpg", "<docs>/attachments/tx-abc/IMG_2.jpg"]
+
+      // 新 v10（明文元数据数组）
+      [
+        {
+          "remote_key": null,           // 升级时一律 null，等下次同步上传后回填
+          "sha256": null,               // 同上
+          "size": 12345,                // File.lengthSync()，迁移时计算
+          "original_name": "IMG_1.jpg",
+          "mime": "image/jpeg",         // 由扩展名推断（lookupMimeType）
+          "local_path": "<docs>/attachments/tx-abc/IMG_1.jpg"
+        }
+      ]
+      ```
+    - 迁移脚本：`select id, attachments_encrypted from transaction_entry where attachments_encrypted is not null` → 解码旧数组 → 包装成新 shape → `update transaction_entry set attachments_encrypted = ? where id = ?`。本地文件不存在时 `size = 0` + 加 `"missing": true` 标记（UI 上显示占位）。
+    - schemaVersion 从 v9 升 v10。
+  - **领域层数据类**：新建 `lib/domain/entity/attachment_meta.dart`：`AttachmentMeta`（不可变，`==` / `hashCode` / `toJson` / `fromJson`），字段与上面 JSON 一一对应。`record_new_providers.dart::_encodeAttachmentPaths` / `_decodeAttachmentPaths` 重命名为 `_encodeAttachmentMetas` / `_decodeAttachmentMetas`，内部从 `List<String>` 改为 `List<AttachmentMeta>`；`RecordFormData.attachmentPaths` 同步改名为 `attachmentMetas`；UI 渲染用 `meta.localPath ?? meta.remoteKey` 决策走本地还是触发下载。
+  - **上传管线**（新建 `lib/features/sync/attachment/attachment_uploader.dart`）：
+    - `Future<List<AttachmentMeta>> uploadPending(List<AttachmentMeta> metas, {required String txId, required String uid})`：对每个 `meta.remoteKey == null` 的项 → 读 `meta.localPath` 字节 → 算 sha256（明文 hash）→ 拼 `key = 'users/$uid/attachments/$txId/$sha256$ext'` → 调 `uploadBinary(path: key, bytes: bytes, contentType: meta.mime)` → 回填 `remoteKey / sha256 / size`。
+    - **幂等保障**：上传前先 `exists(path)` 命中即跳过；同 sha256 视为同一对象，`uploadBinary` 走 upsert 语义。
+    - **不阻塞主流程**：`RecordForm.save()` 走完本地 DB 写入后照常 `scheduleDebounced()` 触发快照同步——本步在 `SnapshotSyncService.upload(ledgerId)` 内部，**先**扫该账本下所有 `remoteKey == null` 的附件 `uploadPending`，再上传 JSON 快照。这样 B 设备拉到的快照里所有附件都已有 `remoteKey`。
+    - **错误处理**：单个附件上传失败（网络中断 / 配额超限）→ 跳过该附件、继续后面的 + 把失败 meta 留 `remoteKey = null`，记 log（`debugPrint`）。整体快照上传**不**因附件失败而中断（用户的流水数据优先保住，附件下次同步重试）。
+  - **超限保护**：保存图片到本地时（`record_new_providers._copyToTxDir`）若单文件 > 10MB，先用 `image` 包转 JPEG q=85 → 落盘 → 真实 size 再决定 `meta.size`。设置项暂不暴露（V1 硬编码常量 `kMaxAttachmentBytes = 10 * 1024 * 1024`）。
+- **验证**：
+  - 单元测试：v9 → v10 迁移：旧 BLOB `["a.jpg","b.jpg"]`（含本地存在与不存在两种）升级后 shape 正确、`size` / `mime` / `original_name` 推断正确、不存在的有 `"missing": true`。
+  - 单元测试：`AttachmentMeta` toJson/fromJson 往返；带 null 的 `remoteKey` 与 `sha256` 不丢。
+  - 单元测试：`uploadPending` 同 sha256 调两次只产生一次 `uploadBinary`（mock storage 计数）。
+  - 单元测试：`uploadPending` 中一个文件失败不影响其他文件（`failure` 项 `remoteKey` 仍 null，`success` 项已回填）。
+  - 集成测试：保存带 2 张图的流水 → 触发 `SyncTrigger.scheduleDebounced` → `SnapshotSyncService.upload` 完成后 backend 上 `users/<uid>/attachments/<txId>/` 目录有 2 个对象 + JSON 快照里 `attachments_encrypted` 解码后 `remoteKey` 全部已填。
+  - widget 测试：`record_new_page` 选 12MB 图片 → 落盘后实际 size < 10MB（被 JPEG 压缩）。
+
+### Step 11.3 懒下载与本地缓存
+- **做什么**：
+  - 新建 `lib/features/sync/attachment/attachment_downloader.dart`：
+    - `Future<File?> ensureLocal(AttachmentMeta meta, {required String txId})`：
+      1. 若 `meta.localPath != null` 且 `File(localPath).existsSync()` → 直接返回 File。
+      2. 否则按 `meta.remoteKey` 调 `downloadBinary(path: remoteKey)` → 写到 `<cache>/attachments/<txId>/<sha256><ext>` → 把 `local_path` 写回 DB（让下次直接命中）→ 返回 File。
+      3. 网络失败 / 远端 404 → 返回 null（不抛异常），UI 显示「📎 附件未同步」占位。
+    - `meta.remoteKey == null` 且 `localPath` 也不存在 → 直接返回 null（数据丢失，最终态）。
+  - **缓存目录**：`getApplicationCacheDirectory()` 而非 documents——iOS 系统在空间紧张时会自动清理 cache，下次访问再懒下载即可。容量上限 500MB（常量 `kAttachmentCacheLimitBytes`）；超限按文件 mtime 升序淘汰，至少保留最近 7 天访问的。
+    - **不**新增 schema 列追踪缓存大小——启动时扫一次目录算 `Directory.list` 的总 size，性能足够（500MB 上限 → 几百个文件级别）。
+  - **UI 渲染调整**：
+    - `RecordDetailSheet` 与流水列表的缩略图组件改为 `FutureBuilder<File?>`；loading 显示骨架屏，`null` 显示占位「📎 附件未同步，下拉刷新重试」，成功显示 `Image.file`。
+    - 新建 `lib/features/record/widgets/attachment_thumbnail.dart`（`ConsumerWidget`），统一封装上述 FutureBuilder，所有附件渲染点（流水详情、流水列表、编辑表单）都用它。
+    - **prefetch 策略**：流水列表滚动到含附件的 tile 时 fire-and-forget 调 `ensureLocal`（限并发 3，用全局 `Pool` 实例避免冷启动同步把网卡打满）。失败静默；下次滚动到时再触发。
+  - **设置入口**：「我的 → 附件缓存」新增 `AttachmentCachePage`：显示当前占用 + "清除缓存"按钮（清空 cache 目录，不动 documents 与远端）。
+- **验证**：
+  - 单元测试：`ensureLocal` 在 `localPath` 已存在时不调 storage（mock 验证 0 次 downloadBinary 调用）。
+  - 单元测试：`remoteKey == null && localPath == null` 直接返回 null。
+  - 单元测试：mock storage 抛网络异常 → `ensureLocal` 返回 null（不抛异常，UI 不崩）。
+  - 集成测试：B 设备 fresh install + 配置同 backend + 点云服务页"下载" → 流水列表打开**不立即下载所有附件**（mock storage 调用数 = 0）→ 滚动到含附件的 tile 触发 prefetch → 点详情正常显示图片。
+  - 集成测试：填满 cache 到 600MB → 触发淘汰 → 总 size < 500MB 且最新 7 天文件保留。
+  - widget 测试：`AttachmentThumbnail` 三态（loading / null / 成功）UI 都不崩。
+
+### Step 11.4 软删除联动、GC 与回填迁移
+- **做什么**：
+  - **软删除联动**（不立刻删远端）：流水 `deleted_at` 写入时**只清本地 cache**（cache 目录的 `<txId>/` 子目录），**保留** documents 目录原图（垃圾桶可恢复）+ **保留** backend 远端对象。理由：30 天内若用户从垃圾桶恢复，附件还在；30 天后由 GC 统一硬删。`lib/features/trash/trash_attachment_cleaner.dart` 当前只清 documents——本步把 documents 清理推迟到硬删，软删时改清 cache 而非 documents。
+  - **硬删 GC 扩展**（在现有 `lib/features/trash/trash_gc_service.dart` 基础上）：
+    - `deleted_at < now - 30d` 的流水触发硬删时 → 删 documents 文件 + 调 `attachmentStorage.delete(path: meta.remoteKey)` 删远端对象。删失败不阻塞硬删（log error，下次孤儿 sweep 兜底）。
+    - **孤儿对象 sweep**（每 7 天一次，触发于 startup +5 分钟，与现有 trash GC 同生命周期）：调 `listBinary(prefix='users/<uid>/attachments/')` → 与 DB 中所有 `attachments_encrypted` 解码后的 `remoteKey` 集合做 diff → 远端有但 DB 无的 → 按 `lastModified > now - 30d` 保留宽限期，超期再 `delete`。
+  - **存量数据回填**（schema v10 迁移后第一次同步）：
+    - v10 升级时所有 meta 的 `remoteKey` 都是 null。下一次 `SnapshotSyncService.upload` 走到 Step 11.2 的 `uploadPending` 分支会自动回填——**无需额外代码**，是上传管线的自然行为。
+    - UI 提示：云服务页 `_SyncStatusCard` 在「正在同步…」副标题下加附件进度（`已同步附件 X/Y`），由 `attachmentUploader` 通过 `Stream<AttachmentUploadProgress>` 推送。回填完成后 SnackBar「附件已全部上云」。
+  - **跨 backend 切换**：用户从 Supabase 切到 WebDAV 时（`activeCloudConfigProvider` 重建）→ 弹确认对话框「切换后新附件将上传到 WebDAV，已上传到 Supabase 的附件不会跨设备访问。是否把已有附件迁移到新 backend？（耗时较长）」。选迁移 → 把所有 `remoteKey != null` 的 meta `remoteKey` 清为 null + `localPath` 保留 → 下次同步时由 `uploadPending` 重新上传到新 backend；旧 backend 上的对象 7 天后由孤儿 sweep 清掉。
+- **验证**：
+  - 单元测试：流水软删后 cache 目录被清，documents 目录与 backend 对象均保留。
+  - 单元测试：硬删触发时 `delete` 调用次数 = 流水的 `attachments_encrypted` meta 数。
+  - 集成测试：v9 升级到 v10 后启动 → 触发同步 → 所有附件被上传，DB 中 `remoteKey` 全部回填 + UI 进度条正常推进。
+  - 集成测试：A 设备删流水（30 天后硬删）→ 同步到 B → B 拉快照后该流水消失 → 7 天后孤儿 sweep 把 backend 对象也清掉。
+  - 集成测试：A 设备从 Supabase 切到 WebDAV + 选迁移 → 所有附件在 WebDAV 上可见 + Supabase 上 7 天宽限期后被孤儿 sweep 清理。
+  - 端到端：A 设备本地附件丢失（手动删 documents 目录）→ 触发上传队列 → 跳过该 meta（不报错、不清 `remoteKey`）+ 写 log；B 设备此时仍可正常 download（远端对象之前已存在）。
+
+> **依赖与风险提示**：
+> - Step 11.1 需要在 `packages/flutter_cloud_sync*` 4 个子包加二进制方法实现；这是 vendored 包，可直接改源码并提 PR 到上游（或就地维护 fork）。**无需新增 pubspec 依赖**——4 个 backend SDK 都已在子包里就位。
+> - Step 11.2 schema v10 迁移**不可逆**（旧明文路径数组 → 元数据对象数组）。降级到 v9 会让 v10 插入的对象数组被旧代码当作"非法路径"处理，UI 不崩但附件不显示。约定：v10 上线后用户不允许降级。
+> - 所有附件均为**明文**上传——用户的云端账户被攻破或 backend 被入侵 = 图片可被读。文档与设置项需明示「附件不加密。请确保使用受信任的云端账户。」如果未来要加密，作为独立 Phase（建议命名 Phase 11+），对象内容用 AES-GCM 包装、key 派生与本阶段独立设计，**不**在本阶段做。
+> - Supabase 后端：用户需先跑 `docs/supabase-setup.sql` 创建 `attachments` bucket + RLS 策略。这步是手动一次性配置，App 内不自动执行（避免持有 service_role key）。其他 3 个 backend（iCloud / WebDAV / S3）无需后端配置。
+> - 单测覆盖率门槛：附件管线总用例数预估 25+（4 binary storage 实现 × 2-3 用例 + uploader 4 + downloader 4 + GC 4 + 迁移 3），起步时若赶进度优先保证 uploader / downloader / 迁移三块。
 
 ---
 

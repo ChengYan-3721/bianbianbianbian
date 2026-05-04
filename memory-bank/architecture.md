@@ -8,7 +8,7 @@
 
 ---
 
-## 当前文件一览（Phase 9 · Step 9.3 LLM 增强后）
+## 当前文件一览（Phase 12 · 垃圾桶后）
 
 ```
 bianbianbianbian/
@@ -16,19 +16,19 @@ bianbianbianbian/
 │  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider）+ 错误兜底
 │  ├─ app/
 │  │  ├─ app.dart               BianBianApp 根组件（MaterialApp.router）
-│  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, …, /settings/multi-currency → MultiCurrencyPage）
+│  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, /record/search → RecordSearchPage, …, /sync → CloudServicePage）
 │  │  ├─ app_theme.dart         appTheme + BianBianSemanticColors ThemeExtension
-│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 8.1：我的 Tab 加"多币种"入口）
+│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口）
 │  ├─ core/
 │  │  ├─ crypto/
 │  │  │  └─ bianbian_crypto.dart  BianbianCrypto（PBKDF2 + AES-256-GCM）+ DecryptionFailure
-│  │  ├─ network/               [空] Supabase 客户端工厂（双模）
+│  │  ├─ network/               [空]
 │  │  └─ util/
 │  │     ├─ currencies.dart     Currency 数据类 + kBuiltInCurrencies (11 种) + kFxRateSnapshot 写死快照（Step 8.1）
 │  │     └─ quick_text_parser.dart  QuickTextParser + QuickParseResult（Step 9.1，本地中文快速记账文本解析器）
 │  ├─ data/
 │  │  ├─ local/
-│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=8；含 v3 重建 category / v4 budget 结转 / v5 信用卡日 / v6 多币种 + fx_rate / v7 fx_rate.is_manual + last_fx_refresh_at / v8 ai_input_enabled + ai_api_model + ai_api_prompt_template）
+│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=8；Phase 10 不动 schema）
 │  │  │  ├─ app_database.g.dart       build_runner 产物
 │  │  │  ├─ db_cipher_key_store.dart  本地 DB 加密密钥的生成/持久化
 │  │  │  ├─ device_id_store.dart      device_id 加载器（secure ↔ user_pref 双向同步）
@@ -44,7 +44,7 @@ bianbianbianbian/
 │  │  │  │  ├─ sync_op_dao.dart             SyncOpDao + .g.dart（Step 2.2，供仓库层写队列）
 │  │  │  │  └─ fx_rate_dao.dart             FxRateDao + .g.dart（Step 8.1，工具表 listAll/getByCode/upsert）
 │  │  │  └─ tables/
-│  │  │     ├─ user_pref_table.dart         §7.1 user_pref 表（Step 8.1 追加 multi_currency_enabled；Step 8.3 追加 last_fx_refresh_at；Step 9.3 追加 ai_input_enabled / ai_api_model / ai_api_prompt_template；ai_api_endpoint / ai_api_key_encrypted 自 v1 已声明，Step 9.3 起被消费）
+│  │  │     ├─ user_pref_table.dart         §7.1 user_pref 表（云配置由 flutter_cloud_sync 包走 SharedPreferences，不入库）
 │  │  │     ├─ ledger_table.dart            §7.1 ledger 表
 │  │  │     ├─ category_table.dart          重构版 category 表（parent_key/is_favorite，全局二级分类）
 │  │  │     ├─ account_table.dart           §7.1 account 表（Step 7.3 追加 billing_day / repayment_day）
@@ -52,7 +52,7 @@ bianbianbianbian/
 │  │  │     ├─ budget_table.dart            §7.1 budget 表
 │  │  │     ├─ sync_op_table.dart           §7.1 sync_op 队列表（AUTOINCREMENT id）
 │  │  │     └─ fx_rate_table.dart           Step 8.1 工具表（code PK / rate_to_cny REAL / updated_at INTEGER）
-│  │  ├─ remote/                [空] Supabase DataSource
+│  │  ├─ remote/                [空]
 │  │  └─ repository/             Step 2.2 已填充：entity_mappers + repo_clock + 5 个仓库
 │  │     ├─ repo_clock.dart             RepoClock typedef（仓库层时间注入点）
 │  │     ├─ entity_mappers.dart         drift row ↔ domain entity 映射桥接层
@@ -72,13 +72,17 @@ bianbianbianbian/
 │  │  │  └─ budget.dart                同上
 │  │  └─ usecase/               [空] 跨仓库业务用例
 │  └─ features/
-│     ├─ record/                Step 3.2 已重构：新建记账页采用一级/二级分类 + 收藏 + 自动收支判定
-│     │  ├─ record_home_page.dart       RecordHomePage + 子组件（顶栏/月份/卡片/快捷输入/流水列表/FAB；Step 9.2 _QuickInputBar 已接线解析器+确认卡片）
+│     ├─ record/                Step 3.2 已重构：新建记账页采用一级/二级分类 + 收藏 + 自动收支判定；Step 3.6/3.7 已接入搜索页 + 月份选择器
+│     │  ├─ record_home_page.dart       RecordHomePage + 子组件（顶栏/月份/卡片/快捷输入/流水列表/FAB；Step 9.2 _QuickInputBar 已接线解析器+确认卡片；Step 3.6 搜索图标跳转 /record/search；Step 3.7 月份文字 InkWell 弹年-月选择器；详情/编辑/复制/删除流程已抽到 record_tile_actions.dart）
 │     │  ├─ record_new_page.dart        RecordNewPage + 子组件（一级Tab/收藏/金额/分类/账户/时间/备注/附件/保存）
 │     │  ├─ record_providers.dart       RecordMonth Notifier + recordMonthSummary FutureProvider
 │     │  ├─ record_providers.g.dart     riverpod_generator 产物
 │     │  ├─ record_new_providers.dart   RecordFormData + _parseExpr + RecordForm Notifier（自动判定 income/expense + 本地附件管理）
 │     │  ├─ record_new_providers.g.dart riverpod_generator 产物
+│     │  ├─ record_search_filters.dart   Step 3.6 SearchQuery 数据类 + SearchTypeFilter 枚举 + searchTransactions 纯函数（关键词/日期/类型/金额取交集）
+│     │  ├─ record_search_page.dart      Step 3.6 RecordSearchPage（关键词输入 + 日期范围 / 类型 / 金额三段筛选 + 结果列表 + 空查询/空结果两种空态；结果点击复用 record_tile_actions 详情底表）
+│     │  ├─ record_tile_actions.dart     Step 3.6 续：RecordDetailAction 枚举 + RecordDetailSheet（流水详情底表）+ openRecordTileActions（点击 → 详情 → 编辑/复制/删除全流程的共享 helper）+ inferParentKeyForTx
+│     │  ├─ month_picker_dialog.dart     Step 3.7 showMonthPicker + _MonthPickerDialog（年箭头切换 + 12 月网格 + 取消/确定）
 │     │  ├─ quick_input_providers.dart   Step 9.2 quickTextParserProvider（keepAlive，可注入固定 clock 给测试）+ quickConfidenceThreshold=0.6
 │     │  ├─ quick_input_providers.g.dart riverpod_generator 产物
 │     │  ├─ quick_confirm_sheet.dart     Step 9.2 showQuickConfirmSheet + QuickConfirmCard（金额/分类/时间/备注 4 字段可编辑 + 低置信度横幅 + 分组分类选择器；Step 9.3 已追加 ✨ AI 增强按钮 + _runAiEnhance 路径）
@@ -107,8 +111,17 @@ bianbianbianbian/
 │     │  ├─ account_providers.g.dart    riverpod_generator 产物
 │     │  ├─ account_list_page.dart      AccountListPage（总资产卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单）
 │     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/初始余额/币种/计入总资产，新建+编辑双模式）
-│     ├─ sync/                  [空] 同步 UI + 状态
-│     ├─ trash/                 [空] 垃圾桶
+│     ├─ sync/                  Phase 10 已完成：账本快照模型多后端云同步 + 触发调度
+│     │  ├─ sync_service.dart        SyncService 抽象 + LocalOnlySyncService + SnapshotSyncService（V1）
+│     │  ├─ snapshot_serializer.dart  LedgerSnapshot 数据类 + LedgerSnapshotSerializer + exportLedgerSnapshot/importLedgerSnapshot 纯函数
+│     │  ├─ sync_provider.dart       Riverpod 顶层 provider 链（store→config→cloudProvider→authService→syncService）
+│     │  ├─ sync_trigger.dart        Step 10.7 SyncTrigger Notifier + SyncTriggerState + 5 触发源调度（trigger/scheduleDebounced/startPeriodic/stopPeriodic/cancelTimers）
+│     │  └─ cloud_service_page.dart  「我的→云服务」页（_SyncStatusCard 状态条 + iCloud/WebDAV/S3/Supabase 4 个后端卡 + 配置对话框）
+│     ├─ trash/                 Phase 12 已完成：垃圾桶列表 + 恢复/永久删除/清空 + 启动定时清理
+│     │  ├─ trash_attachment_cleaner.dart  TrashAttachmentCleaner（递归删除 <docs>/attachments/<txId>/）+ DocumentsDirProvider 注入点
+│     │  ├─ trash_providers.dart           kTrashRetention=30d + trashDaysLeft 纯函数 + 5 个 FutureProvider.autoDispose（TX/Cat/Acc/Ledger/Budget）
+│     │  ├─ trash_gc_service.dart          TrashGcService.gcExpired(now) 端到端硬删 + TrashGcReport
+│     │  └─ trash_page.dart                TrashPage（4 Tab：流水/分类/账户/账本）+ AppBar 一键清空 + 行级恢复/永久删除二次确认
 │     ├─ lock/                  [空] 应用锁
 │     ├─ import_export/         [空] 导入导出
 │     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider；Step 8.3：汇率刷新服务 + 手动覆盖；Step 9.3：AI 增强配置
@@ -151,6 +164,9 @@ bianbianbianbian/
 │  │  │  └─ quick_confirm_sheet_test.dart    Step 9.2 QuickConfirmCard 单元测试（13 用例 + Step 9.3 新增 4 用例 = 17 用例，覆盖字段初始展示 / 低置信度横幅 / 保存路径 / 取消 / 分类选择器 / subcategory 二次匹配 / AI 增强按钮显隐 + 成功/失败路径）
 │  │  │  └─ quick_input_bar_test.dart        Step 9.2 首页输入条 → 卡片 → 保存全链路集成测试（2 用例）
 │  │  │  └─ ai_input_enhance_service_test.dart Step 9.3 AiInputEnhanceService + parseEnhanceJson 测试（24 用例：schema 严格校验 + HTTP 协议 + prompt 占位符）
+│  │  │  └─ record_search_filters_test.dart  Step 3.6 searchTransactions 纯函数 + SearchQuery copyWith/isEmpty（11 用例：关键词命中备注/分类/账户、日期闭区间、类型筛选、金额范围、多维度交集）
+│  │  │  └─ record_search_page_test.dart     Step 3.6 RecordSearchPage widget 测试（5 用例：空查询提示 / 关键词命中 / 空结果提示 / 点击结果弹详情 / 删除流程从列表消失）
+│  │  │  └─ month_picker_dialog_test.dart    Step 3.7 showMonthPicker widget 测试（3 用例：默认高亮初始月份 / 切换年-月并确认 / 取消返回 null）
 │  │  └─ stats/
 │  │     ├─ stats_range_providers_test.dart  统计区间/饼图/排行/热力图聚合测试（Step 5.1~5.5）
 │  │     └─ stats_export_service_test.dart   CSV 编码 + 文件名规则测试（Step 5.6）
@@ -165,7 +181,9 @@ bianbianbianbian/
 │  │  └─ fx_rate_refresh_service_test.dart   FxRateRefreshService 节流 / 失败静默 / 手动覆盖（15 用例，Step 8.3）
 │  │  └─ ai_input_settings_providers_test.dart Step 9.3 AiInputSettings 数据类 + DB 集成 roundtrip（10 用例）
 │  │  └─ ai_input_settings_page_test.dart    Step 9.3 AiInputSettingsPage widget 测试（3 用例：预填 / 保存 / API key 显示切换）
-│  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例）
+│  ├─ features/sync/
+│  │  └─ sync_trigger_test.dart              Step 10.7 SyncTrigger 单元测试（8 用例：notConfigured / 成功 / SocketException / TimeoutException / failure / skipped / 防抖语义 / cancelTimers）
+│  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例；Step 10.7 起所有 BianBianApp 实例均传 enableSyncLifecycle: false）
 ├─ memory-bank/
 │  ├─ design-document.md        产品设计（权威来源）
 │  ├─ implementation-plan.md    分阶段实施计划
@@ -206,8 +224,8 @@ bianbianbianbian/
 横切关注点，三个子目录按职责拆分：
 - **`crypto/`**（Step 1.6 已填充）：
   - **`bianbian_crypto.dart`**：`BianbianCrypto` 工具类（私有构造，只暴露 static 方法）+ `DecryptionFailure` 异常。三个公开 API：`deriveKey(password, salt, {iterations=100000})` 走 PBKDF2-HMAC-SHA256；`encrypt(plaintext, key)` 走 AES-256-GCM 并返回 `nonce(12) ‖ ciphertext(N) ‖ tag(16)` 连续打包的 `Uint8List`；`decrypt(packed, key)` 反向解包，任何失败（长度不足 / tag 校验失败 / 错误 key）统一抛 `DecryptionFailure`。nonce 由 `AesGcm.newNonce()` 生成（`Random.secure()` 内核）每次都独立，避免同一 key 下重用导致 GCM 泄密。`@visibleForTesting` 的 `encryptWithFixedNonce` 让 KAT 能对照固定 `(K, N, P) → (C, T)` 向量。key 长度严格校验 32 字节，nonce 严格 12 字节，非法输入抛 `ArgumentError`。
-  - 消费者（均 Phase 11 起陆续接）：`transaction_entry.note_encrypted` / `attachments_encrypted` 字段级加密（Step 11.2）、附件上传前 `.enc` 临时文件（Step 11.3）、"同步码"对称外壳（Step 11.4）、`.bbbak` 备份包（Step 13.2）、`user_pref.ai_api_key_encrypted` 存取。**与 SQLCipher/`DbCipherKeyStore` 走两条完全独立路径**——本工具加密的是"将来要上云的字段"，SQLCipher 加密的是"本机 DB 文件"。
-- **`network/`**：`SupabaseClient` 工厂，支持"官方托管 / 用户自建"双模切换。Step 10.2 填充。
+  - 消费者：当前实际消费方仅 `user_pref.ai_api_key_encrypted` 存取（Step 9.3 起，落 UTF-8 raw bytes，DB 由 SQLCipher 加密保护）。**Phase 11（附件云同步）不再消费**——附件直接明文上传到用户自有云，无字段级加密；原计划的「note 加密 / 附件密文 / 同步码对称外壳」整段废弃。`bianbian_crypto.dart` 留作未来可选加密层（如 Phase 13 `.bbbak` 备份包密码加密）的工具备件。**与 SQLCipher/`DbCipherKeyStore` 走两条独立路径**——本工具加密的是"出站字段"，SQLCipher 加密的是"本机 DB 文件"。
+- **`network/`**：`SupabaseClient` 工厂，支持用户自建 Supabase（BYO 单模——Phase 10 已废弃"官方托管 + 自建双模"，所有用户都填自己的 URL + anon key）。Step 10.2 填充。
 - **`util/`**：无分类的纯函数工具；目前承载两个文件——
   - `currencies.dart`（Step 8.1）：`Currency` 数据类 + `kBuiltInCurrencies` (11 种) + `kFxRateSnapshot` 初始汇率快照。
   - `quick_text_parser.dart`（Step 9.1）：`QuickTextParser` + `QuickParseResult`。中文快速记账文本本地解析器。**纯 Dart**——不依赖 Flutter / Riverpod / drift。解析 5 步串行（**时间在金额之前**——避免 `3天前 烧烤 88` 中的 `3` 被金额正则先吃掉）：① 时间（内置相对天数 `大前天/前天/昨天/今天/明天/后天/大后天` + `上周X/这周X/下周X` + `N天前`）；② 金额（阿拉伯数字正则 `[¥￥]?(\d+(?:\.\d+)?)\s*(?:元|块|RMB|CNY|￥|¥)?` 优先，未命中则中文数字回退 `[零一二两三四五六七八九十百千万]+` + 可选尾缀；单字中文数字若无尾缀视为非金额，避免 `买了一些菜` 中 `一` 误判）；③ 分类（53 词词典，长词优先扫描，覆盖餐饮/交通/购物/娱乐/收入等 11 个一级分类 key，与 `seeder.dart::categoriesByParent.keys` 同集）；④ 置信度（阿拉伯金额 +0.5 / 中文金额 +0.4 / 分类 +0.4 / 时间 +0.1，上限 1.0；Step 9.2 阈值 0.6 决定"AI 增强"按钮是否出现）；⑤ 备注（剥离已识别片段后的残余文本）。`clock` 钩子让测试锁定参考时间。Step 9.2 会在 `features/record` 起 `quickTextParserProvider`，但本文件保持纯函数式无副作用。
@@ -225,7 +243,7 @@ bianbianbianbian/
     - **`MigrationStrategy`**：
       - `onCreate`：`m.createAll()` + `_createTransactionIndexes()`
       - `onUpgrade`：`from < 2` 时创建 v2 业务表；`from < 3` 时按产品要求**不兼容旧分类结构**，执行 `deleteTable('category')` 后 `createTable(categoryTable)` 重建；`from < 4` 时给 `budget` `addColumn` 两列；`from < 5` 时给 `account` `addColumn` 两列。
-  - **`db_cipher_key_store.dart`**：`DbCipherKeyStore` + `SecureKeyValueStore` 抽象接口 + `FlutterSecureKeyValueStore` 生产实现。`loadOrCreate()`：已有合法 hex（64 字符小写）→ 读回；否则用注入的 `Random`（默认 `Random.secure()`）生成 32 字节，hex 编码写入 `flutter_secure_storage` 条目 `local_db_cipher_key`。密钥以 hex 串保存、以 `PRAGMA key = "x'<hex>'"` 注入，跳过 SQLCipher 自带 PBKDF2。**该密钥仅保护本机 `bbb.db`，与 Phase 11 的用户同步密码派生密钥完全无关**。
+  - **`db_cipher_key_store.dart`**：`DbCipherKeyStore` + `SecureKeyValueStore` 抽象接口 + `FlutterSecureKeyValueStore` 生产实现。`loadOrCreate()`：已有合法 hex（64 字符小写）→ 读回；否则用注入的 `Random`（默认 `Random.secure()`）生成 32 字节，hex 编码写入 `flutter_secure_storage` 条目 `local_db_cipher_key`。密钥以 hex 串保存、以 `PRAGMA key = "x'<hex>'"` 注入，跳过 SQLCipher 自带 PBKDF2。**该密钥仅保护本机 `bbb.db`**，与同步链路完全无关——Phase 11 附件云同步不引入任何字段级加密，云端是用户自有空间，明文上传（详见 implementation-plan §11）。
   - **`device_id_store.dart`**（Step 1.5）：`LocalDeviceIdStore` + `UuidFactory` 类型别名。`loadOrCreate()` 按「`flutter_secure_storage` → `user_pref.device_id` → 新生成」优先级解析 device_id，并把最终值**同步写回另一侧**（"冗余防丢"）。密钥名 `local_device_id`（静态常量 `storageKey`）独立于 `DbCipherKeyStore.storageKey`——前者可被同步恢复，后者丢失即本机 DB 永久不可读，两者命名空间故意分开。UUID 合法性走宽松正则（8-4-4-4-12 hex、不校验 v4 version/variant 位），允许从老库恢复任意合法 UUID。`_ensureUserPref` **故意不用 `insertOnConflictUpdate`**——user_pref 的 `CHECK(id=1)` 约束在 SQLite UPSERT 的 DO UPDATE 路径会被二次评估并误报失败，改为显式 select-then-insert/update（DAO 层普通表不受此影响，原因是它们没有 id CHECK）。依赖注入点：`SecureKeyValueStore`（生产 `FlutterSecureKeyValueStore`、测试 in-memory）+ `UuidFactory`（默认 `const Uuid().v4()`、测试返回固定字面量）。
   - **`seeder.dart`**（Step 1.7）：`DefaultSeeder` + `SeedClock` / `SeedUuidFactory` 类型别名。`seedIfEmpty()` 在单事务内判断 `ledger` 表是否空——非空整体跳过；空则插入 1 账本（📒 生活）+ 28 分类（18 支出 + 10 收入）+ 5 账户（现金 / 工商银行卡 / 招商信用卡 / 支付宝 / 微信）。默认列表作为 `static const List<(...)> expenseCategories / incomeCategories / defaultAccounts` 暴露给测试与后续 UI（Step 3.2 记账页分类网格直接消费）。颜色走 `palette` 6 色（design-document §10.2 奶油兔色板）的 `i % 6` 循环。**不向 `sync_op` 写条目**——Phase 10 再决定种子数据与首次同步的交互规则，避免两台设备各自种子导致"两套默认数据重复上云"。
   - **`providers.dart`**（Step 1.5/1.7）：三个 `@Riverpod(keepAlive: true)` 顶层函数。
@@ -241,7 +259,7 @@ bianbianbianbian/
     - 二级分类通过 `is_favorite` 标记收藏（全局共享）；
     - 已移除 `ledger_id` 与 `type`，并通过 `parent_key` 约束保证值域合法。
   - **`tables/account_table.dart`**（Step 1.3 / Step 7.3）：`AccountTable` + `@DataClassName('AccountEntry')`。`type` ∈ `cash` / `debit` / `credit` / `third_party` / `other`；`initial_balance` REAL 默认 0（信用卡可为负）；`include_in_total` 默认 1；`currency` 默认 `'CNY'`。账户不绑定账本——全局资源。**Step 7.3** 追加两列 `billing_day INTEGER` / `repayment_day INTEGER`（均 nullable，UI 校验取值 1-28），仅信用卡使用，仅展示用、不生成提醒。
-  - **`tables/transaction_entry_table.dart`**（Step 1.3）：`TransactionEntryTable` + `@DataClassName('TransactionEntryRow')`——**刻意不叫 `TransactionEntry`**，让位给 Step 2.1 的领域实体同名。`ledger_id` 声 FK，`amount` / `currency` / `occurred_at` NOT NULL，`fx_rate` 默认 1.0，`note_encrypted` / `attachments_encrypted` 为 BLOB（Phase 11 装密文，Phase 3 先明文/JSON）。两索引 `idx_tx_ledger_time (ledger_id, occurred_at DESC)` 与 `idx_tx_updated (updated_at)` 在 `MigrationStrategy` 里用 `customStatement` 建。
+  - **`tables/transaction_entry_table.dart`**（Step 1.3）：`TransactionEntryTable` + `@DataClassName('TransactionEntryRow')`——**刻意不叫 `TransactionEntry`**，让位给 Step 2.1 的领域实体同名。`ledger_id` 声 FK，`amount` / `currency` / `occurred_at` NOT NULL，`fx_rate` 默认 1.0，`note_encrypted` / `attachments_encrypted` 为 BLOB（**列名是历史遗留**——v1 设计曾打算装字段级加密密文，Phase 11 决策后改为明文：`note_encrypted` 暂未消费、`attachments_encrypted` 装附件元数据 JSON 数组明文 bytes，Phase 11 schema v10 升级后 shape 从 `["path"]` 升级为 `[{remote_key, sha256, ...}]`。详见 implementation-plan §11.2）。两索引 `idx_tx_ledger_time (ledger_id, occurred_at DESC)` 与 `idx_tx_updated (updated_at)` 在 `MigrationStrategy` 里用 `customStatement` 建。
   - **`tables/budget_table.dart`**（Step 1.3）：`BudgetTable` + `@DataClassName('BudgetEntry')`。`period` ∈ `monthly` / `yearly`；`category_id = NULL` 表示"总预算"（该账本该周期的总盘子）；`carry_over` 默认 0（Phase 6 Step 6.4 才真正使用）。
   - **`tables/sync_op_table.dart`**（Step 1.3）：`SyncOpTable` + `@DataClassName('SyncOpEntry')`——本机出站同步队列。`id` 用 `integer().autoIncrement()`（隐式主键，**不**再覆写 `primaryKey`；重复覆写会触发 drift_dev 的 `primary_key_and_auto_increment` 报错）。无 `updated_at` / `deleted_at` / `device_id` 三件套——这是队列而非实体，push 成功就物理删除条目。
   - **`dao/`**（Step 1.4）：5 个业务表 DAO，每个文件均为 `@DriftAccessor(tables: [XxxTable])` + `extends DatabaseAccessor<AppDatabase> with _$XxxDaoMixin`。所有 DAO 只暴露 **4 类方法**（实施计划 Step 1.4 硬性约束）：
@@ -257,7 +275,7 @@ bianbianbianbian/
   - **`repo_clock.dart`**：`typedef RepoClock = DateTime Function()`——仓库层"当前时间"注入点。生产路径默认 `DateTime.now`，测试路径注入固定时间戳。
   - **`entity_mappers.dart`**：drift 行对象 ↔ 领域实体的唯一映射桥接层。5 组 10 个函数（每组 `rowToXxx` + `xxxToCompanion`），完成 `int epochMs ↔ DateTime`、`int? 0/1 ↔ bool`、nullable 默认值应用。**这是 `lib/data/` 与 `lib/domain/` 之间唯一允许的桥接点**——UI 层只能通过抽象接口 import 仓库。
   - **5 个仓库**（一个抽象接口 + 一个 `LocalXxxRepository` 实现）：
-    - `ledger_repository.dart`：`listActive()` / `save(Ledger)` / `softDeleteById(id)`
+    - `ledger_repository.dart`：`listActive()` / `getById(id)` / `save(Ledger)` / `softDeleteById(id)` / `setArchived(id, bool)`。**名称唯一性强化**：`save()` 内查 `name` 命中未软删账本（排除自身 id）即抛 `LedgerNameConflictException`（同文件公开类，`Exception` 而非 `Error`）。Why: 删除账本即使云端有备份也找不回（V1 同步按 ledgerId 寻址，普通用户只识别名字），允许重名会导致切换/恢复时无法区分。已软删的账本不视为冲突——名字可被新账本立即复用；UI 在调用前已 trim 名字。
     - `category_repository.dart`：`listActiveByParentKey(parentKey)` / `listFavorites()` / `listActiveAll()` / `save(Category)` / `toggleFavorite(id, isFavorite)` / `softDeleteById(id)`
     - `account_repository.dart`：`listActive()` / `getById(id)` / `save(Account)` / `softDeleteById(id)`。**Step 7.2 新增 `getById`**：**不**过滤 `deleted_at`，软删账户也能查到——这是流水详情显示"（已删账户）"占位的实现路径（参见 `_TxTile.accountName`）。
     - `transaction_repository.dart`：`listActiveByLedger(ledgerId)` / `save(TransactionEntry)` / `softDeleteById(id)`
@@ -1022,7 +1040,7 @@ UI 层：
   - `ai_input_enabled INTEGER NULLABLE DEFAULT 0`：master switch。0/null = 关闭（确认卡片不显示 AI 增强按钮），1 = 开启（且需 endpoint/key/model 三件齐全才真正显示按钮）。
   - `ai_api_model TEXT NULLABLE`：用户填写的模型名（如 `gpt-4o-mini`）。
   - `ai_api_prompt_template TEXT NULLABLE`：用户填写的 prompt 模板（含 `{NOW}` / `{TEXT}` / `{CATEGORIES}` 占位符）；为空时使用 [kDefaultAiInputPromptTemplate] 兜底。
-  - 历史遗留列 `ai_api_endpoint TEXT` / `ai_api_key_encrypted BLOB`（自 Step 4.2 user_pref 表初次落库即声明但未消费）：Step 9.3 起被消费。`ai_api_key_encrypted` 在 V1 落 UTF-8 raw bytes（DB 由 SQLCipher 加密保护，故 at-rest 安全已由 DB 级别覆盖；Phase 11 会改为 BianbianCrypto 字段级加密，列名 `_encrypted` 是为该用法预留的）。
+  - 历史遗留列 `ai_api_endpoint TEXT` / `ai_api_key_encrypted BLOB`（自 Step 4.2 user_pref 表初次落库即声明但未消费）：Step 9.3 起被消费。`ai_api_key_encrypted` 在 V1 落 UTF-8 raw bytes（DB 由 SQLCipher 加密保护，故 at-rest 安全已由 DB 级别覆盖；列名 `_encrypted` 是历史遗留——曾计划用 BianbianCrypto 字段级加密，Phase 11 决策后整套字段级加密计划废弃，名字保留只是为了不动 schema）。
 - `lib/data/local/app_database.dart`：`schemaVersion` 从 v7 升 v8；`onUpgrade` 新增 `if (from < 8)` 分支：3 个 `m.addColumn(userPrefTable, ...)`。Schema 版本注释同步追加 v8 行。
 
 Provider 层 / 服务：
@@ -1078,3 +1096,189 @@ UI 层：
 - `flutter analyze` → No issues found。
 - `flutter test` → 360/360 通过（315 前 + 4 quick_confirm_sheet + 24 service + 10 providers + 3 page + 4 quick_confirm_sheet group 重构净增量 = 360）。
 - `dart run custom_lint` → 8 条 INFO（6 条预存 + 2 条新 `ai_input_settings_page_test.dart` 关于 `avoid_public_notifier_properties` / `scoped_providers_should_specify_dependencies`，仅测试 fake 风格，不影响生产）。
+
+
+## Phase 10 · Step 10.1+10.2 增量说明（2026-05-03）
+
+### 范围与重要决策
+
+- **同步语义选择**：implementation-plan §10.2 描述的是「sync_op 队列 + LWW 增量合并」模型；V1 选择**与「蜜蜂记账云同步方案.md」一致的快照模型**——账本视为一个 JSON 文件，每次上传 / 下载是整体覆盖。理由：① 实现简单可靠（无需冲突合并器）；② 与 BeeCount 用户预期一致；③ 单设备主力 + 备份恢复场景足够。多设备双向增量同步留给 V2，届时切换为队列模型时本接口（[SyncService]）保持稳定。
+- **不动 schema**：云配置（URL / Key / Path / Token 等）由 `flutter_cloud_sync` 包通过 `SharedPreferences` 持久化；`user_pref` 不增列。代价是配置在 Android 上是明文 XML、iOS 是 NSUserDefaults plist——V1 接受这个权衡（Phase 11 附件云同步同样**不**触动云配置存储，因为整体方向是"云是用户自有空间，明文可接受"；如果未来真要加密云配置，作为独立 Phase 重新评估，不在 Phase 11 范围内）。
+- **后端覆盖**：iCloud（仅 iOS）/ WebDAV / S3 / Supabase 共 4 种。**故意不开启 BeeCount Cloud**——它是 BeeCount 内部服务，本项目用户用不到。包内代码保留为死代码，不暴露任何 UI 入口。
+
+### 文件清单与职责
+
+#### `lib/features/sync/sync_service.dart`
+- **`SyncService`** 抽象：`upload(ledgerId)` / `downloadAndRestore(ledgerId)` / `getStatus(ledgerId, {forceRefresh})` / `deleteRemote(ledgerId)` / `clearCache()`。所有方法用 `String ledgerId`（与项目其余地方一致）。
+- **`LocalOnlySyncService`** 兜底实现：所有写操作抛 `UnsupportedError`；`getStatus` 返回 `SyncState.notConfigured` + 哨兵消息 `__SYNC_NOT_CONFIGURED__`（UI 层负责本地化）。
+- **`SnapshotSyncService`** 实现：包装 `CloudSyncManager<LedgerSnapshot>`。
+  - `_path(ledgerId)` 返回 `users/<userId>/ledgers/<ledgerId>.json`——userId 来自 `provider.auth.currentUser?.id`，无 auth 的 backend（WebDAV/iCloud/S3）退化为 `deviceId`。Supabase RLS 依赖 `(storage.foldername)[2] = auth.uid()`，所以 userId 必须等于 Supabase 的 auth.uid()。
+  - `upload`：拉本地快照 → manager.upload。
+  - `downloadAndRestore`：manager.download → 校验 `snapshot.ledger.id == ledgerId`（防错恢复别人的备份）→ `importLedgerSnapshot`。
+  - `getStatus`：拉本地快照（带 `exportedAt` 时间戳）→ manager.getStatus（指纹比对 + cache）。
+  - `deleteRemote`：catch `CloudStorageException` 视为幂等成功（云端已不存在）。
+
+#### `lib/features/sync/snapshot_serializer.dart`
+- **`LedgerSnapshot`** 不可变数据类（V1 = `version: 1`）：`ledger / categories / accounts / transactions / budgets` + `exportedAt / deviceId`。`fromJson` 校验版本号——大于 `kVersion` 抛 `FormatException`，避免新版备份被旧版误读出错。
+- **`LedgerSnapshotSerializer implements DataSerializer<LedgerSnapshot>`**：`serialize` = `jsonEncode`、`deserialize` = `jsonDecode`、`fingerprint` = `sha256(utf8(data))`。
+- **`exportLedgerSnapshot`** 顶层函数：从 5 个仓库拉**活跃**实体（不含已软删）→ 组装 `LedgerSnapshot`。**不**读 sync_op / fx_rate / user_pref。
+- **`importLedgerSnapshot`** 顶层函数：单事务内 → ① `delete .. where ledger_id = ?` 物理清空当前账本的 transactions / budgets（含已软删）→ ② `db.batch + InsertMode.insertOrReplace` 写 ledger / categories / accounts / transactions / budgets。**故意绕过 repository 层 `save`**——避免 import 触发 sync_op 队列累积，形成「刚下载的数据立刻又被排队上传」循环。categories / accounts 是全局资源，只 upsert 不 delete（避免破坏其他账本依赖）。
+
+#### `lib/features/sync/sync_provider.dart`
+全部用普通 `Provider` / `FutureProvider`（不走 `@riverpod` 代码生成，避免再产 .g.dart）。链式：
+- `cloudServiceStoreProvider`（thin wrapper of `CloudServiceStore`）
+- `activeCloudConfigProvider`（FutureProvider<CloudServiceConfig>，UI 与 sync 共享真值源）
+- `supabaseConfigProvider` / `webdavConfigProvider` / `s3ConfigProvider`（UI 配置对话框预填用）
+- `cloudProviderInstanceProvider`（FutureProvider<CloudProvider?>，根据 active config 调 `createCloudServices` 实例化；初始化失败返回 null 让上层走 LocalOnly 兜底；`ref.onDispose` 清理连接）
+- `authServiceProvider`（无云服务时返回 `NoopAuthService`）
+- `syncServiceProvider`（FutureProvider<SyncService>，组合 5 个 repository + DB + deviceId 构造 `SnapshotSyncService`）
+
+切换激活后端 / 保存配置后调 `ref.invalidate(activeCloudConfigProvider)` 即可下游链式重建。
+
+#### `lib/features/sync/sync_trigger.dart`（Step 10.7）
+
+把"5 个触发源"统一在同一个调度器下：① App 启动；② 前台恢复（`WidgetsBindingObserver.didChangeAppLifecycleState == resumed`）；③ 记账后 5s 防抖（`record_new_providers.save` 调用 `scheduleDebounced()`）；④ 首页下拉刷新（`record_home_page._onPullToRefresh` 调用 `trigger()` 并消费返回结果展示 SnackBar）；⑤ 15 分钟定时器（lifecycle resumed 启动、paused 停止）。
+
+- **`SyncTrigger extends Notifier<SyncTriggerState>`**：`build()` 注册 `ref.onDispose` 取消所有内部计时器。三大不变量：
+  1. **前一次未完成则跳过**——内部 `_running` 标记，命中即返回 `SyncTriggerOutcome.skipped`，不堆叠 upload。
+  2. **未配置云服务则跳过**——`syncServiceProvider` 解析为 `LocalOnlySyncService` 时直接返回 `SyncTriggerOutcome.notConfigured`，不抛异常打断调用方。
+  3. **网络错误归一化**——`_isNetworkError` 把 `SocketException` / `Failed host lookup` / `connection refused/reset/closed` / `HandshakeException` / `TimeoutException` / `Network is unreachable` / `No address associated` 共 9 类异常归类为 `networkUnavailable`。其他归 `failure`。任何意外异常（含 `MissingPluginException` 等测试环境平台报错）都被外层 try/catch 兜住——`unawaited(trigger(...))` 永远不冒烟。
+- **公开方法**：`trigger()` 主入口（5 种 outcome：success/networkUnavailable/failure/skipped/notConfigured）；`scheduleDebounced({delay = 5s})` 重置式防抖（重复调用取消旧 timer）；`startPeriodic({interval = 15min})` / `stopPeriodic()` 由生命周期管控；`cancelTimers()` 显式清理（`BianBianApp.dispose` 调用，因为 `ref.onDispose` 只在 ProviderContainer 关闭时跑）。
+- **`SyncTriggerState`**：`isRunning` / `isConfigured` / `lastSyncedAt` / `lastError` 4 字段。`copyWith` 支持 `clearError` / `clearLastSyncedAt` 显式清空（避免 `??` 把 `null` 当成"不改"）。
+- **`syncTriggerProvider`**：`NotifierProvider<SyncTrigger, SyncTriggerState>(() => SyncTrigger())`——故意没用 `Notifier.new` tear-off，因为 `SyncTrigger({SyncTriggerClock? clock})` 的可选命名参数与 `Notifier Function()` 签名不兼容。`SyncTriggerClock` typedef 注入测试。
+
+#### `lib/app/app.dart`（Step 10.7 升级）
+
+`BianBianApp` 由 `StatelessWidget` 升级为 `ConsumerStatefulWidget` + `WidgetsBindingObserver`：
+- `initState`：`addPostFrameCallback` 后读 `syncTriggerProvider.notifier`，`unawaited(trigger.trigger())` + `trigger.startPeriodic()`。延迟到首帧避免 Riverpod "watched a provider before init" 警告。
+- `didChangeAppLifecycleState`：`resumed` → trigger + startPeriodic；`paused/detached/hidden` → stopPeriodic；`inactive`（来电覆盖等短暂态）不动定时器。
+- `dispose`：`removeObserver` + `cancelTimers`（`// ignore: avoid_ref_inside_state_dispose`，INFO 级 lint）。
+- 新增 `enableSyncLifecycle = true` 构造参数：测试传 `false` 跳过整套生命周期，避免 `syncServiceProvider` 链触达 `SharedPreferences` 抛 `MissingPluginException`，以及悬挂的 `Timer.periodic(15min)` 让 `tester.pumpAndSettle()` 报"Timer still pending"。**新增 widget 测试若 pump `BianBianApp` 必须显式传 `false`**。
+
+#### `lib/features/record/record_home_page.dart`（Step 10.7 增量）
+
+- **`_SyncStatusBadge`**（ConsumerWidget）：watch `syncTriggerProvider` → 仅当 `isConfigured` 为真时渲染。4 态 icon：① running → `CircularProgressIndicator(14×14, strokeWidth=2)`；② lastError → `cloud_off_outlined` + error 色；③ lastSyncedAt → `cloud_done_outlined` + tertiary 色 + `_formatRelative(t)` 小字（"刚刚 / N 分钟前 / N 小时前 / N 天前 / MM-dd HH:mm"）；④ 其余 → `cloud_outlined` 暗色。tooltip 含错误消息或上次同步时间。点击 `context.push('/sync')`。`_TopBar` Row 里位置：`Spacer()` 之后、转账按钮之前。
+- **`_TransactionListState`**：空状态与列表态都包 `RefreshIndicator(onRefresh: _onPullToRefresh)`。空状态用 `ListView` + `AlwaysScrollableScrollPhysics` + `SizedBox(height: screenH*0.5)`，让无数据时也能下拉。`_onPullToRefresh` 调 `trigger()` → switch 5 种 outcome 显示 SnackBar：`success` "已同步" / `networkUnavailable` "网络不可用" / `failure` "同步失败：$msg" / `skipped` 与 `notConfigured` 静默退出。
+
+#### `lib/features/record/record_new_providers.dart`（Step 10.7 增量）
+
+`save()` 末尾追加 `ref.read(syncTriggerProvider.notifier).scheduleDebounced()`（`// ignore: avoid_manual_providers_as_generated_provider_dependency`，INFO 级 lint）。连续保存只触发最后一次同步，5 秒防抖窗口。
+
+#### `lib/features/sync/cloud_service_page.dart`
+「我的→云服务」页。结构：
+- **顶部全局开关 `SwitchListTile`**：绑定 `active.type != local`。OFF→`store.disableCloudSync()`（store 把当前非 local 类型记到 `_kLastActiveType`，再切 `local`）+ invalidate sync 链；ON→先尝试 `store.reactivateLast()` 还原上次激活的后端，找不到就回落 `store.findFirstReady()` 扫描首个 ready 的后端激活，仍然没有时弹"请先在下方任选一个云服务并完成配置"。**全局开关本身不再控制卡片可点性**——卡片就绪态完全由 per-后端 config + failed 集决定，开关 OFF 时只切到 LocalOnlySyncService 并隐藏 _SyncStatusCard。
+- **`_SyncStatusCard`**（开关 ON 时显示）：watch `currentLedgerIdProvider` + `syncServiceProvider` → `_SyncStatusBody`：
+  - 标题行：后端名 + obfuscated URL + 刷新状态按钮（`force=true`）。
+  - 状态行 `_StatusLine`：彩色圆点 + 文字（已同步/云端较新/本地较新/未配置等）+ 上次同步时间 + 本地/云端流水数 + 错误文案。
+  - 操作行：上传（FilledButton）/ 下载（OutlinedButton，二次确认）/ 删除云端（IconButton，二次确认）。`_busy` 状态守门防双击；操作后 `clearCache + _refresh(force: true)`。
+- **后端选择卡 4 个**：iCloud（仅 iOS）/ WebDAV / S3 / Supabase。每张卡片 watch 各自的 `supabase|webdav|s3ConfigProvider` + `cloudFailedBackendsProvider`，**就绪态 = `config.valid && !failed.contains(type)`**（iCloud 仅靠 `Platform.isIOS`）；未就绪卡片半透明且禁点，齿轮配置入口仍可用——保证"先配再启用"。点击就绪卡片走 `_switchService`，**必须检查 `store.activate(type)` 的 bool 返回值**：未配置 / 配置无效时返回 false 且不切换激活类型，UI 弹"切换失败：xxx 尚未配置..."并跳过 invalidate；只有 true 才弹"已切换到 xxx"+ invalidate 三个 provider（active config / auth / sync service）。后端名走 `_typeLabel` 中文化映射（避免直接打印枚举名）。点击齿轮打开配置对话框（_SupabaseConfigDialog / _WebdavConfigDialog / _S3ConfigDialog）。
+- **保存配置后自动跑连接测试**：`_saveConfig` 在 `store.saveOnly(cfg)` 之后调用 `_testConnection(cfg)`（包内 `createCloudServices` + 立即 `dispose`，10s 超时），结果通过 `store.markBackendTested(type, success)` 写入 failed 集（成功时移除条目）。S3.initialize 内部会真实调 `listObjects` 校验 endpoint/credentials/bucket，Supabase / WebDAV initialize 也走真实 I/O——所以测试 = "整链路真能跑通"。结果通过 SnackBar 反馈："配置已保存并通过连接测试" 或 "配置已保存，但连接测试失败：xxx"。失败的卡片副标题显示"上次连接测试失败，点击右侧设置重新配置"。
+- **三个对话框均提供"自定义名称"输入框**，统一写入 `CloudServiceConfig.customName`（顶层通用字段，非 S3 专属）。`obfuscatedUrl()` 在 Supabase / WebDAV / S3 三个 case 都优先返回 customName，回退到现有 host / endpoint 拼接——驱动状态卡标题。**S3 还有副作用**：`S3AuthService` 用 customName 作为 `CloudUser.id`，把云端路径前缀从 `users/s3-<accessKey>/...` 改为 `users/<customName>/...`，让 S3 备份目录变得人类可读；Supabase 受 RLS 约束（`users/<auth.uid()>/...`）不能动路径，WebDAV 路径已由 username 决定也不动——它们的 customName **仅影响标题**。`fromJson` 优先读 `customName` 键、回落老键 `s3CustomName`，兼容升级前已落盘的 S3 配置。
+
+### `packages/flutter_cloud_sync*` 子包（vendored）
+
+来自 BeeCount 的多后端云同步框架，作为 `path:` 依赖直接集成（不通过 pub.dev）。
+
+| 子包 | 职责 |
+| :-- | :-- |
+| `flutter_cloud_sync` | 核心抽象：`CloudProvider / CloudAuthService / CloudStorageService / CloudSyncManager<T> / DataSerializer<T> / CloudServiceConfig / CloudServiceStore / SyncStatus`。`CloudSyncManager` 用 30 秒 TTL 缓存 `getStatus`。`CloudServiceStore` 维护 `_kActiveType` + `_kLastActiveType` + `_kFailedBackends`：`disableCloudSync` 把当前非 local 类型记到 last 再切 local；`reactivateLast` 读 last 并复用 `activate`（若配置失效返回 null 让 UI 提示）；`findFirstReady` 按 s3>supabase>webdav 顺序扫描首个 `activate` 成功且 **不在 failed 集**的后端，作为 ON 开关的兜底；`markBackendTested(success)` / `failedBackends()` 维护 `_kFailedBackends` 持久化集合（连接测试失败的后端落盘，`success=true` 时清除）；`activate(type)` 在配置缺失/无效时返回 false——**调用方必须检查**。 |
+| `flutter_cloud_sync_supabase` | Supabase backend（auth + storage + database + realtime）。 |
+| `flutter_cloud_sync_webdav` | WebDAV backend（无 auth，URL+username+password 直连）。 |
+| `flutter_cloud_sync_icloud` | iCloud Drive backend（仅 iOS / iPadOS，原生 plugin）。 |
+| `flutter_cloud_sync_s3` | S3 兼容 backend（Cloudflare R2 / AWS S3 / MinIO 等）。 |
+
+子包内部仍带 `BeeCountCloudProvider`（独立 BeeCount 后端的实现），但项目层未暴露 UI 入口、`provider_factory.createCloudServices` 仍含 `case beecountCloud` 分支但永远不会被触发（active config 不会是该类型）。视为死代码保留。
+
+`pubspec.yaml` 新增 `crypto: ^3.0.3` 依赖（用于 `LedgerSnapshotSerializer.fingerprint` 的 SHA256）；其他依赖均已存在。
+
+### Phase 10 修复历史与「沙盒污染」事件
+
+Phase 10 实施过程中，前一轮的 agent 留下了破坏：① 简化重写了 `lib/data/local/providers.dart` 与 `lib/data/repository/providers.dart`（去掉 `deviceIdProvider / defaultSeedProvider / 5 个 repo provider / currentLedgerIdProvider`）；② 删除了对应的 `.g.dart` 产物；③ 在 `user_pref` 加了未消费的 `sync_provider_type/config` 两列并升 schema 到 v9；④ `sync_engine.dart` 与 `sync_provider.dart` 类型全错（`int ledgerId` vs `String id`，drift 字段名错，`AccountEntry.fromJson` 等不存在）。导致全项目 80+ 编译错误，无法运行。
+
+修复策略：① 用 `git checkout HEAD --` 恢复 4 个 providers 文件到 Step 9.3 基线；② 回滚 schema v9 升级，保持 v8；③ 删除 `sync_engine.dart`，重写 `sync_service.dart` / `snapshot_serializer.dart` / `sync_provider.dart`；④ 修补 `cloud_service_page.dart` 的 import + 加 status 卡片；⑤ 加 `crypto` 依赖。结果：360/360 测试通过，主项目 lib/ 零 errors 零 warnings。
+
+### 待办（Phase 10 后续）
+
+- **Step 10.3-10.6** 已经被 V1 快照模型覆盖（包内 4 个 backend 实现都可用）。后续若要走增量队列模型（V2），实现 sync_op 消费器 + LWW 合并器，并替换 `SnapshotSyncService` 为 `IncrementalSyncService`。
+- **Step 10.7（已完成）**：5 个触发源由 `SyncTrigger` 调度器统一管理；首页顶栏渲染 `_SyncStatusBadge`；下拉刷新走 `trigger()`。Phase 11 附件云同步在 `SnapshotSyncService.upload` 内部前置一段附件二进制上传，`SyncTrigger` 接口完全不动。
+- **Phase 11 附件云同步（待实施）**：见 implementation-plan §11。核心：`CloudStorageService` 加 `uploadBinary` / `downloadBinary` / `listBinary` 三个方法（4 个 backend 实现）+ `attachments_encrypted` BLOB shape v9→v10 升级（路径数组 → 元数据对象数组）+ 上传管线接入 `SnapshotSyncService.upload` 前置阶段 + 懒下载与本地缓存（500MB LRU）+ GC 与 7 天孤儿 sweep。**全程明文**——云端是用户自有空间，无加密层。原 Phase 11「快照加密 + 同步码」整段废弃。
+
+---
+
+## Step 3.6 + 3.7 补回（2026-05-03）
+
+### 改动概要
+
+Step 3.6（首页流水搜索）与 3.7（首页月份选择器）此前在 Phase 3 收尾被跳过，现一并补齐：
+
+- `lib/features/record/record_search_filters.dart`（新建）：`SearchQuery` 数据类（关键词 / 起止日期 / 类型筛选 / 金额上下限）+ `SearchTypeFilter` 枚举（all/expense/income/transfer）+ `searchTransactions` 纯函数（在内存中过滤当前账本未删流水；关键词同时匹配备注 `tags` / 分类名 / 账户名含 `toAccountId`）。
+- `lib/features/record/record_search_page.dart`（新建）：`RecordSearchPage` ConsumerStatefulWidget，结构 = 关键词 TextField + ExpansionTile（日期范围 / SegmentedButton 类型 / 金额上下限） + `_ResultsView`。空查询时显示「输入关键词或筛选条件后开始搜索」，命中无结果时显示「没有找到相关流水」。结果项按 `occurredAt` 倒序，行内拼接 `日期 · 账户名 · 备注` 副标题。AppBar 右侧 `Icons.refresh` 重置全部条件。
+- `lib/features/record/month_picker_dialog.dart`（新建）：`showMonthPicker` 顶层函数 + `_MonthPickerDialog` 私有 StatefulWidget。年箭头切年 + 4×3 月份网格 + 取消/确定双按钮，返回 `DateTime(year, month)`（day 固定为 1，对齐 `RecordMonthProvider`）。`firstDate` 默认 `DateTime(2000)`，`lastDate` 默认 `now.year + 5`。
+- `lib/features/record/record_home_page.dart`：
+  - `_TopBar` 搜索图标 `onPressed` 由「占位」改为 `context.push('/record/search')`。
+  - `_MonthBar` 中间月份 `Text` 包裹一层 `InkWell`（key=`record_month_label`），点击调 `showMonthPicker` → `recordMonthProvider.notifier.jumpTo(picked)`。
+- `lib/app/app_router.dart`：新增 `GoRoute('/record/search')` → `RecordSearchPage`。
+
+### 设计决策
+
+- **搜索的数据加载在 UI 层 `FutureBuilder` 内做，不抽 Riverpod Provider**：搜索页 query 是页面局部 state，每次过滤都依赖最新的 query；如果做成 `family` provider 又要把 query 哈希成 key，反而复杂。直接 `_ResultsView.FutureBuilder` 拉一次 listActiveByLedger + listActiveAll + listActive 后纯函数过滤即可，V1 数据量在内存里完全可接受。
+- **空查询 `SearchQuery.isEmpty == true` 时返回空列表**：避免一打开搜索页就把整本账本砸到屏幕——这不是搜索意图，引导用户输入条件。
+- **月份选择器没引入第三方包**：原生 `AlertDialog` + `GridView.count(crossAxisCount: 4)` 即可拼出。`showDatePicker(initialDatePickerMode: DatePickerMode.year)` 强迫用户先选年再选日，跨年跳转体验不佳，故弃用。
+- **月份选择器返回值的 day 固定为 1**：与 `RecordMonth.build` 的语义对齐（`DateTime(now.year, now.month)`，day 默认 1）。`jumpTo` 接受任意 day 但内部按 `DateTime(day.year, day.month)` 收敛。
+
+### 测试
+
+- `test/features/record/record_search_filters_test.dart`（11 用例）：覆盖空查询返回空、关键词匹配备注/分类/账户/转账目标账户、大小写不敏感、日期闭区间、类型筛选、金额范围、多维度交集、`SearchQuery.copyWith` clear 标志位、`isEmpty` 边界。
+- `test/features/record/record_search_page_test.dart`（3 用例）：空查询提示、关键词命中、空结果提示——使用 `_FakeTransactionRepository` / `_FakeCategoryRepository` / `_FakeAccountRepository` 三个本地 fake，不触达真实 DB。
+- `test/features/record/month_picker_dialog_test.dart`（3 用例）：默认高亮初始月份 + 确认返回该月份、左右切年 + 选月 + 确认返回新月、取消按钮返回 null。
+- 全量回归：411/411 测试通过。
+
+### 给后续开发者的备忘
+
+- **关键词匹配范围**：当前命中备注（`tx.tags`）+ 分类名 + 账户名（含转账目标）。Phase 11 附件云同步**不**改 `tags` / `note_encrypted` 列的语义（原计划的字段级加密已废弃），只升级 `attachments_encrypted` BLOB 的 JSON shape——搜索逻辑无需任何调整。
+- **搜索粒度限定为「当前账本」**：`_loadAndSearch` 通过 `currentLedgerIdProvider` 拿当前账本 id 后只查该账本的流水。如果将来需要「跨账本搜索」，应在查询条件加 `ledgerScope: SearchLedgerScope.current/all`，并在 service 层把 `txRepo.listActiveByLedger(ledgerId)` 改为遍历所有未归档账本聚合。
+- **月份选择器的边界**：`firstDate` / `lastDate` 都按"年-月"粒度比较（day 不参与），所以选择 1 月 / 12 月时不会被边界 day 卡住。`_MonthCell.enabled = false` 时点击不响应、显示灰色。
+- **路由 `/record/search` 由首页搜索图标驱动**：未来如果在统计页或账本页加二级跳转，遵循同一路由约定。
+
+### 续作：搜索结果点击复用首页详情/编辑/复制/删除（2026-05-03）
+
+实施完成后追问"搜索结果点击能打开流水详情吗？对搜索结果进行复制、编辑、删除"，做了以下二次重构：
+
+- 新增 `lib/features/record/record_tile_actions.dart`，把原本散落在 `record_home_page.dart` 内 `_TxTile.onTap` 的「详情底表 + 三动作流程」抽到共享 helper：
+  - `RecordDetailAction` 枚举（原 `_DetailAction`，公开化）；
+  - `RecordDetailSheet` widget（原 `_RecordDetailSheet`，公开化，渲染金额 + 元数据 + 附件 + 三个底部按钮）；
+  - `openRecordTileActions(...)` 顶层函数：弹详情底表 → switch 处理编辑 / 复制 / 删除（`preloadFromEntry` + 二次 modal sheet 编辑表单 + 二次确认 + `softDeleteById` + provider invalidate + SnackBar）；
+  - `inferParentKeyForTx(category, tx)`：原 `_TxTile._inferParentKey`，公开化共用。
+- `record_home_page.dart`：`_TxTile.onTap` 改为单行 `await openRecordTileActions(...)`，删除 ~250 行重复实现；移除随之失效的 `dart:convert` / `dart:io` import；`formatTxAmountForDetail` 摘掉 `@visibleForTesting` 注解（因为 helper 文件需要在 lib/ 内调用它，跨文件访问）。`_RecordBottomSheetPage` 仅留给 FAB 入口使用，参数收窄到无。
+- `record_search_page.dart`：`_ResultTile` 升级为 `ConsumerWidget`，`onTap` 调 `openRecordTileActions(...)` + 注入 `onChanged` 回调；`_ResultsView` 升级为 `ConsumerStatefulWidget` 持有 `_refreshTick`，编辑/删除完成后 bump 触发 `FutureBuilder` 重拉数据（搜索数据是 page-local future，**不**在 `recordMonthSummaryProvider` 链上，所以无法靠 `ref.invalidate` 自动刷新——必须显式 bump tick）。
+- 测试新增 2 用例 → `record_search_page_test.dart` 升至 5 用例：① 点击命中结果弹详情底表（含 `Key('detail_amount')` + 复制 / 编辑 / 删除三按钮）；② 详情中点删除 + 二次确认对话框 → 仓库收到 `softDeleteById('t1')` + 列表里该流水消失、其他流水不受影响。`_FakeTransactionRepository` 改成模拟 DB：`listActiveByLedger` 排除 `softDeletedIds`，`softDeleteById` 写入该集合。
+
+**为什么搜索页要自己 bump tick 而不能 invalidate provider**：搜索查询是页面 local state（`SearchQuery`），结果 `_SearchData` 是 `_ResultsView.FutureBuilder` 内的 page-local future，没挂在 Riverpod provider 上——`openRecordTileActions` 内部 `ref.invalidate(recordMonthSummaryProvider)` 等只刷新首页，不影响搜索页。所以必须在 helper 调用完毕后通过 `onChanged` 回调让搜索页主动重拉。如果将来把搜索结果做成 `family` provider，可改为 `ref.invalidate(recordSearchResultsProvider(query))`，但目前 V1 数据量在内存里直接过滤更简单。
+
+
+## Phase 11 配套文档（2026-05-03 起持续更新）
+
+非代码资产，但**仅 Supabase 后端用户在启用附件云同步前需要手动跑一遍**，独立成段便于检索。其他 3 个 backend（iCloud / WebDAV / S3）无需后端配置。
+
+### `docs/supabase-setup.sql`（2026-05-03 新增）
+
+- **作用**：仅当用户选用 Supabase 作为云同步 backend 时，在自己的 Supabase 项目里跑一次的初始化脚本。覆盖：
+  1. 创建/更新两个私有 bucket：`beecount-backups`（账本快照，Phase 10 已上线）+ `attachments`（附件本体明文，Phase 11 新增）。
+  2. 显式 `enable row level security` on `storage.objects`（默认就开，写出来便于审计）。
+  3. 8 条 RLS 策略：每个 bucket 各 4 条（SELECT / INSERT / UPDATE / DELETE），统一校验 `(storage.foldername(name))[1] = 'users' AND (storage.foldername(name))[2] = auth.uid()::text`。UPDATE 策略同时挂 USING + WITH CHECK，防止用户通过改名把别人对象搬到自己路径。
+  4. 验证段（4 个查询）+ 客户端测试脚本骨架（Phase 11 落地时配 `test/integration/supabase_rls_test.dart`）+ 注释掉的回滚段。
+- **加密说明**：脚本不涉及任何加密——所有附件以**原始格式**（`.jpg` / `.png` / `.heic` / `.pdf` 等）明文存放在 `attachments` bucket。原因：用户的 Supabase 项目是用户自有空间，RLS 已隔离不同 user_id；明文存放允许用户通过 Supabase Dashboard 直接预览附件，运维友好。如果未来要加密，作为独立 Phase 重新评估，本脚本不需改。
+- **路径约定**：与 `lib/features/sync/sync_service.dart` 的 `_path()` + Phase 11 `attachmentStorage` 路径生成器一致——backups 走 `users/<uid>/ledgers/<ledgerId>.json`，attachments 走 `users/<uid>/attachments/<txId>/<sha256><ext>`（`<ext>` 是原始扩展名，**不**追加 `.enc`）。两者 RLS 检查共享 `folder[2] = uid`。
+- **幂等性**：`bucket` 用 `INSERT ... ON CONFLICT (id) DO UPDATE`；`policy` 用 `DROP IF EXISTS` 后再 `CREATE`。整个文件可重复执行不会出错。
+- **执行方式**：推荐 Supabase Dashboard → SQL Editor 分段贴进去跑（每段一次 Run，便于看每段影响）；也可走 `supabase db execute --file docs/supabase-setup.sql`。**App 内不自动执行**——避免持有 service_role key 与误改用户其他业务表。
+- **必做的人工验证**（脚本里写了详细步骤，简要复述）：
+  1. 跑文件末尾的 V4 查询 → 应返回 8 条策略。
+  2. 在 Authentication → Users 建 `a@test.local` + `b@test.local` 两个账户。
+  3. 用 A 的 access_token 调 `storage.from('attachments').uploadBinary(...)`：写自己路径成功（200），写 B 路径被拒（403）。
+- **故意没做的事**（决策记录，避免后人重复试错）：
+  - **不在 SQL 内做 `file_size_limit` / `allowed_mime_types` 限制**：客户端 `AttachmentUploader`（implementation-plan §11.2）做单文件 ≤ 10MB 约束 + 转 JPEG q=85 压缩，server 端不重复约束便于未来调整。
+  - **`folder[3]` 不参与 RLS**：`users/<uid>/foo.txt` 这种"路径不规范但 uid 正确"的请求会放行——简化策略，路径合规性交给 `AttachmentUploader` 强制。
+  - **anon 角色无任何策略**：所有策略 `to authenticated`——未登录的 anon key 持有者读不到任何对象，这是预期行为。
+  - **附件不加密**：见上面"加密说明"。即使 RLS 兜底，用户的 Supabase 账户被攻破或 backend 被入侵 = 图片可被读，文档与设置项需明示「附件不加密。请确保使用受信任的云端账户。」
+
+

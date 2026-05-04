@@ -55,6 +55,17 @@ class _FakeLedgerRepository implements LedgerRepository {
   @override
   Future<Ledger> setArchived(String id, bool archived) =>
       fail('FakeLedgerRepository.unsaved');
+
+  @override
+  Future<List<Ledger>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) => fail('FakeLedgerRepository.unsaved');
+  @override
+  Future<int> purgeById(String id) => fail('FakeLedgerRepository.unsaved');
+  @override
+  Future<int> purgeAllDeleted() => fail('FakeLedgerRepository.unsaved');
+  @override
+  Future<List<Ledger>> listExpired(DateTime cutoff) async => const [];
 }
 
 class _FakeTransactionRepository implements TransactionRepository {
@@ -77,6 +88,20 @@ class _FakeTransactionRepository implements TransactionRepository {
   @override
   Future<int> softDeleteByLedgerId(String ledgerId) =>
       fail('FakeTransactionRepository.unsaved');
+
+  @override
+  Future<List<TransactionEntry>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) =>
+      fail('FakeTransactionRepository.unsaved');
+  @override
+  Future<int> purgeById(String id) =>
+      fail('FakeTransactionRepository.unsaved');
+  @override
+  Future<int> purgeAllDeleted() =>
+      fail('FakeTransactionRepository.unsaved');
+  @override
+  Future<List<TransactionEntry>> listExpired(DateTime cutoff) async => const [];
 }
 
 class _FakeAccountRepository implements AccountRepository {
@@ -105,6 +130,20 @@ class _FakeAccountRepository implements AccountRepository {
   @override
   Future<void> softDeleteById(String id) =>
       fail('FakeAccountRepository.unsaved');
+
+  @override
+  Future<List<Account>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) =>
+      fail('FakeAccountRepository.unsaved');
+  @override
+  Future<int> purgeById(String id) =>
+      fail('FakeAccountRepository.unsaved');
+  @override
+  Future<int> purgeAllDeleted() =>
+      fail('FakeAccountRepository.unsaved');
+  @override
+  Future<List<Account>> listExpired(DateTime cutoff) async => const [];
 }
 
 // ---- 测试辅助 ----
@@ -150,7 +189,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();
@@ -166,7 +205,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();
@@ -186,7 +225,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();
@@ -206,7 +245,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();
@@ -271,7 +310,7 @@ void main() {
           statsHeatmapCellsProvider.overrideWith((ref) async => []),
           activeBudgetsProvider.overrideWith((ref) async => []),
         ],
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();
@@ -330,7 +369,7 @@ void main() {
           statsHeatmapCellsProvider.overrideWith((ref) async => []),
           activeBudgetsProvider.overrideWith((ref) async => []),
         ],
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();
@@ -410,7 +449,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const BianBianApp(),
+        child: const BianBianApp(enableSyncLifecycle: false),
       ),
     );
     await tester.pumpAndSettle();

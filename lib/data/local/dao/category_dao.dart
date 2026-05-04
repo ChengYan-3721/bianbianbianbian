@@ -35,6 +35,22 @@ class CategoryDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// **垃圾桶专用**（Phase 12 Step 12.1）。所有已软删的分类，按 `deleted_at`
+  /// 倒序——最近删的靠前。
+  Future<List<CategoryEntry>> listDeleted() {
+    return (select(categoryTable)
+          ..where((t) => t.deletedAt.isNotNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.deletedAt)]))
+        .get();
+  }
+
+  /// **垃圾桶定时清理专用**（Phase 12 Step 12.3）。`deleted_at <= cutoff` 的全部软删行。
+  Future<List<CategoryEntry>> listExpired(int cutoffMs) {
+    return (select(categoryTable)
+          ..where((t) => t.deletedAt.isNotNull() & t.deletedAt.isSmallerOrEqualValue(cutoffMs)))
+        .get();
+  }
+
   /// 收藏分类（全局），按 `sort_order` 升序。
   Future<List<CategoryEntry>> listFavorites() {
     return (select(categoryTable)
@@ -91,5 +107,15 @@ class CategoryDao extends DatabaseAccessor<AppDatabase>
   /// 业务路径必须走 [softDeleteById]。
   Future<int> hardDeleteById(String id) {
     return (delete(categoryTable)..where((t) => t.id.equals(id))).go();
+  }
+
+  /// **垃圾桶恢复专用**（Phase 12 Step 12.2）。
+  Future<int> restoreById(String id, {required int updatedAt}) {
+    return (update(categoryTable)..where((t) => t.id.equals(id))).write(
+      CategoryTableCompanion(
+        deletedAt: const Value(null),
+        updatedAt: Value(updatedAt),
+      ),
+    );
   }
 }

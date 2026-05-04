@@ -16,6 +16,7 @@ import '../../domain/entity/transaction_entry.dart';
 import '../budget/budget_providers.dart';
 import '../settings/settings_providers.dart';
 import '../stats/stats_range_providers.dart';
+import '../sync/sync_trigger.dart';
 import 'record_providers.dart';
 
 part 'record_new_providers.g.dart';
@@ -405,6 +406,11 @@ class RecordForm extends _$RecordForm {
     ref.invalidate(statsRankItemsProvider);
     ref.invalidate(statsHeatmapCellsProvider);
     ref.invalidate(budgetProgressForProvider);
+
+    // Step 10.7：记账后 5 秒静默防抖触发同步。连续保存只触发最后一次。
+    // SyncTrigger 内置「未配置云服务则跳过」保护——本地模式下相当于 no-op。
+    // ignore: avoid_manual_providers_as_generated_provider_dependency
+    ref.read(syncTriggerProvider.notifier).scheduleDebounced();
 
     // 持久化本次使用的钱包
     if (d.accountId != null) {
