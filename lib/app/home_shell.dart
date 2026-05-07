@@ -163,6 +163,12 @@ class _MeTab extends StatelessWidget {
             onTap: () => context.push('/import-export'),
           ),
           ListTile(
+            leading: const Icon(Icons.lock_outline),
+            title: const Text('应用锁'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/app-lock'),
+          ),
+          ListTile(
             leading: const Icon(Icons.delete_outline),
             title: const Text('垃圾桶'),
             trailing: const Icon(Icons.chevron_right),

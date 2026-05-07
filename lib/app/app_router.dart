@@ -9,6 +9,7 @@ import '../features/import_export/export_page.dart';
 import '../features/import_export/import_export_page.dart';
 import '../features/import_export/import_page.dart';
 import '../features/ledger/ledger_edit_page.dart';
+import '../features/lock/app_lock_settings_page.dart';
 import '../features/record/category_edit_page.dart';
 import '../features/record/category_manage_page.dart';
 import '../features/record/category_reorder_page.dart';
@@ -114,6 +115,10 @@ final GoRouter goRouter = GoRouter(
     GoRoute(
       path: '/settings/attachment-cache',
       builder: (context, state) => const AttachmentCachePage(),
+    ),
+    GoRoute(
+      path: '/settings/app-lock',
+      builder: (context, state) => const AppLockSettingsPage(),
     ),
     GoRoute(
       path: '/sync',

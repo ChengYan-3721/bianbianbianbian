@@ -62,6 +62,9 @@ dependencies:
   # Step 11.2: MIME 推断（按扩展名 → image/jpeg / image/png …）
   # 用于 attachment_meta.mime 字段；纯 Dart，不引入 native 依赖。
   mime: ^2.0.0
+  # Step 13.3: 系统文件选择器，用于导入 .json / .csv / .bbbak 备份文件。
+  # 跨平台（Android / iOS / 桌面），返回文件绝对路径供 dart:io 读取。
+  file_picker: ^11.0.0
   flutter_localizations:
     sdk: flutter
 

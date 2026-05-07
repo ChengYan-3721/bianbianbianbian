@@ -8,7 +8,7 @@
 
 ---
 
-## 当前文件一览（Phase 13.4 · 三方模板导入完成后）
+## 当前文件一览（Phase 14.2 · 应用锁生物识别完成后）
 
 ```
 bianbianbianbian/
@@ -132,7 +132,13 @@ bianbianbianbian/
 │     │  ├─ trash_providers.dart           kTrashRetention=30d + trashDaysLeft 纯函数 + 5 个 FutureProvider.autoDispose（TX/Cat/Acc/Ledger/Budget）
 │     │  ├─ trash_gc_service.dart          TrashGcService.gcExpired(now) 端到端硬删 + TrashGcReport（Phase 11.4 加 db / attachmentStorage 可选 named param + remoteAttachmentsDeleted/Failed 字段，硬删流水时先按 remoteKey 列表 storage.delete 再清 documents）
 │     │  └─ trash_page.dart                TrashPage（4 Tab：流水/分类/账户/账本）+ AppBar 一键清空 + 行级恢复/永久删除二次确认
-│     ├─ lock/                  [空] 应用锁
+│     ├─ lock/                  Step 14.1 + 14.2 已填充：PIN（4-6 位 + PBKDF2-HMAC-SHA256 + 16B salt + 3 次错误冷却 30s）+ 生物识别（local_auth 3.x，启用后优先弹系统面板，cancelled/lockedOut/notAvailable/failed 各自降级到 PIN）
+│     │  ├─ biometric_authenticator.dart Step 14.2 BiometricAuthenticator 抽象 + LocalAuthBiometricAuthenticator 生产实现（local_auth 3.x · LocalAuthException → BiometricResult cancelled/lockedOut/notAvailable/failed/success 5 态映射） + FakeBiometricAuthenticator @visibleForTesting (deviceSupported/enrolled/nextResult 三旋钮 + authenticateCalls/lastReason 断言)
+│     │  ├─ pin_credential.dart        PinCredential 数据类 + PinCredentialStore 抽象 + FlutterSecurePinCredentialStore 生产实现 + InMemoryPinCredentialStore @visibleForTesting + generatePinSalt / hashPin / verifyPin / validatePinFormat / 常量时间比较；常量 kPinMinLength=4 / kPinMaxLength=6 / kPinPbkdf2Iterations=100000 / kPinSaltBytes=16；secure_storage 5 个独立条目（salt / hash / iterations / enabled + Step 14.2 biometric_enabled）
+│     │  ├─ app_lock_providers.dart    pinCredentialStoreProvider + appLockClockProvider + appLockEnabledProvider (FutureProvider) + PinAttemptSession (StateNotifier；isCoolingDown / cooldownRemainingSeconds / tryVerify / reset) + AppLockController (setupPin/changePin/disable/forgetPinAndDisable + Step 14.2 setBiometricEnabled · disable/forgetPinAndDisable 同步清生物识别开关) + biometricAuthenticatorProvider / biometricCapabilityProvider (FutureProvider) / biometricEnabledProvider + BiometricCapability 数据类 + 常量 kPinFailureLimit=3 / kPinCooldownDuration=30s
+│     │  ├─ pin_setup_page.dart        PinSetupPage（PinSetupMode setup/change 两态 · 两步输入：先输 → 再确认 · 不一致回退到第一步并清空两个 controller · 调用 controller.setupPin/changePin · 成功 pop(true)）
+│     │  ├─ pin_unlock_page.dart       PinUnlockPage（subtitle 注入 · allowBiometric 入参："持有人确认"路径传 false · 冷却中输入框 + 按钮置灰 + 1s Timer.periodic 倒计时 setState · Step 14.2 init 阶段自动尝试生物识别一次 + "使用指纹/面容"按钮手动重试 · cancelled 静默降级 · lockedOut/notAvailable/failed 各自文案 · 失败展示"剩余尝试次数 X"或"已进入冷却"· 成功 pop(true)）
+│     │  └─ app_lock_settings_page.dart 「我的→应用锁」设置页（SwitchListTile 启用开关：关→开 push PinSetupPage / 开→关 push PinUnlockPage 验证（allowBiometric=false）· 修改 PIN 入口（先 unlock allowBiometric=false 再 setup mode=change）· Step 14.2 _BiometricToggle 三态：硬件不支持 / 未录入 / 可用，开启需弹一次系统面板二次确认 + SnackBar 反馈 · 忘记 PIN AlertDialog 二次确认 · 安全说明区）
 │     ├─ import_export/         Phase 13 Step 13.1 + 13.2 + 13.3 + 13.4 已完成：CSV / JSON / .bbbak 导出 + 本 App 三种格式导入向导 + 钱迹 / 微信 / 支付宝 CSV 自动识别
 │     │  ├─ export_service.dart    BackupFormat (csv/json/bbbak) / BackupScope / BackupDateRange + MultiLedgerSnapshot 信封 + filterSnapshotByRange + encodeBackupCsv / encodeBackupJson / buildBackupFileName + BackupExportService（writeExportFile / exportCsv / exportJson / exportBbbak / shareFile）
 │     │  ├─ bbbak_codec.dart       Step 13.2 BbbakCodec（encode/decode/inspect + magic 'BBBK' / version=1 / salt 16B / packed AES-GCM body）+ BbbakFormatException
@@ -213,6 +219,11 @@ bianbianbianbian/
 │  │  ├─ bbbak_codec_test.dart               Step 13.2 BbbakCodec 单元测试（18 用例：参数校验 / 文件结构（魔数+版本+salt+body）/ 短长明文 roundtrip / 含中文 emoji 换行 / 同密码两次产出不同 packed / 错误密码失败 / 大小写敏感 / 密文 salt 篡改失败 / 短文件 / 魔数错 / 版本不识别 / inspect 边界 / JSON 集成 round-trip）
 │  │  ├─ import_service_test.dart            Step 13.3 BackupImportService 单元测试（28 用例：detectFileType / parseCsvRows / stripUtf8Bom / stripLedgerEmoji / JSON preview + 3 strategy / CSV header + fallback / .bbbak roundtrip + iterations:1）
 │  │  └─ third_party_template_test.dart      Step 13.4 三方模板单元测试（37 用例：detectThirdPartyTemplate 4 模板形态 + 本 App CSV 不被误命中 / mapKeywordToCategory 7 类别 / parseAmount 7 形态 / parseFlexibleDate 5 形态 / 微信 50+ 行样本 + 状态过滤 + 中性过滤 / 支付宝 50+ 行样本 + 退款过滤 + 未命中归"其他" / 钱迹 50+ 行样本 + 转账行 + 二级分类直接成 categoryName / 三模板 apply 端到端落到 fallback ledger）
+│  ├─ features/lock/            Step 14.1 + 14.2 PIN 凭据 / 冷却 / 设置页 / 生物识别（68 用例）
+│  │  ├─ biometric_authenticator_test.dart    Step 14.2 FakeBiometricAuthenticator 单元测试（6 用例：默认 success / deviceSupported / enrolled 旋钮 / nextResult 5 态 / authenticateCalls 计数 / lastReason 透传）
+│  │  ├─ pin_credential_test.dart            validatePinFormat / generatePinSalt 熵 / hashPin + verifyPin 往返 / 错 PIN / 不同 salt / 篡改 iterations / constantTimeEquals / PinCredential ==hashCode / InMemoryPinCredentialStore + Step 14.2 biometric storage roundtrip（21 用例）
+│  │  ├─ app_lock_providers_test.dart        PinAttemptSession.tryVerify 冷却语义 + AppLockController setupPin/changePin/disable/forgetPinAndDisable + appLockEnabledProvider invalidate + Step 14.2 biometricCapabilityProvider 三态 + biometricEnabledProvider invalidate + setBiometricEnabled + disable/forgetPinAndDisable 同步清生物识别开关（共 24 用例）
+│  │  └─ app_lock_settings_page_test.dart    PinSetupPage 两步一致 / 不一致回退 / 长度过短 + PinUnlockPage 正确 + 3 次错误冷却文案 + AppLockSettingsPage 默认 OFF / 拨开开关 push setup → ON / 忘记 PIN 二次确认 + Step 14.2 _BiometricToggle 三态（不支持/未录入/可用）+ 拨开 success → persist + cancelled SnackBar + 拨关不弹面板 + PinUnlockPage 5 路径（success/cancelled/lockedOut/disabled/不支持/allowBiometric=false）（17 用例）
 │  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例；Step 10.7 起所有 BianBianApp 实例均传 enableSyncLifecycle: false）
 ├─ memory-bank/
 │  ├─ design-document.md        产品设计（权威来源）
@@ -1870,3 +1881,175 @@ apply 阶段（共享 13.3 _applyCsv）：
 
 
 
+## Phase 14.1 架构决策（2026-05-07）
+
+### 文件归属
+
+`lib/features/lock/` 全新落地（之前仅 `.gitkeep`）：
+
+| 文件 | 角色 |
+| :-- | :-- |
+| `pin_credential.dart` | PIN 哈希存取层 + 数据类 + secure storage 抽象 |
+| `app_lock_providers.dart` | Riverpod 链 + 冷却会话 + 命令式控制器 |
+| `pin_setup_page.dart` | PIN 设置 / 修改双态页（两步输入 + 不一致回退） |
+| `pin_unlock_page.dart` | PIN 验证页（冷却 UI + 倒计时） |
+| `app_lock_settings_page.dart` | 「我的→应用锁」设置页 |
+
+入口接线：
+- `app_router.dart` 注册 `/settings/app-lock` → `AppLockSettingsPage`
+- `home_shell.dart` 在「我的」Tab 加 `Icons.lock_outline` "应用锁" 入口（位于"导入/导出"与"垃圾桶"之间）
+
+### 数据流图（14.1 阶段）
+
+```
+[设置页 SwitchListTile 拨开]
+   └─→ push PinSetupPage(setup)
+        └─ 第一步：输入 PIN（FilteringTextInputFormatter.digitsOnly · maxLength=6）
+        └─ 第二步：再次输入 → 与第一步比较
+            └─ 一致 → AppLockController.setupPin(pin)
+                       └─ generatePinSalt(Random.secure)
+                       └─ BianbianCrypto.deriveKey(pin, salt, iterations=100k)
+                       └─ store.save(PinCredential{salt/hash/iterations})
+                       └─ store.writeEnabled(true)
+                       └─ pinAttemptSession.reset()
+                       └─ Navigator.pop(true)
+                          └─ 设置页 ref.invalidate(appLockEnabledProvider) → 开关 ON
+
+[设置页 SwitchListTile 拨关]
+   └─→ push PinUnlockPage(subtitle="请输入当前 PIN 以关闭应用锁")
+        └─ TextField → FilledButton "验证"
+        └─ session.tryVerify(pin)
+            ├─ 正确：state→initial · pop(true)
+            │       └─ controller.disable() → store.clearCredential() + writeEnabled(false)
+            │           └─ ref.invalidate(appLockEnabledProvider) → 开关 OFF
+            └─ 错误：failures+1（< 3）/ 触发冷却（>= 3：cooldownUntil = now + 30s, failures→0）
+                    UI rebuild：按钮文案 "冷却中（X 秒）" + 输入框置灰
+                    1s Timer.periodic 倒计时 setState 重绘
+                    冷却结束 → 输入框恢复 + 错误清空
+
+[设置页 修改 PIN]
+   └─→ push PinUnlockPage("请输入当前 PIN 以验证身份")
+        └─ 验证通过 → push PinSetupPage(change)
+            └─ 两步一致 → controller.changePin(newPin) → store.save(新 cred)
+                          enabled 不变；UI 不需 invalidate（开关 ON 维持）
+
+[设置页 忘记 PIN]
+   └─→ AlertDialog 二次确认（"我已知晓，关闭应用锁"）
+        └─ controller.forgetPinAndDisable()（语义上等同 disable，14.1 不真清库）
+            └─ ref.invalidate(appLockEnabledProvider) → 开关 OFF
+```
+
+### 决策
+
+1. **PBKDF2 复用 BianbianCrypto.deriveKey**：不引入第二套 KDF；`hashPin(pin, salt, iterations)` 直接调用。生产 100k 迭代，测试覆盖路径用 `iterations=1` 加速断言（`iterations` 已是 `PinCredential` 的字段，不是写死常量——确保未来"算力升级 + 旧凭据自动 rehash"路径开放）。
+2. **secure storage 用 4 个独立条目**而非单 JSON：salt / hash / iterations / enabled 各占一个 key（`local_app_lock_pin_*` 前缀）。理由：① iOS Keychain 与 Android EncryptedSharedPreferences 的 atomic 单位是单条，不是整个 dict——独立 key 让"清凭据 + 保留 enabled"这种部分写入更直观；② 若未来某条字段做格式升级，只需 migrate 单条而非读+写整个 JSON。
+3. **enabled 标志独立于 credential 存在性**：`load() == null` 与 `readEnabled() == false` 不是冗余——后续 14.2 生物识别可能引入"PIN 已设但暂时 disabled（因生物识别正常工作）"路径。当前 UI 只产生"两者一致"的状态，但底层支持解耦。
+4. **冷却语义**：错误第 3 次后 `failures` 重置为 0、写入 `cooldownUntil`；冷却中再次调用 `tryVerify` 直接返回 false（**不**消耗 attempt、**不**刷新 cooldownUntil）——避免攻击者通过 spam tryVerify 不断推迟冷却结束时间。冷却到期后 `isCoolingDown()` 自动转 false，下一次错误从 failures=1 重新计。
+5. **冷却仅活在内存（StateNotifier 状态）**：App 冷重启即清。这与 design-document §5.5 的口径一致——"冷却"是对暴力破解的最低门槛护栏，不期望持久化抵抗"重启 App 绕过"；要做这层防护得把 `cooldownUntil` 也写进 secure storage（潜在引入"系统时间被回拨"漏洞）。14.1 接受这一取舍。
+6. **SwitchListTile 拨关需要先验证 PIN**：避免有人短暂获得设备物理控制权时拨开关绕过验证。"忘记 PIN" 走另一条路径——不需要旧 PIN，但用 AlertDialog 强制二次确认 + 醒目红字告知"会清空本地数据但云端可恢复"。
+7. **"忘记 PIN" 在 14.1 阶段不真清库**：仅清 PIN 凭据 + 关锁。理由：① 真正"清空本地数据"涉及 drift DB 整体重建 + 附件目录递归删除 + Phase 10 云配置可能也要清——这是独立功能（Step 18.x 端到端"重置 App"），不应内嵌进锁屏路径；② 当前"清库 + 云端恢复"路径已具备（用户卸载重装即可，secure_storage 在 iOS 卸载后会丢，Android 视设置而定），UI 只需告知用户该路径而不必内嵌。文档与对话框文案明确"先确认云端有最新备份"。
+8. **PinAttemptSession 用 StateNotifier 而非 @Riverpod 注解**：参考 `sync_provider.dart` 的同款选择——避免再产 `.g.dart`。模块结构稳定，没用上 codegen 的好处（family / async 序列化）。
+9. **AppLockClock 注入点**：testkit 通过 `_Clock` 类承载 mutable `current` 字段以可控推进时间——`tryVerify` 内调 `clock()` 取当下时间戳。生产传 `DateTime.now`。
+10. **PIN 字段限定 ASCII 数字**：`FilteringTextInputFormatter.digitsOnly` 阻止中文 IME / 全角数字进入。`validatePinFormat` 二次防御（拒绝任何 codeUnit 不在 0x30-0x39 的字符）——避免"PIN 是 1234 但用户用全角输入而 store 存的是半角"导致永远验证失败。
+11. **常量时间比较**：`verifyPin` 内部使用 `_constantTimeEquals` 而非 `==`/`indexOf`/`==[]`——避免时序侧信道（理论上对本地 SQLCipher 加密的 PIN 来说意义不大，但实现成本几乎为 0，符合"安全相关代码默认走常量时间"的惯例）。`@visibleForTesting` 暴露 `constantTimeEqualsForTest`。
+12. **InMemoryPinCredentialStore 标 @visibleForTesting**：放在主 lib（`pin_credential.dart`）而非 test 包，让 Riverpod override 可以直接 `.overrideWithValue(InMemoryPinCredentialStore())`，跨 widget test 复用。
+
+### 单元测试策略（40 用例 / 3 个 group）
+
+- `pin_credential_test.dart` (17 用例)：纯函数路径——`validatePinFormat` 边界、`generatePinSalt` 熵、`hashPin/verifyPin` 往返、错 PIN、不同 salt 派生不同哈希、篡改 iterations、`constantTimeEquals` 三态、`PinCredential ==`、`InMemoryPinCredentialStore` save/load/clear/enabled 隔离。
+- `app_lock_providers_test.dart` (16 用例)：
+  - `PinAttemptSession.tryVerify` 7 条核心冷却语义（凭据缺失 / 成功 / 1-2 次累计 / 第 3 次进冷却 / 冷却中拒绝 + 不消耗 / 冷却结束重新计 / `cooldownRemainingSeconds` 向上取整 / `reset`）；
+  - `AppLockController` 5 条（setupPin 写入 + reset 失败计数 / 拒绝非法 PIN throws / changePin 替换 + 旧 PIN 失效 / disable 清凭据 + enabled=false / forgetPinAndDisable 与 disable 一致）；
+  - `appLockEnabledProvider` 2 条（默认 false / setupPin 后 invalidate 变 true）。
+- `app_lock_settings_page_test.dart` (7 用例)：widget 路径——
+  - PinSetupPage 三态（两步一致 → setupPin · 不一致回退 + 报错 · 长度过短在第一步阻止）；
+  - PinUnlockPage 两态（正确 PIN 弹 true · 3 次错误后按钮文案 "冷却中（30 秒）"）；
+  - AppLockSettingsPage 三态（默认 OFF + 修改 PIN 入口隐藏 / 拨开开关 push setup 完成 → ON / 已开启状态点忘记 PIN → AlertDialog 确认后关锁）。
+
+### 与 Step 14.2 / 14.3 / 14.4 的衔接
+
+- **14.2 生物识别**：本步暴露的 `AppLockController` + `PinAttemptSession` + `appLockEnabledProvider` 已经是上层调用面。14.2 在 `pin_unlock_page.dart` 内插入"指纹按钮 + local_auth 调用"分支，成功路径直接 `Navigator.pop(true)` 复用同一回调；失败降级走现有 PIN 输入。`PinAttemptSession.reset()` 已暴露给 14.2 在生物识别成功后清空残余失败计数。
+- **14.3 前台锁触发**：本步**未**接入 `WidgetsBindingObserver`，App 启动 / 后台恢复都不会自动 push `PinUnlockPage`。14.3 会新建一个 `lockGuardProvider` 监听 `AppLifecycleState`，按 `appLockEnabledProvider == true && (cold start || backgrounded > N min)` 决定是否在路由栈最顶层 push `PinUnlockPage(subtitle="解锁以继续")`。`PinUnlockPage` 已经支持 `subtitle` 注入，UI 不需要改。
+- **14.4 隐私模式**：与本步独立——多任务预览模糊与 FLAG_SECURE 是 native 层 hook，与 PIN 路径并行存在。
+
+### 故意不做的事
+
+- ❌ **PIN 强度校验**：未拒绝 `1234` / `1111` 等弱 PIN。理由：(1) 4-6 位空间小本身就弱（10^4 - 10^6），加复杂度规则只是骚扰用户；(2) 真正的护栏是冷却（暴力破解需要 30s × 333 ≈ 9999 秒才能跑完 4 位 PIN 空间）。
+- ❌ **PIN 修改后旧 PIN 一段时间内仍可用**：直接覆盖。设计上简单。
+- ❌ **冷却到期通知 / 推送**：14.1 阶段冷却仅会话级，UI 倒计时即可，无后台行为。
+- ❌ **persisted cooldownUntil**：见决策 #5。
+- ❌ **PIN 输入图形化键盘**：使用系统 numeric keyboard。理由：自定义 UI 反而增加截屏可视性。
+- ❌ **多用户 / 多账号 PIN**：design-document §5.5 是单设备单 PIN，与 BeeCount 一致。
+
+
+
+
+## Phase 14.2 架构决策（2026-05-07）
+
+### 文件归属
+
+`lib/features/lock/` 在 14.1 基础上新增 `biometric_authenticator.dart`，并扩展现有 4 个文件：
+
+- `biometric_authenticator.dart`（新建）：`BiometricAuthenticator` 抽象 + `LocalAuthBiometricAuthenticator` 生产实现（包 `local_auth` 3.x，把 `LocalAuthException` 收敛到 `BiometricResult` 5 态枚举）+ `FakeBiometricAuthenticator` `@visibleForTesting`。
+- `pin_credential.dart`：`PinCredentialStore` 抽象增加 `readBiometricEnabled / writeBiometricEnabled` 两方法；`FlutterSecurePinCredentialStore` + `InMemoryPinCredentialStore` 同步实现；新增 `biometricEnabledStorageKey = 'local_app_lock_biometric_enabled'` 第 5 个 secure storage 条目。
+- `app_lock_providers.dart`：新增 `biometricAuthenticatorProvider`（生产 `LocalAuthBiometricAuthenticator`）/ `biometricCapabilityProvider`（FutureProvider，探测 supported + hasEnrolled）/ `biometricEnabledProvider`（FutureProvider）/ `BiometricCapability` 数据类（supported + hasEnrolled + isUsable getter）；`AppLockController.setBiometricEnabled(bool)` 写入；`disable / forgetPinAndDisable` 同步 `writeBiometricEnabled(false)`。
+- `pin_unlock_page.dart`：`PinUnlockPage` 加 `allowBiometric` 入参（默认 true）；init 阶段 first-frame 后自动尝试一次 `_runBiometric`（仅当 `enabled && capability.isUsable && !cooling` 时触发）；底部加 "使用指纹/面容" `OutlinedButton.icon`；`BiometricResult` 5 态分别处理：success 走 reset session + pop(true) / cancelled 静默 / lockedOut/notAvailable/failed 各自文案 + 回退 PIN。
+- `app_lock_settings_page.dart`：`_BiometricToggle` ConsumerWidget（仅在 `enabled` 时挂载）三态——硬件不支持 / 未录入（trailing 占位 Switch 置灰）/ 可用（`SwitchListTile`）；开启路径调 `authenticate` 二次确认，非 success 显示 SnackBar + 不 persist；关闭路径直接 `setBiometricEnabled(false)`；"关闭应用锁" / "修改 PIN" 两条 `PinUnlockPage` 调用都传 `allowBiometric: false`。
+- `PinAttemptSession.reset`：移除 `@visibleForTesting`——14.2 在 `PinUnlockPage._runBiometric` success 路径调用，避免上一会话残余 PIN 失败计数把后续手动输入直接推进冷却。
+
+### 数据流图（14.2 阶段）
+
+设置页 _BiometricToggle 拨开（已开启 PIN + 设备 isUsable）：
+- ref.read(biometricAuthenticatorProvider).authenticate(reason: '验证身份以启用生物识别解锁')
+- success 走 controller.setBiometricEnabled(true) + invalidate(biometricEnabledProvider) → 开关 ON
+- cancelled/lockedOut/notAvailable/failed 走 SnackBar 反馈 + 不 persist（开关回到 OFF）
+
+设置页 _BiometricToggle 拨关：
+- controller.setBiometricEnabled(false) + invalidate（不再次弹面板，直接 persist）
+
+PinUnlockPage 进入（allowBiometric=true · enabled=true · isUsable=true · !coolingDown）：
+- initState postFrameCallback 走 _maybeAutoTriggerBiometric
+- 读 biometricEnabledProvider.future + biometricCapabilityProvider.future 都通过则调 _runBiometric
+- success 走 session.reset() + Navigator.pop(true)
+- cancelled 静默回到 PIN 输入态
+- lockedOut/notAvailable/failed 各自文案 + 留在 PIN 输入
+
+PinUnlockPage（allowBiometric=false · "关闭应用锁" / "修改 PIN" 入口）：
+- initState 不弹面板 + build 不显示生物识别按钮 → 仅 PIN 路径
+
+### 决策
+
+1. 生物识别仅做加速通道，永远以 PIN 为底线。任何分支失败都降级到 PIN 输入而非阻塞解锁。理由：① 生物识别有"重启 / OS 临时锁定 / 用户穿手套"等不可用场景，PIN 是兜底；② "PIN 一定能解锁"是用户的稳定心智模型。
+2. "持有人确认"路径强制禁用生物识别。`allowBiometric` 默认 true，但"关闭应用锁" / "修改 PIN" 入口显式传 false——避免有人短暂获得设备物理控制权时绕过验证。
+3. 开启生物识别需要弹一次系统面板二次确认。避免 short-press 拨开关导致用户不知情下被开启。success 才 persist；非 success 给 SnackBar 反馈但不持久化。关闭路径不需要二次确认——只是降级到纯 PIN，不构成安全风险。
+4. enabled 标志独立于硬件可用性。biometricEnabledProvider 仅反映用户在设置页的选择，不反映"现在是否真能用"。"现在能否用" = enabled && capability.isUsable，由 UI 自己组合判断。
+5. BiometricCapability 不缓存，每次 watch 重跑探测。用户可能在 App 运行中去系统设置录入新指纹，探测结果会变。代价只是两次 method channel 调用。
+6. disable / forgetPinAndDisable 同步清生物识别开关。避免"关锁后重新设 PIN，旧的 enabled=true 残留生效"。
+7. local_auth 3.x API 适配。3.0 把 AuthenticationOptions 拆成 authenticate 直接命名参数；错误从 PlatformException 变成 LocalAuthException。LocalAuthBiometricAuthenticator.authenticate 用 switch 把 13 个错误码收敛到 5 态 BiometricResult——上游 UI 文案策略稳定，不被 plugin 错误码命名变更穿透。
+8. isDeviceSupported 与 hasEnrolledBiometrics 的语义分离。local_auth 3.x isDeviceSupported 含义模糊（含 PIN/Pattern）；BiometricCapability.isUsable 要求两条都满足。
+9. PinAttemptSession.reset 暴露给 UI。14.1 标 @visibleForTesting，14.2 移除——_runBiometric success 路径必须调 reset()，否则上一会话残留的 PIN 失败计数会把"刚生物识别成功 → pop 后又被路由 push 回来 → 输错 1 次"直接推进冷却。
+10. 生物识别按钮永远在 PIN 按钮之下。UI 顺序保持"PIN 输入框 → 验证 PIN 按钮 → (条件) 使用生物识别按钮"。PIN 是首选项。
+11. 冷却中禁用生物识别按钮 + 不自动触发。3 次 PIN 错误进冷却期间生物识别都不该工作——避免冷却被生物识别旁路。
+12. _autoBiometricAttempted 防止 build 期间多次自动触发。仅 init 阶段自动弹一次。
+13. 沿用 14.1 的"独立 secure storage 条目"模式，扩成 5 个而非合并 JSON。让"清凭据 + 保留 enabled"理论上可解耦；未来字段升级只需 migrate 单条。
+14. 故意不做生物识别"记忆 last 5 attempts"。OS 自己有锁定（temporaryLockout / biometricLockout），不需要在 App 层重复护栏。
+
+### 单元测试策略（28 新增）
+
+- biometric_authenticator_test.dart（6 用例）：FakeBiometricAuthenticator 三个旋钮（deviceSupported / enrolled / nextResult）+ authenticateCalls 计数 + lastReason 透传。不测试 LocalAuthBiometricAuthenticator——需要 platform channel mock，价值低于成本；端到端验证由用户本机做。
+- pin_credential_test.dart 扩展（4 用例）：readBiometricEnabled 默认 false / 独立于 enabled / write+read roundtrip / clearCredential 不影响 biometricEnabled。
+- app_lock_providers_test.dart 扩展（8 用例）：biometricCapabilityProvider 三态 + BiometricCapability ==hashCode / biometricEnabledProvider 默认 false + setBiometricEnabled invalidate / disable 同步清 biometric / forgetPinAndDisable 同步清 biometric。
+- app_lock_settings_page_test.dart 扩展（10 用例）：_BiometricToggle 不支持/未录入 subtitle 文案 + 拨开 success persist + 拨开 cancelled SnackBar + 拨关不弹面板 + 5 路 PinUnlockPage 生物识别（自动 success → pop / cancelled 静默 / lockedOut 文案 / disabled 不弹 / 不支持不弹 / allowBiometric=false 不弹）。
+
+### 故意不做的事
+
+- WidgetsBindingObserver 锁屏拦截：14.3 才接入。本步只暴露 PinUnlockPage(allowBiometric=true) 形态，让 14.3 在路由栈最顶层 push 即可复用。
+- 生物识别"会话期内复用"：每次 push PinUnlockPage 都重新弹一次面板。14.2 阶段没有"会话"概念（14.3 才引入"后台超过 N 分钟才再锁"），且生物识别成本是用户按一次指纹 / 看一次镜头，不构成 UX 障碍。
+- 失败次数告警 / 推送：生物识别失败 / 取消都不写日志、不推送。
+- iOS Touch ID / Face ID 区分文案：UI 文案统一"指纹 / 面容"。系统面板自己会显示具体形态。
+- 支持降级到设备 PIN/Pattern：仅 biometricOnly: true。设备 PIN 与 App PIN 是两个安全边界——让前者能解锁后者会让 App PIN 形同虚设。
+
+### 与 Step 14.3 / 14.4 的衔接
+
+- 14.3 前台锁触发：本步暴露的 PinUnlockPage(allowBiometric: true) 与 appLockEnabledProvider 已经是上层调用面。14.3 新建 lockGuardProvider 监听 AppLifecycleState，按 enabled == true && (cold start || backgrounded > N min) 决定是否在路由栈最顶层 push PinUnlockPage，UI 不需要改。
+- 14.4 隐私模式：与本步独立——多任务预览模糊与 FLAG_SECURE 是 native 层 hook，与 PIN/生物识别路径并行存在。
