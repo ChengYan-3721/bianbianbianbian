@@ -5,6 +5,9 @@ import '../features/account/account_edit_page.dart';
 import '../features/account/account_list_page.dart';
 import '../features/budget/budget_edit_page.dart';
 import '../features/budget/budget_list_page.dart';
+import '../features/import_export/export_page.dart';
+import '../features/import_export/import_export_page.dart';
+import '../features/import_export/import_page.dart';
 import '../features/ledger/ledger_edit_page.dart';
 import '../features/record/category_edit_page.dart';
 import '../features/record/category_manage_page.dart';
@@ -115,6 +118,18 @@ final GoRouter goRouter = GoRouter(
     GoRoute(
       path: '/sync',
       builder: (context, state) => const CloudServicePage(),
+    ),
+    GoRoute(
+      path: '/import-export',
+      builder: (context, state) => const ImportExportPage(),
+    ),
+    GoRoute(
+      path: '/import-export/export',
+      builder: (context, state) => const ExportPage(),
+    ),
+    GoRoute(
+      path: '/import-export/import',
+      builder: (context, state) => const ImportPage(),
     ),
     GoRoute(
       path: '/trash',

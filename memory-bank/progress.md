@@ -2627,3 +2627,374 @@ V1 选择**省略** plan 提到的 `Stream<AttachmentUploadProgress>` 与 `_Sync
 至此 Phase 11（附件云同步）4 个 step 全部完成。**测试与人工验证留给用户本机执行**——前一轮 agent 测试时使用了图片导致 Request too large，主动停手。下一阶段 Phase 12（垃圾桶 12.1~12.3）已在历史先行完成；Phase 13（导入导出）尚未启动。
 
 
+---
+
+## Phase 13 · 导入 / 导出
+
+### ✅ Step 13.1 CSV / JSON 导出（2026-05-04）
+
+> **范围**：在「我的 → 导入 / 导出 → 导出」实现 CSV / JSON 两种格式、当前/全部账本两种范围、全部时间/自定义日期两种区间的备份导出。文件落地到 `<documents>/exports/`，唤起系统 Share Sheet 分享。13.2（`.bbbak` 加密包）/ 13.3（导入）/ 13.4（三方模板）尚未启动——本步只填好「编码 + 落盘 + 分享」管线。
+
+**改动**
+
+#### 1. `lib/features/import_export/export_service.dart`（新建）
+
+纯数据 + IO 层，**无 Flutter widget 依赖**——可在 Dart-only 测试中直接消费：
+
+- `BackupFormat { csv, json }` / `BackupScope { currentLedger, allLedgers }` 两个 enum；
+- `BackupDateRange`：不可变；`unbounded` 静态常量；`isBounded` / `contains` 两个谓词。任一边界为 null 视作"该侧不限"；
+- `MultiLedgerSnapshot`：JSON 输出的顶层信封——`version` (kVersion=1) + `exportedAt` + `deviceId` + `List<LedgerSnapshot>`。`fromJson` 严格校验 version：`> kVersion` 抛 `FormatException`，缺失视作 v1（forward-compat 读路径）。**重用 Phase 10 的 `LedgerSnapshot.toJson/fromJson`**——故 Step 13.3 导入时可直接 `LedgerSnapshot.fromJson` + `importLedgerSnapshot` round-trip；
+- 三个 `@visibleForTesting` 纯函数：
+  - `encodeBackupCsv({snapshots})`：UTF-8 BOM + 9 列中文 header（`账本,日期,类型,金额,币种,分类,账户,转入账户,备注`，**始终带账本列**）+ RFC 4180 转义。每个 snapshot 内的 transactions 必须已被调用方过滤过区间（本函数不重复过滤）；组内按 `occurredAt` 升序，多 snapshot 按入参顺序串接。
+  - `encodeBackupJson(multiSnapshot)`：unindented `jsonEncode`，体积优先。
+  - `buildBackupFileName({prefix, ext, now, scope, range})`：`bianbian_backup_<scope>_<rangeStart?>_<rangeEnd?>_<timestamp>.<ext>`。无 range 时省略 range 段；半开区间用 `min` / `max` 占位。
+- 一个公开（**无** `@visibleForTesting`）函数 `filterSnapshotByRange(snap, range)`：`unbounded` → `identical` 返回原对象（零拷贝）；限定区间 → 重建 `LedgerSnapshot` 仅动 transactions 列表，其余字段引用原对象。同时被 `export_page.dart` 与单元测试消费，故提为公开 API。
+- `BackupExportService` 类：`writeExportFile(filename, bytes)` / `exportCsv({snapshots, scope, range})` / `exportJson({multiSnapshot, scope, range})` / `shareFile(file, {subject?, text?})`。三个钩子可注入：`BackupDocumentsDirProvider` / `BackupShareXFilesFn` / `now`。
+- 落盘目录：`<documents>/exports/`——与 `StatsExportService` 共享同目录（用户视角下"导出"是一个统一概念）。
+
+#### 2. `lib/features/import_export/import_export_page.dart`（新建）
+
+「我的 → 导入 / 导出」hub 页，极简：两个 ListTile——导出（可点）+ 导入（disabled，副标题「待实施(Step 13.3 / 13.4)」）。配置项收敛在子页避免 hub 承担两份不同表单。
+
+#### 3. `lib/features/import_export/export_page.dart`（新建）
+
+`ExportPage` ConsumerStatefulWidget。表单由 3 个 `SegmentedButton` 组成（不用 `RadioListTile`——后者在 Flutter 3.32+ 起报 `deprecated_member_use` info；项目零 issue 基线下不能容忍）：
+- 格式：CSV（`Icons.table_chart_outlined`） / JSON（`Icons.data_object`）；
+- 范围：当前账本 / 全部账本（含归档）；
+- 时间区间：全部时间 / 自定义。选"自定义"时弹出 `showDateRangePicker`（zh_CN 本地化），并在下方显示已选区间 + 修改按钮。
+
+每个 `SegmentedButton` 下方紧跟一段 `bodySmall` 文字说明该模式的语义，弥补 `SegmentedButton` 没有 subtitle 的不足。
+
+`_runExport` 流程：
+1. 解析 `_range` → `BackupDateRange`：`showDateRangePicker` 返回的 `end` 是当天 0 时，扩展为 `23:59:59` 以包含整天；
+2. 选择目标账本：`currentLedger` 走 `currentLedgerIdProvider` + `getById`；`allLedgers` 走 `listActive()`（包含归档但不含已软删——`listActive()` 已过滤）；
+3. 对每个账本调 `exportLedgerSnapshot(...)`（Phase 10 已有的纯读函数，**不**写 sync_op、不动云端），然后 `filterSnapshotByRange` 过滤；
+4. 编码 + 落盘 → `BackupExportService.exportCsv/exportJson`；
+5. SnackBar 显示文件名 + `shareFile(file, subject, text)` 唤起系统 Share Sheet。
+
+错误一律走 `try/catch` + SnackBar 提示，不抛给框架。`_exporting` 互斥锁防止双击导出。
+
+**不**消费 `SyncTrigger` / `SyncService`——导出是单向写本地文件 + Share Sheet，不与云端交互。即便用户没配云服务也能导出。
+
+#### 4. 路由与入口
+
+- `lib/app/app_router.dart`：新增 2 条 GoRoute——`/import-export` → `ImportExportPage`、`/import-export/export` → `ExportPage`。
+- `lib/app/home_shell.dart`：「我的」Tab `_MeTab` 在「附件缓存」下、「垃圾桶」上插入「导入 / 导出」入口（`Icons.import_export` → `context.push('/import-export')`）。
+
+#### 5. 单元测试
+
+`test/features/import_export/export_service_test.dart`（新建，20 用例 / 4 个 group）：
+
+- **`BackupDateRange`（4）**：unbounded contains all / start-only 排除前序 / end-only 排除后序 / 闭区间含两端点。
+- **`filterSnapshotByRange`（2）**：unbounded 走零拷贝（`identical` 断言）/ 限定区间只过滤 transactions（其余字段 `identical` 引用未变）。
+- **`encodeBackupCsv`（8）**：BOM + 9 列 header / cover emoji 拼接 ledger label / 缺 emoji 回退到 plain name / transfer 行 toAccount 列 / RFC 4180 转义（逗号 / 双引号 / 换行）/ 组内 `occurredAt` 升序 / 多账本按入参顺序 / 缺失引用渲染空格。
+- **`encodeBackupJson + MultiLedgerSnapshot.fromJson`（3）**：toJson/fromJson round-trip 完整字段 / version > kVersion 抛 FormatException / version 缺失视为 v1。
+- **`buildBackupFileName`（3）**：unbounded 省略 range / bounded 带 range (yyyymmdd) / 半开区间用 `min` / `max` 占位。
+
+故意**不**写 widget 级别的"点击导出 → 文件落盘 + Share"测试——`Share.shareXFiles` 走 platform channel，widget test 下无法 mock；`StatsExportService` 也只测了纯逻辑（Step 5.6 备忘印证）。
+
+**验证**
+
+- `flutter analyze` → No issues found（修复了初版 12 条 `RadioListTile` deprecation info + 1 条 `visibleForTesting` 误用 + 1 条 `Ledger.createdAt` 缺失编译错）。
+- `flutter test test/features/import_export/export_service_test.dart` → 20/20 通过。
+- `flutter test`（全量回归）→ 468/468 通过。
+- 用户本机端到端验证（**待用户执行**）：
+  1. 「我的 → 导入 / 导出 → 导出」入口可见可点；
+  2. 选 CSV / 当前账本 / 全部时间 → 点导出 → 系统 Share Sheet 弹出 → 选"保存到文件"或发邮件 → 用 Excel/Numbers 打开应见 9 列中文 header + 数据；
+  3. 选 JSON / 全部账本 / 自定义 4 月 1 日-30 日 → 点导出 → 检查 Share 出来的 JSON 文件可被人类阅读、`ledgers[*].transactions` 仅含 4 月数据；
+  4. 没有当前账本（极端情况）→ 点导出 → SnackBar "导出失败：当前账本不存在"，不崩溃。
+
+**给后续开发者的备忘**
+
+- **`MultiLedgerSnapshot` 是新数据契约**：与 `LedgerSnapshot`（Phase 10 单账本同步快照）形成嵌套关系——前者是导出层信封，后者是同步层单元。Step 13.3 导入时按 version 字段路由：v1 走 `LedgerSnapshot.fromJson` × N + `importLedgerSnapshot` 循环。如果未来 V2 同步引擎扩展 `LedgerSnapshot.kVersion = 2`，`MultiLedgerSnapshot.kVersion` 也要同步升 2，并在 `fromJson` 内做版本桥接。
+- **CSV 始终带"账本"列**——与 `StatsExportService` 的 8 列 CSV 故意不同。理由：① 多账本备份必须区分归属；② 单账本备份保留账本列让 Step 13.3 round-trip 直接按账本名匹配；③ 用户若拼接多次导出的 CSV，账本边界保留；④ 与 stats CSV 区别明确，两份 CSV 摆在一起一眼能分辨。**勿改**——Step 13.3 导入解析依赖此列。
+- **`filterSnapshotByRange` 是公开 API 不是 visibleForTesting**：同时被 `export_page.dart` + 测试消费。如果未来 Phase 13.2 / 13.3 也要复用，直接 import 即可。
+- **`exportLedgerSnapshot` 已有 `clock` 钩子**：本步注入 `() => exportedAt`（页面级一次性时间戳），让多账本导出时所有 LedgerSnapshot 的 `exportedAt` 一致——避免 11/12 月跨年导出时各 ledger 时间戳分散在两年。
+- **`_range` 的 end 必须扩展到 23:59:59**：`showDateRangePicker` 返回的 `end` 是当天 0 时，若直接传给 `BackupDateRange.end`，当日全部流水都被排除（流水的 `occurredAt` 只要时分秒非零就会落在 `end` 之后）。
+- **故意不抽公共导出基类**：`StatsExportService` / `BackupExportService` 重复的只有"`<documents>/exports/` 写盘 + Share Sheet 唤起"两段，抽象代价高于重复代价。如果未来 Phase 13.2 `.bbbak`、Phase 13.4 第三方模板 export 都加进来，再考虑抽 `_BaseExportService` 基类（leading underscore 不强求外部实现）。
+- **Step 13.2 `.bbbak` 实施路径**：本步导出明文 JSON 字节流；13.2 把这段字节流走 `bianbian_crypto.dart::encrypt`（PBKDF2 派生密钥 + AES-GCM 包裹）后写入 `.bbbak`。直接复用本步的 `MultiLedgerSnapshot` 编码 + `BackupExportService.writeExportFile`，只需在 `exportJson` 之上加一层包裹，**不**重做编码核心。
+- **Step 13.3 导入路径**：按文件后缀分流——`.json` 走 `MultiLedgerSnapshot.fromJson` + `importLedgerSnapshot × N`；`.bbbak` 走解密 → `.json` 路径；`.csv` 走第三方模板路径（13.4）。本 App 自己导出的 CSV 也能被 13.3 解析（账本列让其能 round-trip），但 round-trip 完整度优先走 JSON。
+- **`SegmentedButton` 替代 `RadioListTile` 的代价**：每个段不能直接挂 `subtitle`——只能在按钮下方紧跟一段 `bodySmall` 说明。如果未来选项 ≥ 4 个（13.4 三方模板可能多达 5 套），`SegmentedButton` 会拥挤，那时回到 `RadioGroup` + `RadioListTile`（届时项目应已升 Flutter 版本，`RadioGroup` 应已稳定）。
+- **附件不在导出范围**：本步导出的 CSV / JSON **仅包含** transaction 元数据（含 `attachments_encrypted` BLOB——内是 `AttachmentMeta` JSON 数组）。**不**导出 documents 目录里的图片本体。Step 13.3 导入时附件 `local_path` 字段会失效（指向源设备的路径），靠 `remoteKey` 拉云端（如果配了同步）；没配同步时就是"导入后附件不可用"——这是已知边界，作为 V1 接受。如果用户需要"完整附件备份"，应通过云同步（Phase 11.2）实现，本步导出是元数据级别的人类可读备份。
+- **测试与人工验证**：单元测试 20 用例已通过；端到端验证（Share Sheet、Excel 打开、文件路径检查）由用户本机执行。等用户验证后再开 Step 13.2。
+
+### ✅ Step 13.2 加密备份 .bbbak（2026-05-05）
+
+> **范围**：在 13.1 的「导出」页加第三种格式 `.bbbak`——把完整 JSON 字节流用一次性密码做 PBKDF2 + AES-256-GCM 加密后写入自定义二进制文件。提示用户"密码丢失无法恢复"。错误密码解密时必须给出明确错误。13.3（导入路径分流）/ 13.4（三方模板）尚未启动——本步只填好「编码 + 加密外壳 + 落盘」管线，并把"解密"作为公开 API 给 13.3 直接复用。
+
+**改动**
+
+#### 1. `lib/features/import_export/bbbak_codec.dart`（新建，纯 Dart codec）
+
+`BbbakCodec` 静态工具类——**无 Flutter widget 依赖**，可直接 `dart test`：
+
+- `encode(plaintextJson, password, {iterations, saltGenerator})` → `Uint8List`：随机生成 16 字节 salt → PBKDF2-HMAC-SHA256 派生 32 字节 key → 调 `BianbianCrypto.encrypt(plaintext, key)`（自带 fresh nonce + GCM tag）→ 拼接 `magic ‖ version ‖ salt ‖ packed`。`saltGenerator` 钩子让测试能注入固定 salt 让 KAT 可断言；生产侧不要传——保持默认 `Random.secure()`。
+- `decode(packed, password, {iterations})` → `Uint8List`：长度 / 魔数 / 版本号校验 → 抽出 salt → 派生同 key → 调 `BianbianCrypto.decrypt(body, key)`（GCM tag 校验失败统一抛 `DecryptionFailure`）。
+- `inspect(packed)`（`@visibleForTesting`）：暴露 `(magicBytes, version, salt, body)` 切片让单测断言文件结构。
+- 常量：`magic = [0x42, 0x42, 0x42, 0x4B]`（`'BBBK'` 4 字节）/ `kVersion = 1` / `saltLength = 16` / `headerLength = 21`（magic 4 + version 1 + salt 16）。
+
+`BbbakFormatException`：与 `DecryptionFailure` 区分——前者是"压根不是合法 .bbbak 文件"（魔数错 / 版本不识别 / 长度不足），后者是"文件结构 OK，但密码错或被篡改"。Step 13.3 UI 文案分流依赖此区分。
+
+**文件二进制格式**：
+
+```text
+┌──────────────┬──────────────┬───────────────┬──────────────────────────────┐
+│ magic 4 B    │ version 1 B  │ salt 16 B     │ packed AES-GCM bytes (rest)  │
+│ 'BBBK'       │ 0x01         │ Random.secure │ nonce(12) + ct(N) + tag(16)  │
+└──────────────┴──────────────┴───────────────┴──────────────────────────────┘
+```
+
+#### 2. `lib/features/import_export/export_service.dart`（扩展）
+
+- `BackupFormat` 枚举从 2 值（`csv` / `json`）扩到 3 值（追加 `bbbak`）。注释里说明：`.bbbak` 是 JSON + AES-256-GCM 加密的二进制包，**密码丢失无法恢复**。
+- `BackupExportService.exportBbbak({multiSnapshot, password, scope, range})`：复用 `encodeBackupJson(multi)` 拿到 JSON 字符串 → `utf8.encode` → `BbbakCodec.encode(bytes, password)` → `writeExportFile(filename, encrypted)`。文件名扩展用 `.bbbak`。
+- 密码作为方法参数注入而非 Service 字段——服务无状态便于测试，避免长生命周期对象意外持有密码字符串。
+
+#### 3. `lib/features/import_export/export_page.dart`（重写）
+
+- 格式 SegmentedButton 从 2 段（CSV / JSON）扩到 3 段（追加"加密"，icon `Icons.lock_outline`）。
+- 新增 `_buildPasswordSection`：仅在 `_format == BackupFormat.bbbak` 时显示，包含：
+  - **警告横幅**（`colorScheme.errorContainer` 半透明背景 + `Icons.warning_amber_rounded`）：「该密码用于解密备份。一旦丢失，备份内容将永远无法恢复——请使用密码管理器记录或写在安全的纸上，不要只存在脑子里。」
+  - **密码** `TextField`（`obscureText` 默认开 + 显示/隐藏切换 IconButton）；
+  - **再次输入密码** `TextField`（共用同 `obscureText` 状态，用 `errorText: mismatch ? '两次输入不一致' : null` 实时反馈）。
+- `_canExport()` 守门：`.bbbak` 时要求两次密码非空且一致，否则导出按钮置灰。
+- 导出成功后立即 `_passwordCtrl.clear()` + `_passwordConfirmCtrl.clear()`——密码不长留 widget tree；`dispose()` 也调 `controller.dispose()` 释放。
+- `_runExport` 改为 `switch` 三分支（csv / json / bbbak）；`bbbak` 分支额外把 `_passwordCtrl.text` 拷贝到局部变量 `pw` 后清空 controller，再调 `service.exportBbbak(...)`。
+- `_formatLabel(BackupFormat)` / `_formatDescription(BackupFormat)` 把"格式 → 中文标签 / 副标题"封装成纯函数，便于扩展。
+
+#### 4. 单元测试 `test/features/import_export/bbbak_codec_test.dart`（新建，18 用例 / 5 个 group）
+
+- **encode 参数校验（2）**：空密码抛 `ArgumentError` / 非 16 字节 salt 抛 `ArgumentError`。
+- **encode 文件结构（2）**：开头是 `BBBK` + `0x01` + 16 字节 salt + ≥28 字节 body / `headerLength = 21` 与实测偏移一致。
+- **encode/decode roundtrip（4）**：简短英文 / 中文 emoji 换行 / 10KB 长明文 / 同密码两次产出不同 packed（salt + nonce 都新，但都能正常解密）。
+- **错误密码 / 篡改（5）**：错误密码 → `DecryptionFailure` / 密码大小写敏感 / 密文体翻一字节 → `DecryptionFailure`（GCM tag 校验生效）/ salt 翻一字节 → `DecryptionFailure`（key 不同了）/ decode 空密码 → `ArgumentError`。
+- **文件格式错误（4）**：长度 < `headerLength` → `BbbakFormatException` / 魔数错 → `BbbakFormatException` / 版本不识别 → `BbbakFormatException` / `inspect` 在过短文件上抛 `BbbakFormatException`。
+- **JSON 集成（1）**：JSON 字符串 → encode → decode → utf8.decode 字节级一致。
+
+所有用例显式 `iterations: 1`——把 PBKDF2 时间从 ~50ms 压到 <1ms，让单测套件保持秒级。底层 PBKDF2 KAT 已由 `bianbian_crypto_test.dart` 用 RFC 7914 向量保证（不重测）。
+
+**验证**
+
+- `flutter analyze` → No issues found.
+- `flutter test test/features/import_export/bbbak_codec_test.dart` → 18/18 通过。
+- `flutter test test/features/import_export/` → 38/38 通过（13.1 现有 20 + 13.2 新 18）。
+- `flutter test`（全量回归）→ 486/486 通过（之前 468 + 新增 18）。
+- 用户本机端到端验证（**待用户执行**）：
+  1. 「我的 → 导入 / 导出 → 导出」选"加密"格式 → 警告横幅 + 两个密码字段出现，按钮初始置灰；
+  2. 输入两次相同密码（任意非空字符串）→ 按钮变可点；
+  3. 输入两次不一致密码 → 第二个字段红字"两次输入不一致"，按钮置灰；
+  4. 点导出 → SnackBar "已导出：bianbian_backup_*.bbbak" + Share Sheet 弹出 → 保存到文件管理器；
+  5. 文件管理器查看：扩展名 `.bbbak`、二进制内容、用文本编辑器打开开头是 `BBBK` 4 字节 + 一字节 0x01 + 16 字节 salt + 不可读密文；
+  6. 点击显示/隐藏切换 → 密码字段切换 obscure 状态；
+  7. 错误密码（13.3 实施后）→ 应给出"密码错误"明确文案，不能崩。**当前 13.2 不含解密 UI**，错误密码语义由 18 用例单测保证；端到端解密 UX 留待 13.3。
+
+**给后续开发者的备忘**
+
+- **`.bbbak` 文件结构**：`magic 4 B 'BBBK' + version 1 B 0x01 + salt 16 B + packed AES-GCM bytes`。`packed = nonce(12) + ciphertext + tag(16)`，由 `BianbianCrypto.encrypt` 直接产出。如果未来要换 cipher / KDF / payload shape，bumped `kVersion = 2`，并在 `BbbakCodec.decode` 内按版本路由——v1 永远不能改语义，旧备份必须能继续被新版本解开（10 年后用户翻箱底找出 .bbbak 也要能恢复）。
+- **每个备份包独立 16 字节 salt**：放在文件头明文部分。让相同密码下两次导出产出不同密钥 + 不同密文，挫败"批量字典攻击"——即使攻击者拿到 100 个用同一弱密码加密的 `.bbbak`，每份都需要独立跑 PBKDF2。生产 salt 由 `Random.secure()` 生成；测试可注入固定 salt 让 KAT 可断言。
+- **PBKDF2 100k iterations 是默认且唯一**：与 `BianbianCrypto.defaultPbkdf2Iterations` 一致。如果未来需要升参数（200k / 600k），改 const 即可，但要把"老备份用旧迭代数解密、新备份用新迭代数加密"的兼容性单独考虑——可能需要在 `.bbbak` 文件头加一字节 iter-tier，让 v2 解密时按 tier 选迭代数。**V1 不需要——目前所有 .bbbak 都用 100k**。
+- **没有"快速验密码"路径**：`.bbbak` 内**不含**任何密码 hash 或验证哈希，必须跑完 PBKDF2 + AES-GCM tag 才知道密码对不对。这是有意的——让攻击者也必须跑完整个 KDF，挫败暴力破解。也是"丢了密码无法恢复"产品语义的真实保证：UI 上提示"密码丢失无法恢复"不是说说而已。
+- **`BbbakFormatException` vs `DecryptionFailure` 分两类异常**：前者是文件结构层（魔数错 / 版本不识别 / 长度不足），后者是加密层（密码错 / 篡改）。Step 13.3 UI 文案应该分开提示——前者建议用户"检查文件来源是否正确（.bbbak 文件已损坏或不是边边记账的备份）"，后者建议"密码错误，请重新输入"。**不要合并成一个异常分类**——用户体验差异显著。
+- **密码不长留 widget tree**：导出成功后立即 `_passwordCtrl.clear()` + `_passwordConfirmCtrl.clear()`，`dispose()` 也调 `controller.dispose()`。如果未来加"自动填密码（生物识别二次验证）"的 UX，要把密码作为短生命周期变量传过去，**绝不**把密码存到 user_pref / secure_storage——那等于把"加密备份"降级为"假装加密的本地缓存"。
+- **故意不做密码强度校验**：用户输入"123"也允许导出。① 增加 UI 检查代码量 + i18n 复杂度；② 用户清楚自己想要什么强度（"我只是想给老婆备份一下，不想她忘密码"是合理用例）；③ 如果未来要加强提示，应作为独立改动加在 UI 层（密码复杂度计 / 弱密码警告横幅），不混进 13.2。
+- **Step 13.3 导入路径直接复用 `BbbakCodec.decode`**：按文件后缀分流——`.csv` → 13.4 三方模板路径；`.json` → `MultiLedgerSnapshot.fromJson`；`.bbbak` → 用户输入密码 → `BbbakCodec.decode(packed, password)` → JSON 字节流 → 同 `.json` 路径。两条导入路径在 codec 解封装之后**完全合并**，不会出现"`.bbbak` 走专属路径"。
+- **测试不覆盖 `BackupExportService.exportBbbak` 的 IO 部分**：与 `exportCsv` / `exportJson` 一致——IO（path_provider + Share Sheet）涉及 platform channel mock，价值低于成本。`bbbak_codec_test.dart` 18 用例已覆盖编码/解码核心；IO 路径由用户本机端到端验证。
+- **Service 上不持有密码字段**：`exportBbbak` 把 password 作为参数注入而非 `BackupExportService` 字段。这避免了"服务对象生命周期跨页面 → 密码意外残留"。如果未来加"批量加密导出多个账本到同一密码"，应当在调用方循环中复用密码字符串，**不**改 service 接口。
+- **测试与人工验证**：18 用例单测已通过；端到端验证（实际选加密 / 输入密码 / 落盘 / 文件结构核对）由用户本机执行。**13.3（导入）必须等用户验证 13.2 后再开**——避免在错误的密码 UX 上叠加更复杂的解密 UX。
+
+### ✅ Step 13.3 导入（本 App 格式 JSON / CSV / .bbbak）（2026-05-05）
+
+> **范围**：在「我的 → 导入 / 导出 → 导入」实现完整向导：选文件 → 解析 → 预览前 20 行 → 选去重策略（仅 JSON / `.bbbak`）→ 写入 DB。三种文件类型按扩展名分流：`.json` 直接 fromJson、`.bbbak` 解密外壳后走 JSON 同路径、`.csv` 9 列 RFC 4180 解析 + 名字解析 + fallback ledger。三方模板（钱迹 / 微信 / 支付宝）等到 Step 13.4。
+
+**改动**
+
+#### 1. `lib/features/import_export/import_service.dart`（新建，纯 Dart 解析 + 写库）
+
+`BackupImportService` 静态服务——**无 Flutter widget 依赖**，可直接 `dart test`：
+
+- **三个 enum**：
+  - `BackupImportFileType { json, bbbak, csv }`：文件类型标签，由 `detectFileType(fileName)` 按扩展名（不识别魔数）识别；
+  - `BackupDedupeStrategy { skip, overwrite, asNew }`：流水级去重策略——`skip` = 已有 id 整行跳过 / `overwrite` = 已有 id 走 insertOrReplace / `asNew` = 每条都生成新 UUID v4；
+- **四个数据类**：
+  - `BackupImportPreview`：预览结果（fileType + ledgerCount + transactionCount + sampleRows + 全量 snapshot 或 csvRows + exportedAt + sourceDeviceId）；
+  - `BackupImportPreviewRow`：UI 渲染表格用的字符串化行；
+  - `BackupImportCsvRow`：CSV 单行解析中间结果（保留**原始名称**，apply 阶段才与 DB 现有实体做 name → id 解析）；
+  - `BackupImportResult`：导入计数（ledgersWritten / categoriesWritten / accountsWritten / transactionsWritten / transactionsSkipped / budgetsWritten + unresolvedLedgerLabels）；
+- **两个核心方法**：
+  - `preview({bytes, fileType, password?, bbbakIterations?})` → `BackupImportPreview`：解析文件**不写库**。三种路径：JSON 直接 utf8.decode + jsonDecode + MultiLedgerSnapshot.fromJson；`.bbbak` 先 `BbbakCodec.decode` 再走 JSON；CSV 走 `parseCsvRows` 9 列 header 校验 + 行级解析；
+  - `apply({preview, strategy, db, currentDeviceId, fallbackLedgerId?})` → `BackupImportResult`：单 `db.transaction` 内全量写入。JSON / `.bbbak` 路径下，ledger / category / account / budget 一律 `insertOnConflictUpdate`；transactions 按 `strategy` 三分支。CSV 路径下，强制 `asNew` + 名字解析（账本/分类/账户）+ fallback ledger 兜底；
+- **三个公开工具函数**（顶层 `@visibleForTesting`）：
+  - `parseCsvRows(input)`：RFC 4180 行解析（双引号 + 转义 `""` + 字段内换行 + `\r\n` 行尾），不依赖 `csv` package；
+  - `stripUtf8Bom(s)`：剥离 `\uFEFF` 前缀；
+  - `stripLedgerEmoji(label)`：把账本标签前的 emoji + 空格剥离（用于 CSV 路径按账本名匹配 DB——导出时 `📒 生活`，导入时按 `生活` 匹配）。
+
+`BackupImportException`：解析层错误（与 `DecryptionFailure` / `BbbakFormatException` 形成 3 层异常分类，UI 文案分流依赖此区分）。
+
+#### 2. `lib/features/import_export/import_page.dart`（新建，UI 向导）
+
+`ImportPage` ConsumerStatefulWidget——单页 7 阶段线性向导：
+
+- `_Stage.idle`：显示支持的文件格式说明 + "选择备份文件" FilledButton；
+- `_Stage.parsing`：CircularProgressIndicator（短暂——通常 <100ms，`.bbbak` 100k iterations 会停 ~50ms）；
+- `_Stage.needPassword`：仅 `.bbbak` 选中时进入——红色锁图标横幅 + 密码 TextField（带显示/隐藏切换）+ "解密并预览" / "取消" 双按钮；
+- `_Stage.preview`：元数据卡（文件名 / 类型 / 账本数 / 流水数 / 导出时间 / 源设备）+ 前 20 行预览表格 + 去重策略 RadioTile（CSV 路径替换为说明文字）+ "确认导入" / "取消" 双按钮；
+- `_Stage.applying`：CircularProgressIndicator + "正在写入数据库…"；
+- `_Stage.done`：成功横幅 + 计数卡（账本 / 分类 / 账户 / 流水 / 预算 各 upsert 数）+ unresolved ledger 提示（如有）+ "继续导入其他文件" / "完成" 双按钮；
+- `_Stage.error`：错误横幅 + 错误文案（按 3 层异常分流）+ "重新选择" 按钮。
+
+**FilePicker.pickFiles**（v11 静态 API）走 `FileType.custom + allowedExtensions: ['json', 'csv', 'bbbak']`，限制用户在系统选择器中只能看到这三种文件。`withData: false` —— 我们走文件路径再 `File(path).readAsBytes()`，避免 file_picker 自带的 base64 内嵌。
+
+密码 controller 在 `dispose()` 调 `controller.dispose()`、应用成功后 / `_resetToIdle()` 时调 `controller.clear()`——避免密码长留 widget tree。
+
+#### 3. `lib/features/import_export/import_export_page.dart`（修改）
+
+「导入」ListTile 从 `enabled: false` + `onTap: null` 改为 `onTap: () => context.push('/import-export/import')`，副标题改为「支持本 App 导出的 JSON / CSV / .bbbak」。
+
+#### 4. `lib/app/app_router.dart`（修改）
+
+新增 `GoRoute('/import-export/import')` → `ImportPage`。
+
+#### 5. `pubspec.yaml`（修改）
+
+新增 `file_picker: ^11.0.0` 依赖（用于跨平台文件选择器）。
+
+#### 6. 单元测试 `test/features/import_export/import_service_test.dart`（新建，28 用例 / 6 个 group）
+
+- **`detectFileType`（2）**：识别 `.json` / `.csv` / `.bbbak`（大小写不敏感）/ 未知后缀抛 `BackupImportException`。
+- **`parseCsvRows / stripUtf8Bom / stripLedgerEmoji`（8）**：parser 简单 / `\r\n` 行尾 / 双引号包裹 + 内部逗号 / 内部转义 `""` / 字段内换行 / 末尾无换行 / BOM 删除 / emoji 剥离。
+- **JSON 预览（4）**：账本/流水计数 + 20 行预览（25 条流水只取前 20）/ 拒绝非 UTF-8 / 拒绝顶层非对象 / 拒绝 version 超前。
+- **JSON 应用 strategy（5）**：skip 跳过 + DB 中原值不变 / overwrite 用备份值替换 / asNew 生成新 id 同时改 deviceId / 多账本合并 / 重复导入 skip 幂等。
+- **CSV 路径（5）**：header + UTF-8 BOM 识别 / 错列头拒绝 / 列数不匹配 / 类型标签未识别 / 名称匹配 + fallback + unresolvedLabels 报告。
+- **`.bbbak` 路径（4）**：roundtrip（`bbbakIterations: 1` 钩子降低 PBKDF2 时间）/ 错误密码透传 `DecryptionFailure` / 空密码 `BackupImportException` / null 密码 `BackupImportException`。
+
+所有 DB 测试都用 `NativeDatabase.memory()`——与 `dao_test.dart` 同模式。`bbbakIterations: 1` 让 .bbbak 测试也保持秒级（PBKDF2 KAT 已由 `bianbian_crypto_test.dart` RFC 7914 向量保证）。
+
+**验证**
+
+- `flutter analyze` → No issues found.
+- `flutter test test/features/import_export/import_service_test.dart` → 28/28 通过。
+- `flutter test test/features/import_export/` → 66/66 通过（13.1 现有 20 + 13.2 现有 18 + 13.3 新 28）。
+- `flutter test`（全量回归）→ 542/542 通过（之前 514 + 新增 28）。
+- 用户本机端到端验证（**待用户执行**）：
+  1. 「我的 → 导入 / 导出 → 导入」入口可见可点；
+  2. 选 JSON 文件（用 13.1 导出的 bianbian_backup_*.json）→ 预览阶段显示账本数 / 流水数 / 导出时间 / 来源设备 + 前 20 行 + 3 个策略 RadioTile；选 skip 点确认 → 完成阶段显示「写入 0 / 跳过 N」（因为已经存在）；
+  3. 用 13.1 导出的 CSV 文件（含账本列）→ 预览阶段策略区域显示文字说明而不是 RadioTile；点确认 → 完成阶段显示流水写入数 + （如果账本名 resolve 失败）unresolved 提示；
+  4. 用 13.2 导出的 .bbbak 文件 → 进入密码输入阶段；输错密码 → 错误阶段显示「密码错误，请检查密码是否正确，或文件是否被损坏。」；输对密码 → 走 JSON 同路径预览；
+  5. 把任意 .txt 文件改名为 .bbbak → 进入密码输入阶段输入随便密码 → 错误阶段应显示「文件格式不识别（魔数错）」；
+  6. 选 .json 文件但内容是 `[]` → 错误阶段应显示「JSON 顶层不是对象（期望 MultiLedgerSnapshot）」。
+
+**给后续开发者的备忘**
+
+- **三种 dedupe 策略仅 JSON / `.bbbak` 路径生效**：CSV 没有 ID，强制走 `asNew`。UI 在 preview 阶段判断 `fileType == csv` 时**完全隐藏**策略选项区域，改为一段文字说明——避免给用户一个用不上的选择。如果未来 CSV 也想支持 dedupe，需要在 CSV 的 9 列里挤一个 id 列；目前 13.1 导出的 CSV **没有** id 列，要先改导出格式才能改 dedupe。
+- **CSV 名字解析失败时不抛异常，而是回落 fallback / 置 null**：账本 → fallback ledgerId；分类 / 账户 → 留 null（流水仍写入，UI 显示"无分类"/"无账户"）。理由：CSV 是用户人肉编辑过的可能性高（比如手贴别的应用导出），要求严格 schema 反而让用户挫败。`unresolvedLedgerLabels` 字段会把所有匹配失败的标签集合返回，UI 完成阶段会显示提示——透明而不阻塞。
+- **`asNew` 模式必须用直接构造而非 `copyWith`**：`copyWith` 的 `?? this.foo` 语义无法把 `deletedAt` 清空。如果源流水是软删的（`deletedAt != null`），asNew 后必须作为新 live 流水导入。`_reidTransaction` 私有方法专门负责构造——**未来如果有人想"简化"用 `tx.copyWith(id: ..., deletedAt: null)`，会发现 deletedAt 没生效**。代码注释里专门标注此点。
+- **绕过 repository 层 `save`**：导入直接走 `db.batch + db.into(table).insert(...)`，**不**调 `transactionRepository.save()`。理由：repo 层 save 会写 `sync_op` 队列；导入瞬间灌入大量记录会立刻撑满队列，下次同步触发就把刚导入的数据全量再次上传——"导入 = 立即重传"循环。这与 Phase 10 的 `importLedgerSnapshot`（同步层快照恢复）一致——快照模型整体覆盖时也不写 sync_op。
+- **预览数据全量塞进 `BackupImportPreview` 内存**：preview 解析后 snapshot / csvRows 直接挂在预览对象上，apply 时直接复用——避免"预览等 1 秒，确认后又等 1 秒重读"的重复 IO + 重复解码。代价：内存里多放一份解析后的对象（一般 < 1MB）；如果未来要支持 50MB+ 备份文件，再考虑流式解析。
+- **`bbbakIterations` 钩子（仅测试用）**：生产路径默认 100k 迭代；测试可降到 1 让套件保持秒级。命名带 `bbbak` prefix——避免日后扩展「JSON / CSV 也加 iterations 钩子」时语义冲突。生产路径**不传**该参数。
+- **3 层异常文案分流**：`BbbakFormatException`（文件结构）/ `DecryptionFailure`（加密层）/ `BackupImportException`（解析层）→ UI 文案完全独立。其他未捕获的 `Exception` 走 fallback「解析失败：$e」——这是兜底，不应该被命中。如果某个新异常类型经常被命中，应该捕获到对应分类里，给出友好文案。
+- **导入完成只 invalidate `currentLedgerIdProvider`**：用户导入后多半会回到首页看新数据——首页的 `recordMonthSummaryProvider` 是基于 currentLedgerId 派生的，会自动 rebuild。如果未来某个 provider 缓存了 transactions 列表（不依赖 currentLedgerId），需要单独 invalidate。
+- **`file_picker: ^11.0.0` 是新依赖**：v11 把 API 从 `FilePicker.platform.pickFiles(...)` 改成静态 `FilePicker.pickFiles(...)`——没有 v10 兼容层。如果项目其他 feature 也要用 file_picker，统一走 `FilePicker.pickFiles(...)` 静态 API。Android 需要 `READ_EXTERNAL_STORAGE` 权限（package 自动声明），iOS 在 14+ 用 PHPickerViewController（无需权限）。
+- **`importLedgerSnapshot`（同步层）不能复用**：同步层那条路径是「整体覆盖快照」——先 `delete from transaction_entry where ledger_id = ?`，再 upsert 全部。这与 13.3 的「合并」语义**根本不同**——同步必须保证两端最终一致；导入只是用户主动加点数据，不能动他原有的流水。本 service 用全新代码路径走 `db.batch + InsertMode.insertOrAbort/insertOrReplace`，**不**调 `importLedgerSnapshot`。如果未来想做"导入 = 整盘恢复（清空再灌）"模式，应当作为独立的 `BackupDedupeStrategy.replaceAll` 或单独的 service 方法，不要混进现有 strategy。
+- **附件文件本体不在导入范围**：备份的 JSON 中 `attachments_encrypted` BLOB 含 `AttachmentMeta` 数组（含 `localPath` 指向源设备路径 / `remoteKey` 指向云端 key）；导入到新设备时本地路径**失效**，但 `remoteKey` 仍可通过 Phase 11 的 `attachmentDownloader.ensureLocal` 从云端拉。如果用户没配云同步又导入了带附件的备份，附件不可见——这是已知边界，作为 V1 接受。
+- **测试与人工验证**：28 用例单测已通过；端到端验证（实际选文件 / 输密码 / 预览 / 写库 / 首页刷新）由用户本机执行。**Step 13.4（三方模板）必须等用户验证 13.3 后再开**——避免在未验证的解析管线上叠加 3 个新格式的解析逻辑。
+
+### ✅ Step 13.4 三方模板导入（钱迹 / 微信 / 支付宝 CSV）（2026-05-05）
+
+> **范围**：在 Step 13.3 的 CSV 路径上叠加自动模板识别——钱迹（Qianji）/ 微信账单 / 支付宝账单 CSV 自动检测 + 列结构识别 + 关键词→本地分类映射。复用 13.3 的 `_applyCsv` 写库通道，新模板的输出直接喂到同一个 `BackupImportCsvRow`。每个模板备一份 50+ 行样本 + 状态过滤 + 金额汇总测试。
+
+**改动**
+
+#### 1. `lib/features/import_export/templates/third_party_template.dart`（新建，纯 Dart）
+
+新增子目录 `templates/`，第一个文件即模板基类 + 三个具体模板：
+
+- **`ThirdPartyTemplate` 抽象基类**（`const` 构造）：
+  - `id` / `displayName`（用户可见名）/ `matches(rows) → bool` / `parse(rows) → List<BackupImportCsvRow>` 四个抽象成员；
+  - 复用 13.3 的 `BackupImportCsvRow` 数据契约——模板的输出与本 App 9 列 CSV 共用同一个 apply 通道。
+- **`WechatBillTemplate`**：识别微信支付账单 CSV（前 16 行说明 + header `交易时间,交易类型,交易对方,商品,收/支,金额(元),支付方式,当前状态,...`）。`matches` 扫前 30 行找含 `交易时间` + `交易类型` + `交易对方` + `收/支` 的行。`parse` 跳过状态含 `退款`/`失败`/`关闭`/`未支付` 的行；金额走 `parseAmount`（去 `¥` / `,`）；类型由"收/支"列决定，`/`（中性，如零钱通转入）跳过；分类走 `mapKeywordToCategory([交易对方, 商品, 交易类型])`；账户名透传"支付方式"列；ledgerLabel 设为 `displayName='微信账单'`。
+- **`AlipayBillTemplate`**：识别支付宝账单 CSV（header 含 `交易号,商家订单号,交易创建时间,...,商品名称,金额（元）,收/支,交易状态,...`）。`matches` 扫前 30 行找含 `交易号` + `交易创建时间` + `商品名称` + `金额` + `收/支` 的行。`parse` 跳过状态含 `退款`/`关闭`/`失败` 的行；金额识别 `金额（元）` / `金额(元)` 两种全角/半角括号；账户名固定为"支付宝"；ledgerLabel 设为 `displayName='支付宝账单'`。
+- **`QianjiTemplate`**：识别钱迹两种格式（8 列 `时间,类型,金额,一级分类,二级分类,账户1,账户2,备注` 或 6 列 `日期,分类,子分类,账户,金额,备注`）。`matches` 扫前 10 行找同时含 `金额` + `分类|类别` + `时间|日期` 的行——**关键护栏**：必须排除含 `账本` / `币种` 的行，否则会把本 App 9 列 CSV 误命中。`parse` 优先用"二级分类"作为 `categoryName`（直接落到 DB 同名 category，命中率高于关键词推测）；类型若有"类型"列直接用，否则按支出兜底；金额永远 `abs()`，方向由"类型"列决定；转账行带 `accountName` + `toAccountName`。
+- **关键词→分类映射**（顶层 `kKeywordToCategory: List<MapEntry<String,String>>`）：~80 条规则，覆盖餐饮（星巴克 / 瑞幸 / 美团外卖 / 饿了么 / 麦当劳 / 肯德基 / 火锅 / 烧烤 / 便利店）/ 交通（滴滴 / 高德打车 / 地铁 / 公交 / 加油 / 中石化 / 火车票 / 12306 / 携程）/ 购物（淘宝 / 天猫 / 京东 / 拼多多 / 优衣库 / Apple / 华为 / 宜家 / 沃尔玛 / 盒马）/ 娱乐（电影 / 万达 / Steam / KTV / 景区 / 门票）/ 住房（房租 / 物业 / 水费 / 电费 / 燃气）/ 医疗（医院 / 药店 / 体检）/ 教育（得到 / 网易云课堂 / 当当 / Kindle）/ 收入（工资 / 退款 / 红包 / 转账）/ 订阅（话费 / 流量 / Netflix / iCloud / 会员）。
+- **关键词匹配规则**：值是本地二级分类名（必须与 `seeder.dart#categoriesByParent` 字面对齐）；用 `String.contains` 子串匹配；按 `List` 顺序敏感（前面的优先）；未命中归 `kFallbackCategoryName='其他'`（必命中本地 `other` 一级下的"其他"二级——seeder 默认种子）。
+- **三个 `@visibleForTesting` 工具**：
+  - `mapKeywordToCategory(List<String?> candidates) → String`：把候选文本拼起来按顺序找子串命中的关键词，返回本地二级分类名；
+  - `parseAmount(String raw) → double?`：去除 `¥` / `￥` / `$` / `,`（千位） / `"`（引号包裹），失败返回 null；
+  - `parseFlexibleDate(String raw) → DateTime?`：试 6 种格式（`yyyy-MM-dd HH:mm:ss` / `yyyy-MM-dd HH:mm` / `yyyy-MM-dd` / `yyyy/MM/dd HH:mm:ss` / `yyyy/MM/dd HH:mm` / `yyyy/MM/dd`），失败返回 null。
+- **顶层 `kAllThirdPartyTemplates: const List<ThirdPartyTemplate>`**：注册表——`[WechatBillTemplate(), AlipayBillTemplate(), QianjiTemplate()]`。**钱迹放最后**：钱迹 header 签名最弱（仅"金额"+"分类"+"时间"），如果放前面会把微信/支付宝也吃掉。
+- **顶层 `detectThirdPartyTemplate(rows) → ThirdPartyMatch?`**：按注册表顺序逐一调 `matches`，命中第一个就 `parse` 并返回 `ThirdPartyMatch(template, rows)`。
+
+#### 2. `lib/features/import_export/import_service.dart`（修改）
+
+`BackupImportPreview` 数据类追加三字段：
+- `thirdPartyTemplateId`（命中模板的 id）；
+- `thirdPartyTemplateName`（命中模板的 displayName）；
+- `unmappedCategoryCount`（关键词命中"其他"的行数——给 UI 显示提示）。
+
+`_previewCsvBytes` 改造：在 `parseCsvRows` 之后**优先**调 `detectThirdPartyTemplate(rows)`——命中走新增私有方法 `_previewFromThirdPartyMatch(match)` 包成 preview；未命中再校验本 App 9 列 header（沿用 13.3 已有逻辑）。
+
+`_previewFromThirdPartyMatch`：把 `match.rows` 包成 `BackupImportPreview`——`ledgerCount` 强制为 1（模板把所有流水写到 `displayName` 这个虚拟账本名），同时数 `categoryName == kFallbackCategoryName` 的行数填到 `unmappedCategoryCount`。前 20 行格式化为 `BackupImportPreviewRow`。
+
+**`_applyCsv` 完全没改**——三方模板生成的 `BackupImportCsvRow` 与本 App CSV 行字段一致，复用同一个写库通道（强制 asNew + 名字解析 + fallback ledger）。这是 13.4 架构的关键：扩展点收敛到模板抽象，写库管道零修改。
+
+#### 3. `lib/features/import_export/import_page.dart`（修改）
+
+- idle 卡片提示文案从「等候 13.4 上线」改为「自动识别钱迹/微信/支付宝」+ 解释「第三方账单会被识别为单一账本，自动归入当前账本；分类按关键词推测，不能命中的归到「其他」」；
+- preview 卡片在 `thirdPartyTemplateId != null` 时多渲染：
+  - 「识别为：xxx」一行（图标 `Icons.auto_awesome`）；
+  - 如果 `unmappedCategoryCount > 0`，显示「其中 N 条按关键词未匹配到本地分类，已归入「其他」」橙色提示；
+- 策略区文字针对三方账单做了专门描述（「第三方账单不含本 App 的 ID，会作为「全部新记录」导入；账本归入当前账本，账户列若与现有账户同名会被关联，否则置空。」）。
+
+#### 4. 单元测试 `test/features/import_export/third_party_template_test.dart`（新建，37 用例 / 6 个 group）
+
+- **`detectThirdPartyTemplate`（6）**：微信 / 支付宝 / 钱迹 8 列 / 钱迹 6 列 header 命中 + 本 App 9 列 CSV 不被误命中（关键测试，验证钱迹的"账本/币种"排除护栏）+ 空 rows。
+- **`mapKeywordToCategory`（7）**：星巴克 / 滴滴 / 地铁 / 淘宝 / 未命中 / 全空 / iCloud 订阅。
+- **`parseAmount`（7）**：普通 / `¥` / `￥` / `,` 千位 / 引号包裹 / 空 / 非法。
+- **`parseFlexibleDate`（5）**：4 种格式 + 非法。
+- **微信账单模板（3）**：`_buildWechatBillCsv` 生成 60 笔正常 + 5 笔退款 + 2 笔中性 → 解析后 60 笔（金额汇总精确）/ "已全额退款" 行被过滤 / `/`（中性收/支）被过滤。
+- **支付宝账单模板（3）**：`_buildAlipayBillCsv` 生成 55 笔正常 + 3 笔关闭 → 解析后 55 笔 / 退款 / 关闭过滤 / 未命中关键词的某行归"其他"。
+- **钱迹模板（3）**：`_buildQianjiCsv` 生成 52 笔 → 解析后 52 笔 / 转账行带账户 1/2 / 二级分类直接成 categoryName（即便不在本地分类表里）。
+- **集成端到端（3）**：分别用最简微信 / 支付宝 / 钱迹 CSV 跑 preview + apply，验证：流水真实落到 fallback ledger / 关键词命中本地 categoryId / 账户名匹配本地 accountId / unresolvedLedgerLabels 包含模板的 displayName。
+
+50+ 行样本由 `_buildWechatBillCsv` / `_buildAlipayBillCsv` / `_buildQianjiCsv` 生成器构造（避免硬编码 200 行 CSV 字面量），内置正常行 + 状态异常行 + 中性行；测试断言"成功行数"和"金额汇总"。
+
+#### 5. 文档更新
+
+- **`memory-bank/architecture.md`**：
+  - 顶部时间戳从「Phase 13.3 · 导入路径完成后」改为「Phase 13.4 · 三方模板导入完成后」；
+  - `import_export/` 目录树追加 `templates/third_party_template.dart` 行 + 更新 `import_service.dart` / `import_page.dart` 描述；
+  - test/features/import_export/ 树追加 `third_party_template_test.dart` 行；
+  - 新增「Phase 13.4 架构决策（2026-05-05）」段落（14 条决策、数据流图、单元测试策略、故意不做的事、与 14.x 的关系）；
+  - 在 Phase 13.3 末尾「与 Step 13.4 第三方模板的衔接」段后追加「后注（13.4 实现时调整）」——说明实际没有给 `BackupImportFileType` 加分支，而是在 CSV 路径内做"二次分流"。
+
+**验证**
+
+- `flutter analyze` → No issues found.
+- `flutter test test/features/import_export/third_party_template_test.dart` → 37/37 通过。
+- `flutter test test/features/import_export/` → 103/103 通过（13.1 现有 20 + 13.2 现有 18 + 13.3 现有 28 + 13.4 新 37）。
+- `flutter test`（全量回归）→ 551/551 通过（13.3 时 514 + 13.4 新增 37）。
+- 用户本机端到端验证（**待用户执行**）：
+  1. 拿一份**真实的**微信账单 CSV（微信支付 → 账单 → 申请账单 → 邮箱接收 → 解压 ZIP）→ 选文件 → preview 应显示「识别为：微信账单」+ 行数与你账单实际成功消费数对得上 + 部分行类别合理（星巴克→饮料、滴滴→打车...）+ 部分行归入"其他"（关键词未命中）；
+  2. 同样拿一份**真实的**支付宝账单 CSV → 选文件 → preview 应显示「识别为：支付宝账单」+ 退款 / 关闭的行被过滤；
+  3. 拿一份钱迹导出 CSV → 应显示「识别为：钱迹」+ 二级分类直接落到 DB 同名分类（如果你的本地分类名与钱迹一致）；
+  4. 导入完成后回到首页 → 流水列表 / 月汇总 / 统计页都应显示新数据；账户列匹配（"零钱"/"支付宝"/"现金"等）的流水带账户图标，未匹配的显示"无账户"；
+  5. **重新导入同一份账单** → 因为 CSV 强制 asNew，**会产生重复**——这是 CSV 的固有限制，文档已说明（用户应避免重复导入）；
+  6. 选 13.1 导出的本 App 9 列 CSV → preview 应**不显示**「识别为」行（因为不会被三方模板抢占）。
+
+**给后续开发者的备忘**
+
+- **三方模板复用 `BackupImportFileType.csv`**：13.3 末尾架构注里的"加 enum 分支"想法被推翻——实际发现 enum 膨胀且需要 `detectFileType` 阶段就预读字节，架构不优雅。改为 CSV 路径内由 `detectThirdPartyTemplate` 做"二次分流"，扩展点收敛到 `kAllThirdPartyTemplates`。**未来如果要加新模板**（如随手记 / 招商银行），只需：① 写一个 `extends ThirdPartyTemplate` 的类；② 加到 `kAllThirdPartyTemplates`；③ 写测试。`import_service.dart` / `import_page.dart` 完全零修改。
+- **模板探测顺序敏感**：钱迹放最后避免被微信/支付宝误命中。如果未来加新模板，header 签名越具体越靠前。
+- **钱迹 `_findHeaderRow` 必须排除"账本"/"币种"列**：实际开发中 test fail 一次才加这条护栏——本 App 的 9 列 CSV 含这两列，会触发钱迹的弱签名。**不要删这条护栏**，否则 13.3 的本 App CSV 路径会被钱迹抢占。
+- **关键词表 value 必须与 seeder.dart 二级分类名字面一致**：比如映射到 `'饮料'`、`'打车'`、`'地铁公交'`——apply 阶段在 DB 找同名 category。如果未来重命名 seeder 的二级分类（如"饮料"→"饮品"），必须**同时**改 `kKeywordToCategory` 的 value，否则关键词路径全部 miss → 全部归"其他"。fallback `'其他'` 必命中——seeder 在 `other` 一级下种了名为 `'其他'` 的二级，这个名字也是硬契约，不要改。
+- **第三方账单一律 fallback 到当前账本**：apply 阶段必然 unresolved（DB 里没有名叫"微信账单"的账本），落到 `currentLedgerId`。这是**预期行为**，不是 bug——用户主动把账单导入"我现在用的账本"。如果未来想让用户选目标账本，应在 ImportPage preview 阶段加一个下拉，覆盖 `apply` 调用的 `fallbackLedgerId` 参数（service 层零修改）。
+- **状态过滤白名单是硬编码字符串**：微信"已退款"/"失败"/"已关闭"/"未支付"；支付宝"退款"/"关闭"/"失败"。**腾讯/阿里改了文案就 miss**——比如把"已全额退款"改成"全额退款"还能匹配（contains），但改成"refunded"就 miss 了。如果未来观察到大批量误导入退款行，扩这个白名单即可（不要改 contains 逻辑）。
+- **金额一律 abs()**：钱迹历史版本里支出列是正数；为了一致性所有模板都 `abs()`，方向由"收/支"列决定。**不要**期望"金额负 = 收入"——某些版本里支出也带负号，这个判断会出错。
+- **`kKeywordToCategory` 是 `List<MapEntry>` 不是 `Map`**：因为顺序敏感（"招商银行"放在"银行"前命中）。如果有人改成 `Map<String, String>` 会丢失顺序——**不要改**。
+- **`unmappedCategoryCount` 上报给 UI 是关键 UX 反馈**：让用户能看到"模板识别 50 条，关键词命中 38 条，12 条归到其他"——避免用户导入后才发现一半流水都是"其他"。如果用户反馈不满意，可手工调整或扩 `kKeywordToCategory`；不要把这个数字隐藏起来。
+- **重复导入会重复**：CSV 路径强制 asNew，每次导入都生成新 UUID v4——多次导入同一份账单会重复。这是 CSV 的固有约束（无 ID）；用户应避免重复导入，或用 13.3 的本 App JSON 路径才有 skip 语义。这条限制要在 UI 文案里说清——目前 idle 卡的提示已经隐式提到「全部新记录」，必要时可强化。
+- **PDF 账单解析不在范围**：微信/支付宝 PDF 账单需要 OCR 或 pdf parser，复杂度远高于价值。CSV 是用户已经能拿到的格式（邮箱解压即得），先把 CSV 路径做扎实即可。
+- **银行流水 CSV 不在范围**：BANK 卡流水格式各家都不同（招行/工行/建行...），关键词映射也无意义（多半是"消费支出"+商户号，不是商品名）。等用户反馈再做。
+- **测试与人工验证**：37 用例单测已通过（合 13.3 的 28 条共 65 条 import_export 单测）；端到端验证（实际拿真实账单跑一遍）由用户本机执行。**Step 14.1 PIN 设置必须等用户验证 13.4 后再开**——避免在未验证的导入路径上叠加锁拦截逻辑。
+
+
+

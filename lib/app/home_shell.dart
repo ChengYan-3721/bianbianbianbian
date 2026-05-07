@@ -157,6 +157,12 @@ class _MeTab extends StatelessWidget {
             onTap: () => context.push('/settings/attachment-cache'),
           ),
           ListTile(
+            leading: const Icon(Icons.import_export),
+            title: const Text('导入 / 导出'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/import-export'),
+          ),
+          ListTile(
             leading: const Icon(Icons.delete_outline),
             title: const Text('垃圾桶'),
             trailing: const Icon(Icons.chevron_right),
