@@ -29,6 +29,18 @@ const int kPinPbkdf2Iterations = 100000;
 /// salt 长度。AES-GCM 推荐 16 字节，[BianbianCrypto.deriveKey] 也接受这个长度。
 const int kPinSaltBytes = 16;
 
+/// Step 14.3：后台超时锁定的默认阈值（秒）。
+///
+/// 默认 60 秒——Phase 14.3 设计文档要求"后台超过 N 分钟（默认 1、可配）"。
+/// 0 = "立即锁定"（任何 paused→resumed 都触发锁屏）。
+const int kDefaultBackgroundLockTimeoutSeconds = 60;
+
+/// Step 14.3：后台超时阈值的可选枚举（秒）。
+///
+/// UI 在「应用锁」设置页提供这 4 个选项；写入 secure storage 的值可以是任意正
+/// 整数，但 UI 限定枚举内的值。`0` 表示"立即锁定"。
+const List<int> kBackgroundLockTimeoutOptions = [0, 60, 300, 900];
+
 /// PIN 凭据三元组——salt / 哈希 / 迭代次数；持久化时三项独立写入 secure storage。
 class PinCredential {
   const PinCredential({
@@ -136,6 +148,9 @@ abstract class PinCredentialStore {
   static const String enabledStorageKey = 'local_app_lock_enabled';
   static const String biometricEnabledStorageKey =
       'local_app_lock_biometric_enabled';
+  static const String backgroundLockTimeoutSecondsStorageKey =
+      'local_app_lock_background_timeout_sec';
+  static const String privacyModeStorageKey = 'local_app_lock_privacy_mode';
 
   Future<PinCredential?> load();
   Future<void> save(PinCredential credential);
@@ -154,6 +169,27 @@ abstract class PinCredentialStore {
   /// `biometricAuthenticator.isDeviceSupported` + `hasEnrolledBiometrics` 决定。
   Future<bool> readBiometricEnabled();
   Future<void> writeBiometricEnabled(bool enabled);
+
+  /// Step 14.3：后台超时锁定阈值（秒）。
+  ///
+  /// 真值源是 secure storage 的 `local_app_lock_background_timeout_sec` 条目；
+  /// 缺省 / 解析失败 / 负值 视为 [kDefaultBackgroundLockTimeoutSeconds]（60 秒）。
+  /// `0` 是合法值——表示"立即锁定"。
+  ///
+  /// 与 PIN 启用开关解耦：即使应用锁未启用，本字段也允许预先写入；启用应用锁
+  /// 时直接生效。
+  Future<int> readBackgroundLockTimeoutSeconds();
+  Future<void> writeBackgroundLockTimeoutSeconds(int seconds);
+
+  /// Step 14.4：隐私模式开关——开启后多任务预览模糊（iOS 遮盖层 / Android
+  /// FLAG_SECURE）+ Android 阻止截屏。
+  ///
+  /// 真值源是 secure storage 的 `local_app_lock_privacy_mode` 条目；缺省视为关闭。
+  /// **独立于 PIN 启用开关**——即使 `readEnabled() == false` 也允许打开隐私模式：
+  /// 截屏阻止与"锁屏"是两种正交防护，前者防截图泄露当前画面，后者防有人物理拿到
+  /// 设备。
+  Future<bool> readPrivacyMode();
+  Future<void> writePrivacyMode(bool enabled);
 }
 
 class FlutterSecurePinCredentialStore implements PinCredentialStore {
@@ -231,6 +267,43 @@ class FlutterSecurePinCredentialStore implements PinCredentialStore {
       value: enabled ? 'true' : 'false',
     );
   }
+
+  @override
+  Future<int> readBackgroundLockTimeoutSeconds() async {
+    final raw = await _storage.read(
+      key: PinCredentialStore.backgroundLockTimeoutSecondsStorageKey,
+    );
+    if (raw == null) return kDefaultBackgroundLockTimeoutSeconds;
+    final parsed = int.tryParse(raw);
+    if (parsed == null || parsed < 0) {
+      return kDefaultBackgroundLockTimeoutSeconds;
+    }
+    return parsed;
+  }
+
+  @override
+  Future<void> writeBackgroundLockTimeoutSeconds(int seconds) async {
+    await _storage.write(
+      key: PinCredentialStore.backgroundLockTimeoutSecondsStorageKey,
+      value: seconds.toString(),
+    );
+  }
+
+  @override
+  Future<bool> readPrivacyMode() async {
+    final raw = await _storage.read(
+      key: PinCredentialStore.privacyModeStorageKey,
+    );
+    return raw == 'true';
+  }
+
+  @override
+  Future<void> writePrivacyMode(bool enabled) async {
+    await _storage.write(
+      key: PinCredentialStore.privacyModeStorageKey,
+      value: enabled ? 'true' : 'false',
+    );
+  }
 }
 
 /// 测试 / Riverpod override 用的内存实现。
@@ -239,6 +312,8 @@ class InMemoryPinCredentialStore implements PinCredentialStore {
   PinCredential? _cred;
   bool _enabled = false;
   bool _biometricEnabled = false;
+  int _backgroundLockTimeoutSeconds = kDefaultBackgroundLockTimeoutSeconds;
+  bool _privacyMode = false;
 
   @override
   Future<PinCredential?> load() async => _cred;
@@ -267,5 +342,23 @@ class InMemoryPinCredentialStore implements PinCredentialStore {
   @override
   Future<void> writeBiometricEnabled(bool enabled) async {
     _biometricEnabled = enabled;
+  }
+
+  @override
+  Future<int> readBackgroundLockTimeoutSeconds() async =>
+      _backgroundLockTimeoutSeconds;
+
+  @override
+  Future<void> writeBackgroundLockTimeoutSeconds(int seconds) async {
+    _backgroundLockTimeoutSeconds =
+        seconds < 0 ? kDefaultBackgroundLockTimeoutSeconds : seconds;
+  }
+
+  @override
+  Future<bool> readPrivacyMode() async => _privacyMode;
+
+  @override
+  Future<void> writePrivacyMode(bool enabled) async {
+    _privacyMode = enabled;
   }
 }

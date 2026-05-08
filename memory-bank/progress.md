@@ -3164,3 +3164,202 @@ V1 选择**省略** plan 提到的 `Stream<AttachmentUploadProgress>` 与 `_Sync
 - **biometricCapabilityProvider 不长期缓存**——用户随时可改系统设置；
 - **测试不覆盖 LocalAuthBiometricAuthenticator**——platform channel mock 价值低于成本；
 - **Step 14.3 必须等用户验证 14.2 后再开**。
+
+### Step 14.3 前台锁触发（2026-05-07）
+
+**范围**：在 14.1 PIN + 14.2 生物识别之上叠加生命周期触发的前台锁屏。AppLockGuard StateNotifier 监听 paused/resumed，按"冷启动 / 后台超过 N 分钟"两路决定是否锁屏；锁屏 overlay 形态嵌入 MaterialApp.router 的 builder 之上，深链跳过被自然拦截。后台超时阈值（4 选项：立即锁定 / 1 / 5 / 15 分钟）写第 6 个 secure storage 条目。
+
+**改动**
+
+#### 1. lib/features/lock/pin_credential.dart（修改）
+
+- 新增常量 `kDefaultBackgroundLockTimeoutSeconds=60` / `kBackgroundLockTimeoutOptions=[0,60,300,900]`；
+- `PinCredentialStore` 抽象增加 `readBackgroundLockTimeoutSeconds / writeBackgroundLockTimeoutSeconds`；
+- 新增 `backgroundLockTimeoutSecondsStorageKey = 'local_app_lock_background_timeout_sec'` 第 6 个 secure storage 条目；
+- `FlutterSecurePinCredentialStore` + `InMemoryPinCredentialStore` 同步实现，缺省/解析失败/负值回落 `kDefaultBackgroundLockTimeoutSeconds`。
+
+#### 2. lib/features/lock/app_lock_providers.dart（修改）
+
+- 新增 `backgroundLockTimeoutProvider`（FutureProvider<int>）→ store.readBackgroundLockTimeoutSeconds；
+- `AppLockController.setBackgroundLockTimeoutSeconds(int)` 拒负值 throws ArgumentError；
+- 新增 `AppLockGuardState`（不可变；isLocked + lastBackgroundedAt + 静态 unlocked/locked + copyWith clearLastBackgroundedAt 优先于 lastBackgroundedAt）；
+- 新增 `AppLockGuard` StateNotifier：
+  - `lock()` 直接 state = locked；
+  - `unlock() / forceUnlock()` 状态归零（保留独立方法名为 stack trace 区分调用源）；
+  - `onPaused()` 记 lastBackgroundedAt = clock()，不锁屏；
+  - `onResumed()` elapsed >= timeoutSeconds → 锁；< timeout → 清 lastBackgroundedAt（消化本次会话）；lastBackgroundedAt == null → noop；
+  - `setTimeoutSeconds(int)` 拒负值，timeout 为 mutable instance field，listen 触发即时生效；
+  - `@visibleForTesting int get timeoutSeconds` 暴露给测试；
+- 新增 `appLockGuardProvider` StateNotifierProvider：
+  - 构造时 read backgroundLockTimeoutProvider 拿同步初值（maybeWhen 兜底默认）；
+  - ref.listen 两路：appLockEnabledProvider true→false 自动 forceUnlock；backgroundLockTimeoutProvider 变化 setTimeoutSeconds 同步（不重建 Notifier、保留 lastBackgroundedAt）。
+
+#### 3. lib/features/lock/pin_unlock_page.dart（修改）
+
+- 加 `onUnlocked: VoidCallback?` 与 `showAppBar: bool = true` 入参；
+- 新增 `_emitSuccess()` 私有方法替换原两处 `Navigator.of(context).pop(true)`——onUnlocked != null 走 callback（overlay 形态），== null 走 pop(true)（兼容老 push/await 调用方）；
+- Body 包 SafeArea；AppBar 受 showAppBar 控制（false 时 Scaffold.appBar=null 自动隐藏顶栏）；
+- doc comment 更新：14.3 阶段会作为前台锁屏 overlay 显示。
+
+#### 4. lib/features/lock/app_lock_overlay.dart（新建）
+
+- `AppLockOverlay` ConsumerWidget：PopScope canPop=false 包 Material 包 PinUnlockPage(subtitle='请输入 PIN 解锁边边记账', allowBiometric=true, showAppBar=false, onUnlocked=guard.unlock)；
+- doc 强调"不在路由栈内"——由 BianBianApp.builder 套在 router child 之上的 Stack 显示。
+
+#### 5. lib/features/lock/app_lock_settings_page.dart（修改）
+
+- 在 `if (enabled)` 块内 `_BiometricToggle` 之后追加 `_BackgroundTimeoutTile`（ConsumerWidget）：
+  - 读 backgroundLockTimeoutProvider 渲染当前阈值的人类可读副标题（"立即锁定 · ..." / "1 分钟 · ..."）；
+  - 点击弹 `showModalBottomSheet` + `RadioGroup<int>` + 4 个 RadioListTile（立即锁定 / 1 分钟 / 5 分钟 / 15 分钟）+ 标题"后台超时锁定"；
+  - 选中后调 `setBackgroundLockTimeoutSeconds` + invalidate provider；选回当前值不写入；
+- 安全说明区追加 14.3 文案："· 后台超时锁定：App 切回后台超过设定时长后再回到前台时会要求重新解锁。"
+
+#### 6. lib/main.dart（修改）
+
+- bootstrap `await defaultSeedProvider.future` 之后追加：
+  ```dart
+  await container.read(backgroundLockTimeoutProvider.future);
+  final appLockEnabled = await container.read(appLockEnabledProvider.future);
+  if (appLockEnabled) {
+    container.read(appLockGuardProvider.notifier).lock();
+  }
+  ```
+- 两 await 预热 Riverpod cache，让 BianBianApp 第一帧就能 watch 到 AsyncData；冷启动锁逻辑显式调用 lock() 避免 listen 路径无法区分"冷启动 enabled=true" vs "用户刚 setupPin"。
+
+#### 7. lib/app/app.dart（修改）
+
+- BianBianApp 加 `enableAppLockGuard` 入参（默认 true）；
+- `_observerRegistered` 私有 flag 解耦 sync 与 lock 两路 observer 注册（任一开启即注册一次）；
+- `didChangeAppLifecycleState` 按 enableSyncLifecycle / enableAppLockGuard 两 flag 分别处理：lock 路径转发 paused/hidden/detached → guard.onPaused、resumed → guard.onResumed、inactive → noop；
+- `build` 在 MaterialApp.router 加 `builder` 闭包返回 `_AppLockGate(child: child!)`；
+- 新增 `_AppLockGate` ConsumerWidget：用 `select((s) => s.isLocked)` 仅订阅 isLocked 一项 bool，避免 lastBackgroundedAt 变化导致整棵子树 rebuild；isLocked=true 时 Stack 之上叠 AppLockOverlay。
+
+#### 8. 测试新增（27 用例）
+
+- `test/features/lock/pin_credential_test.dart` 扩展（4 用例）：backgroundLockTimeout 默认 / roundtrip / 拒负值 / clearCredential + writeEnabled(false) 不影响 timeout；
+- `test/features/lock/app_lock_providers_test.dart` 扩展（16 用例）：
+  - backgroundLockTimeoutProvider + setBackgroundLockTimeoutSeconds（3）：默认 60 / set(0) invalidate / set(-1) ArgumentError；
+  - AppLockGuard 状态机（11）：初始 / lock+unlock / onPaused 记不锁 / onResumed elapsed<>=timeout / timeout=0 立即 / null 不动 / setTimeoutSeconds 即时生效保 lastBackgroundedAt / 拒负值保旧值 / appLockEnabled 联动 forceUnlock / timeoutProvider 联动 sync；
+  - AppLockGuardState（2）：== / hashCode + copyWith clearLastBackgroundedAt 优先；
+- `test/features/lock/app_lock_overlay_test.dart` 新建（3 用例）：isLocked=true 显示 PinUnlockPage 无 AppBar / 输入正确 PIN → guard.unlock / PopScope canPop=false 验证；
+- `test/features/lock/app_lock_settings_page_test.dart` 扩展（4 用例）：_BackgroundTimeoutTile 已开启显示默认"1 分钟" / 未开启不挂载 / BottomSheet 4 选项 + 立即锁定 persist / 选当前值不写入。
+
+#### 9. 文档更新
+
+- `memory-bank/architecture.md`：
+  - 顶部时间戳"Phase 14.2 完成后" → "Phase 14.3 前台锁触发完成后"；
+  - lib/main.dart + lib/app/app.dart 描述更新（Step 14.3 标注）；
+  - lib/features/lock 子树扩展（新增 app_lock_overlay.dart 一行 + 各文件 14.3 标注）；
+  - test/features/lock 子树扩展（用例数 68 → 95，新增 app_lock_overlay_test.dart）；
+  - 末尾追加「Phase 14.3 架构决策（2026-05-07）」段落（16 条决策、数据流图 4 路、单元测试策略 27 用例、与 14.4 的衔接、故意不做的事）。
+
+**验证**
+
+- `flutter analyze` → No issues found.
+- `flutter test test/features/lock/` → 95/95 通过（14.1 时 40 + 14.2 新增 28 + 14.3 新增 27）。
+- `flutter test`（全量回归）→ 646/646 通过（14.2 时 619 + 14.3 新增 27）。
+
+用户本机端到端验证（**待用户执行**）：
+1. 进入「我的 → 应用锁」未开启状态：默认无后台超时 ListTile（确认 _BackgroundTimeoutTile 仅 enabled 时挂载）；
+2. 开启应用锁后："后台超时锁定" ListTile 出现，副标题"1 分钟 · ..."；
+3. 点击 ListTile 弹 BottomSheet，4 个选项 RadioGroup，当前选中 1 分钟；
+4. 改选"立即锁定"→ 副标题变"立即锁定 · 任何后台→前台切换都会要求 PIN"；
+5. 把 App 切到后台 1 秒立即切回 → 应出现锁屏 overlay；输入 PIN 1234 → overlay 消失，回到原页面（**路由栈保留**——不该回到首页）；
+6. 改选"5 分钟"+ 切到后台 30 秒回前台 → 不应锁屏（< 5 分钟）；切到后台 6 分钟回前台 → 应锁屏；
+7. 应用冷启动（kill App 重开）→ 应直接看到锁屏 overlay（冷启动锁）；
+8. 锁屏期间尝试通过深链（`adb shell am start -W -a android.intent.action.VIEW -d "bianbian://record/new"`）→ overlay 仍挡在最上层，深链不可绕过；
+9. 在「我的 → 应用锁」关闭应用锁 → 即便后续 paused/resumed 不再锁屏；
+10. 生物识别开启情况下：锁屏 overlay 出现时应自动弹一次系统面板（与 14.2 测试的 push 路径一致）。
+
+**给后续开发者的备忘**
+
+- **冷启动锁由 main 显式调用**——AppLockGuard 不自带"enabled=true 自动锁"逻辑。理由：bootstrap 时 await provider 能可靠拿到布尔值，listen 路径无法区分"冷启动" vs "用户刚 setupPin 完成"。**不要把冷启动锁逻辑移进 guard 构造函数**——会让 setupPin 触发自动锁屏，UX 灾难。
+- **timeoutSeconds 是 mutable instance field 而非 ref.watch 依赖**——避免 timeout 变化时 guard 被销毁重建丢失 lastBackgroundedAt。listen 路径触发 setTimeoutSeconds(int) 同步新值。**不要把 timeout 改回 final field + 让 provider build watch**——会让"用户在后台时改设置"变成"回前台不锁"。
+- **onResumed elapsed < timeout 时清 lastBackgroundedAt**——视为"消化本次后台会话"，避免后续多次 resumed 重复触发判定（短时间多次切前后台时只判一次）。
+- **未走过 onPaused 时 onResumed 直接 noop**——冷启动后第一次 didChangeAppLifecycleState(resumed) 没有 lastBackgroundedAt，guard 不应假装计算 elapsed。
+- **timeout=0 立即锁定**——onResumed 时 elapsed >= 0 一定为 true 触发锁。语义清晰，比"onPaused 直接锁"更线性。
+- **inactive 不算后台**——iOS 控制中心下拉是 inactive 不是 paused，把它当 paused 会让用户每次下拉控制中心都被锁。
+- **AppLockOverlay 用 Stack 而非 GoRouter redirect**——overlay 套在路由器之外，深链命中后路由切换 + overlay 遮盖天然解耦；解锁瞬间用户直接看到目标页面，路由栈状态保留。
+- **PinUnlockPage onUnlocked 默认 null 走 pop(true)**——保持老 push/await 调用方零修改；overlay 形态显式传 callback 走 guard.unlock。
+- **PopScope canPop=false 是 overlay 必备**——防止 Android 物理返回键 / 桌面端 Esc 让 overlay 消失。系统级"返回桌面"不归 PopScope 管，那是 onPaused 的事。
+- **\_AppLockGate 必须用 select 而非 watch 整个 state**——lastBackgroundedAt 每次 onPaused 都改，不 select 会让整棵子树每次后台切换都重建。
+- **`reset()` 在 14.2 已经移除 `@visibleForTesting`**——14.3 没动这个。生物识别 success 仍然调 reset，本步无新调用点。
+- **enableAppLockGuard 测试可关闭**——widget 测试如果不关，appLockGuardProvider 构造会触达 secure storage 抛 MissingPluginException 污染断言。生产恒为 true。
+- **第 6 个 secure storage 条目独立**——sync 跨设备时**不**自动迁移这个偏好（每台设备自管），与 14.1 / 14.2 模式一致。
+- **测试与人工验证**：95 用例单测已通过；端到端 10 项验证（默认无配置 / 开启后显示 / BottomSheet 选项 / 立即锁定 / 后台超时 / 冷启动锁 / 深链拦截 / 关锁联动 / 生物识别联动）由用户本机执行。**Step 14.4 必须等用户验证 14.3 后再开**——14.4 的 FLAG_SECURE / 截屏阻止与 native 代码相关，本步未触碰任何 android/ ios/ 子项目。
+
+---
+
+## Step 14.4 隐私模式（2026-05-08）
+
+**目标**：多任务预览模糊（iOS `applicationWillResignActive` 等价 scene 回调展示遮盖层；Android 设置 `FLAG_SECURE` 同时阻止系统截屏）。开关持久化在 secure storage 第 7 条独立 key，独立于应用锁开启状态——截屏阻止与"PIN 锁"是两种正交防护。
+
+**改动概览**
+
+1. `lib/features/lock/privacy_mode_service.dart`（新建）：`PrivacyModeService` 抽象 + `MethodChannelPrivacyModeService` 生产实现（channel `bianbian/privacy`，方法 `setEnabled(bool)`，`MissingPluginException` / `PlatformException` 静默吞）+ `FakePrivacyModeService` @visibleForTesting（callCount + lastEnabled 断言旋钮）。
+
+2. `lib/features/lock/pin_credential.dart`：`PinCredentialStore` 增加 `readPrivacyMode / writePrivacyMode`，新增第 7 个 secure storage key `privacyModeStorageKey = 'local_app_lock_privacy_mode'`。`FlutterSecurePinCredentialStore` + `InMemoryPinCredentialStore` 同步实现，缺省 false。
+
+3. `lib/features/lock/app_lock_providers.dart`：新增 `privacyModeProvider` (FutureProvider<bool>) + `privacyModeServiceProvider` (Provider<PrivacyModeService>)。`AppLockController.setPrivacyMode(bool)` —— **顺序：先 native（即时生效路径）后 storage（持久化路径）**。失败由 service 内部静默吞，不冒泡到 controller。
+
+4. `lib/features/lock/app_lock_settings_page.dart`：新增 `_PrivacyModeToggle` ConsumerWidget。**独立于 enabled 块挂载**——位于"启用应用锁 ListTile + (enabled 时的 修改 PIN/生物识别/后台超时) Divider"之后、"忘记 PIN" 之前。点击后 `controller.setPrivacyMode` + `invalidate(privacyModeProvider)`。安全说明区追加"隐私模式"段，区分 Android（防截屏）/ iOS（仅多任务遮盖）系统能力差异。
+
+5. `lib/main.dart`：bootstrap 链 `await appLockEnabledProvider.future` 之后追加 `await container.read(privacyModeProvider.future)` + 启用则 `unawaited(privacyModeServiceProvider.setEnabled(true).catchError 静默)`。冷启动 apply 不阻塞首帧（fire-and-forget）。
+
+6. `android/app/src/main/kotlin/com/bianbianbianbian/bianbianbianbian/MainActivity.kt`（重写）：在 `configureFlutterEngine(FlutterEngine)` 注册 `bianbian/privacy` MethodChannel，`setEnabled(true)` 调 `window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, ...)`，`setEnabled(false)` 调 `window.clearFlags(...)`；非 Bool arguments 抛 `INVALID_ARGUMENT` error。
+
+7. `ios/Runner/PrivacyMode.swift`（新建）：单例 `PrivacyMode.shared`（`enabled: Bool` + private `overlay: UIView?`）+ `showOverlay(in:)` / `hideOverlay()` 方法。overlay 是温馨色 UIView（奶黄）+ "边边记账" UILabel（深棕色）。tag = `0xB1AB1A`（"BIABIA" 谐音便于幂等检测）。
+
+8. `ios/Runner/AppDelegate.swift`：在 `didInitializeImplicitFlutterEngine` 注册 `bianbian/privacy` channel，通过 `engineBridge.pluginRegistry.registrar(forPlugin: "BianbianPrivacyMode")` 拿 `messenger`；`setEnabled(false)` 时主动 `hideOverlay()` 防残留。
+
+9. `ios/Runner/SceneDelegate.swift`：override `sceneWillResignActive(_:)` → `PrivacyMode.shared.showOverlay(in:)`；`sceneDidBecomeActive(_:)` → `hideOverlay()`。Flutter 新模板已是 scene-based 架构，不再用 `applicationWillResignActive`。
+
+10. `ios/Runner.xcodeproj/project.pbxproj`：4 处插入注册 `PrivacyMode.swift`（PBXBuildFile / PBXFileReference / Group / Sources build phase）。
+
+**单元测试（17 新增）**
+
+- `pin_credential_test.dart`（+3 用例）：readPrivacyMode 默认 false / write+read roundtrip / clearCredential + writeEnabled(false) 都不影响（"独立于 PIN 锁"）。
+- `privacy_mode_service_test.dart`（新建 6 用例）：FakePrivacyModeService 计数 + lastEnabled / MethodChannel setEnabled true · false / PlatformException 静默吞 / MissingPluginException 静默吞。
+- `app_lock_providers_test.dart`（+4 用例）：privacyModeProvider 默认 false / setPrivacyMode(true) 同时写 store + native service / setPrivacyMode(false) 同步 / setPrivacyMode 后 invalidate 让 provider 拿到新值。
+- `app_lock_settings_page_test.dart`（+3 用例）：未启用应用锁时隐私模式开关仍可见且默认关闭 / 打开开关 → setPrivacyMode(true) 写 store + 调用 native service / 已开启状态下关闭开关 → setPrivacyMode(false)。
+- `app_lock_settings_page_test.dart`（修复 9 用例）：把 `find.byType(SwitchListTile)` 与 `find.byType(Switch).last` 等"按 index 取"的 finder 全部改为 `_switchOf(titleText)` 用 ancestor 限定。Helper 函数 `Finder _switchOf(String titleText)` 用 `ListTile` 作为 ancestor（同时覆盖 SwitchListTile 与生物识别 disabled 态的普通 ListTile）。
+
+**验证**
+
+- `flutter analyze`：No issues found。
+- `flutter test`：662 用例全绿（lock 模块 111 用例全部通过）。
+- iOS / Android native 端**未跑**——Windows 开发机不能 build iOS；Android 端会在用户手机上 e2e 验证。
+
+**用户端到端验证 10 项**
+
+请在真机或模拟器上跑下面 10 项，找到任一不符再叫我修：
+
+1. 「我的 → 应用锁」页底部出现"隐私模式" SwitchListTile（独立于上方"启用应用锁"开关，关锁状态下也可见）；
+2. 默认关闭，副标题"关闭中 · 多任务切换器可见 App 当前画面"；
+3. **Android**：拨开开关 → 副标题变"已开启 · 多任务预览模糊 + Android 阻止截屏"。按 Recent apps 键看缩略图：本 App 应是纯黑（FLAG_SECURE 系统级处理）。系统截屏快捷键应被阻止（出现"无法截屏"或类似错误）；
+4. **Android**：关掉开关 → 缩略图恢复正常预览，截屏功能恢复；
+5. **iOS**：拨开开关 → 把 App 切到 App Switcher（上滑暂停）→ 缩略图应显示奶黄色 + "边边记账" 文字遮盖（不是真实页面）；
+6. **iOS**：关掉开关 → 缩略图恢复正常预览；
+7. 关闭 App 完全杀掉（force quit）→ 重开 → 隐私模式持久化生效（之前开着的现在还开，关着的还关）；
+8. 同时开"应用锁"和"隐私模式" → 锁屏 overlay 显示 + 多任务预览也是遮盖 / FLAG_SECURE → 两套防护可叠加；
+9. 只开"隐私模式"不开"应用锁" → 关锁状态下隐私模式仍生效（独立于 PIN 锁）；
+10. 在切换隐私模式开关时观察日志：Android logcat 应看到 `setFlags(FLAG_SECURE)` / `clearFlags(FLAG_SECURE)` 痕迹；iOS 看到 SceneDelegate 的 sceneWillResignActive / sceneDidBecomeActive 被触发。
+
+**给后续开发者的备忘**
+
+- **setPrivacyMode 顺序：先 native 后 storage**——native 是即时生效路径，先写它再写 storage 一致性最好。**不要颠倒顺序**——会出现"用户认为已关、实际仍生效"。service 内部已 try/catch 静默吞，不会冒泡到 controller。
+- **隐私模式独立于 appLockEnabled**——两者是正交防护，UI 也独立挂载。**不要把 _PrivacyModeToggle 放进 `if (enabled) {...}` 块**——会让"不开锁但要防截屏"的用户找不到入口。
+- **MissingPluginException 与 PlatformException 都静默**——前者是测试 / web 平台无 channel；后者是 native 出错（极少）。最差退化：开关已写 storage 但 native 没生效，下次冷启动 main bootstrap 还会再 apply。
+- **MethodChannel 名 `bianbian/privacy` 不带版本号**——单方法 channel 加新方法即可，加版本会让 native 端两套同名 handler 共存。
+- **iOS 用 SceneDelegate 监听生命周期，不是 AppDelegate**——Flutter 新模板已是 scene-based 架构，`applicationWillResignActive` 在 scene 启用时不再被推送。
+- **iOS overlay 用 UIView 而非新建 UIWindow**——避免 z-order 问题。tag `0xB1AB1A` 唯一便于幂等检测。
+- **iOS overlay 颜色硬编码奶黄**——15.1 主题落地后可改读 `appTheme.colorScheme.primaryContainer`，但 native 端获取 Flutter Theme 较复杂，目前用 design-document 主色调硬编码。
+- **Android FLAG_SECURE 是持久 flag**——只需在"用户改设置"+"冷启动 apply"两点动它，不需要 didChangeAppLifecycleState 加事件。
+- **iOS PrivacyMode.shared.enabled 不持久化在 native**——Dart 侧 secure storage 是真值源；native 是会话内 cache，每次冷启动由 main bootstrap 重写，避免升级 / 重装时 native 残留。
+- **冷启动 apply 用 unawaited + catchError 静默**——await provider.future 拿值是必须，但调 native 是 fire-and-forget，不阻塞首帧。
+- **bootstrap if(privacyEnabled) 而非无条件 setEnabled**——enabled=false 时跳过 channel 跨边界往返，节省冷启动延迟。
+- **secure storage 第 7 条独立 key**——不与 PIN 三件套合并 JSON。理由不变：原子写、字段升级、测试 InMemory 实现独立字段。
+- **PrivacyModeService 抽象 + Fake 单测不打 native**——FakePrivacyModeService 保留 callCount + lastEnabled 让 widget 测试可以断言"切开关 → 调 1 次 + 入参正确"。
+- **AppLockController.setPrivacyMode 不抛异常**——setBackgroundLockTimeoutSeconds 拒负值是因为"负秒数"是程序员误用；setPrivacyMode(true/false) 没有非法值。
+- **测试侧 _switchOf 用 ListTile ancestor**——14.4 让 UI 树同时含 SwitchListTile 与普通 ListTile（生物识别 disabled 态 trailing 是 Switch）。SwitchListTile 内部嵌一个 ListTile，所以 ancestor 用 ListTile 同时覆盖两种形态。
+- **测试与人工验证**：662 全量回归通过（lock 模块 111 用例 + 其余 551）；端到端 10 项需用户在真机执行（Android FLAG_SECURE / iOS overlay 都需 native 路径，模拟器也能验，但真机更可靠）。**Step 15.1 必须等用户验证 14.4 后再开**——15.1 是主题切换，与本步独立，但 iOS overlay 颜色未来将随主题改，所以验证 14.4 时记下"现在 overlay 是奶黄色"作为 15.1 的对比基线。

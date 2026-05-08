@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/lock/app_lock_overlay.dart';
+import '../features/lock/app_lock_providers.dart';
 import '../features/sync/sync_trigger.dart';
 import 'app_router.dart';
 import 'app_theme.dart';
@@ -26,10 +28,23 @@ import 'app_theme.dart';
 /// 下 `syncServiceProvider` 链触达 `SharedPreferences` 时抛
 /// `MissingPluginException`，以及悬挂的 `Timer.periodic` 让
 /// `tester.pumpAndSettle()` 报"Timer still pending"。
+///
+/// Step 14.3：在 `didChangeAppLifecycleState` 里追加 [AppLockGuard.onPaused] /
+/// [AppLockGuard.onResumed] 调用——前台锁屏的"后台超时"判定由 guard 自己负责，
+/// 这里只把生命周期事件原样转发；冷启动锁由 main.dart 在 bootstrap 末尾显式调
+/// `guard.lock()`。`enableAppLockGuard` 让 widget 测试关掉这套行为——避免锁屏
+/// overlay 干扰其他 feature 的 widget 测试。
 class BianBianApp extends ConsumerStatefulWidget {
-  const BianBianApp({super.key, this.enableSyncLifecycle = true});
+  const BianBianApp({
+    super.key,
+    this.enableSyncLifecycle = true,
+    this.enableAppLockGuard = true,
+  });
 
   final bool enableSyncLifecycle;
+
+  /// Step 14.3：测试可关闭。生产恒为 true。
+  final bool enableAppLockGuard;
 
   @override
   ConsumerState<BianBianApp> createState() => _BianBianAppState();
@@ -37,11 +52,16 @@ class BianBianApp extends ConsumerStatefulWidget {
 
 class _BianBianAppState extends ConsumerState<BianBianApp>
     with WidgetsBindingObserver {
+  bool _observerRegistered = false;
+
   @override
   void initState() {
     super.initState();
+    if (widget.enableSyncLifecycle || widget.enableAppLockGuard) {
+      WidgetsBinding.instance.addObserver(this);
+      _observerRegistered = true;
+    }
     if (!widget.enableSyncLifecycle) return;
-    WidgetsBinding.instance.addObserver(this);
     // 不能在 initState 同步阶段读 provider（未 mount 完成前读会被 Riverpod
     // 警告）。延迟到首帧后再启动。
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -56,8 +76,11 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
 
   @override
   void dispose() {
-    if (widget.enableSyncLifecycle) {
+    if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
+      _observerRegistered = false;
+    }
+    if (widget.enableSyncLifecycle) {
       // 显式停一下定时器——Notifier 的 ref.onDispose 在 ProviderContainer
       // 关闭时才会跑，而生产路径 BianBianApp 拆掉时 container 仍存活。
       // ignore: avoid_ref_inside_state_dispose
@@ -68,19 +91,36 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!widget.enableSyncLifecycle) return;
-    final trigger = ref.read(syncTriggerProvider.notifier);
-    switch (state) {
-      case AppLifecycleState.resumed:
-        unawaited(trigger.trigger());
-        trigger.startPeriodic();
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
-      case AppLifecycleState.hidden:
-        trigger.stopPeriodic();
-      case AppLifecycleState.inactive:
-        // 短暂态（如来电覆盖），不动定时器。
-        break;
+    if (widget.enableSyncLifecycle) {
+      final trigger = ref.read(syncTriggerProvider.notifier);
+      switch (state) {
+        case AppLifecycleState.resumed:
+          unawaited(trigger.trigger());
+          trigger.startPeriodic();
+        case AppLifecycleState.paused:
+        case AppLifecycleState.detached:
+        case AppLifecycleState.hidden:
+          trigger.stopPeriodic();
+        case AppLifecycleState.inactive:
+          // 短暂态（如来电覆盖），不动定时器。
+          break;
+      }
+    }
+    if (widget.enableAppLockGuard) {
+      final guard = ref.read(appLockGuardProvider.notifier);
+      switch (state) {
+        case AppLifecycleState.resumed:
+          guard.onResumed();
+        case AppLifecycleState.paused:
+        case AppLifecycleState.detached:
+        case AppLifecycleState.hidden:
+          guard.onPaused();
+        case AppLifecycleState.inactive:
+          // inactive 是 iOS 的"短暂打断"（来电覆盖、控制中心下拉等）——不算真正
+          // 的后台进入，不更新 lastBackgroundedAt 避免误锁。Android 没有 inactive
+          // 态，paused 直接打头。
+          break;
+      }
     }
   }
 
@@ -100,6 +140,35 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: widget.enableAppLockGuard
+          ? (context, child) {
+              return _AppLockGate(child: child ?? const SizedBox.shrink());
+            }
+          : null,
+    );
+  }
+}
+
+/// Step 14.3：套在 router child 之上的锁屏门。
+///
+/// 设计上仅消费 `appLockGuardProvider.select((s) => s.isLocked)` 一项 bool——
+/// `lastBackgroundedAt` / 内部 timeoutSeconds 变化都不应触发 rebuild，避免每次
+/// paused 都重建整棵子树。
+class _AppLockGate extends ConsumerWidget {
+  const _AppLockGate({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isLocked =
+        ref.watch(appLockGuardProvider.select((s) => s.isLocked));
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        if (isLocked) const AppLockOverlay(),
       ],
     );
   }

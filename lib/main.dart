@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'app/app.dart';
 import 'data/local/providers.dart';
+import 'features/lock/app_lock_providers.dart';
 import 'features/settings/settings_providers.dart';
 import 'features/sync/attachment/attachment_orphan_sweeper.dart';
 import 'features/sync/attachment/attachment_providers.dart';
@@ -29,6 +30,30 @@ Future<void> main() async {
   final container = ProviderContainer();
   try {
     await container.read(defaultSeedProvider.future);
+    // Step 14.3：冷启动锁——若用户已启用应用锁则在 BianBianApp 渲染前把
+    // [AppLockGuard] 锁上。这样首帧就会被 overlay 遮盖，避免有人冷启动期间瞄
+    // 到任何受保护内容。await 两个 future 顺序无关：先读 timeout 让
+    // backgroundLockTimeoutProvider AsyncData ready（appLockGuardProvider 构造
+    // 时同步读它的 maybeWhen），再读 enabled 决定是否调 lock()。
+    await container.read(backgroundLockTimeoutProvider.future);
+    final appLockEnabled = await container.read(appLockEnabledProvider.future);
+    if (appLockEnabled) {
+      container.read(appLockGuardProvider.notifier).lock();
+    }
+    // Step 14.4：隐私模式冷启动 apply —— 读 privacyModeProvider 拿持久化值后调
+    // native（Android 设 FLAG_SECURE / iOS 把 enabled flag 写入 PrivacyMode.shared，
+    // 后续 sceneWillResignActive 时挂遮盖）。**与应用锁解耦**——即便 PIN 锁未开
+    // 也允许独立启用隐私模式。failure 由 PrivacyModeService 自己静默兜底，不阻塞
+    // 首帧。
+    final privacyEnabled = await container.read(privacyModeProvider.future);
+    if (privacyEnabled) {
+      unawaited(
+        container
+            .read(privacyModeServiceProvider)
+            .setEnabled(true)
+            .catchError((_) {/* 静默 */}),
+      );
+    }
     // Step 8.3：fire-and-forget 触发汇率刷新。每日节流 + 失败静默；不阻塞首帧。
     // 成功后 invalidate fxRates / fxRateRows 让任何已 mount 的页面拿到新值。
     unawaited(

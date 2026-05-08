@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_lock_providers.dart';
 import 'biometric_authenticator.dart';
+import 'pin_credential.dart';
 import 'pin_setup_page.dart';
 import 'pin_unlock_page.dart';
 
@@ -146,7 +147,11 @@ class _Body extends ConsumerWidget {
           ),
           const Divider(height: 0),
           const _BiometricToggle(),
+          const Divider(height: 0),
+          const _BackgroundTimeoutTile(),
         ],
+        const Divider(height: 0),
+        const _PrivacyModeToggle(),
         const Divider(height: 0),
         ListTile(
           leading: Icon(
@@ -173,7 +178,11 @@ class _Body extends ConsumerWidget {
             '· PIN 经 PBKDF2-HMAC-SHA256 + 16 字节随机 salt 处理后，仅哈希值存于系统安全存储；'
             'App 与服务器都无法还原原始 PIN。\n'
             '· 连续输错 3 次将进入 30 秒冷却。\n'
-            '· 启用生物识别后，每次解锁将优先弹出系统面板；失败或取消后可随时改用 PIN。',
+            '· 启用生物识别后，每次解锁将优先弹出系统面板；失败或取消后可随时改用 PIN。\n'
+            '· 后台超时锁定：App 切回后台超过设定时长后再回到前台时会要求重新解锁。'
+            '"立即锁定"会让任意一次后台→前台切换都触发锁屏。\n'
+            '· 隐私模式：开启后多任务切换器中显示遮盖层；Android 同时阻止系统截屏 / '
+            '录屏，iOS 受限于系统不能阻止截屏（但仍能挡住多任务缩略图）。',
           ),
         ),
       ],
@@ -284,6 +293,150 @@ class _BiometricToggle extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Step 14.3：后台超时锁定阈值选择器。
+///
+/// 仅在应用锁已开启时挂载（由 `_Body.build` 控制）。点击 ListTile 弹
+/// `showModalBottomSheet`，4 个固定选项：
+/// - 立即锁定（0 秒）
+/// - 1 分钟（60 秒）
+/// - 5 分钟（300 秒）
+/// - 15 分钟（900 秒）
+///
+/// 选中后调 [AppLockController.setBackgroundLockTimeoutSeconds] + invalidate
+/// `backgroundLockTimeoutProvider`，[AppLockGuard] 通过 listen 即时更新阈值
+/// （不重建 Notifier，会话状态保留）。
+class _BackgroundTimeoutTile extends ConsumerWidget {
+  const _BackgroundTimeoutTile();
+
+  String _label(int seconds) {
+    if (seconds == 0) return '立即锁定';
+    if (seconds < 60) return '$seconds 秒';
+    if (seconds < 3600) {
+      final m = seconds ~/ 60;
+      return '$m 分钟';
+    }
+    final h = seconds ~/ 3600;
+    return '$h 小时';
+  }
+
+  Future<void> _onTap(BuildContext context, WidgetRef ref, int current) async {
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: RadioGroup<int>(
+          groupValue: current,
+          onChanged: (v) {
+            if (v == null) return;
+            Navigator.of(ctx).pop(v);
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '后台超时锁定',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+              ),
+              for (final option in kBackgroundLockTimeoutOptions)
+                RadioListTile<int>(
+                  value: option,
+                  title: Text(_label(option)),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null || selected == current) return;
+    await ref
+        .read(appLockControllerProvider)
+        .setBackgroundLockTimeoutSeconds(selected);
+    ref.invalidate(backgroundLockTimeoutProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncTimeout = ref.watch(backgroundLockTimeoutProvider);
+    return asyncTimeout.when(
+      loading: () => const ListTile(
+        leading: Icon(Icons.schedule),
+        title: Text('后台超时锁定'),
+        subtitle: Text('正在读取偏好…'),
+      ),
+      error: (e, _) => ListTile(
+        leading: const Icon(Icons.schedule),
+        title: const Text('后台超时锁定'),
+        subtitle: Text('读取失败：$e'),
+        enabled: false,
+      ),
+      data: (seconds) => ListTile(
+        leading: const Icon(Icons.schedule),
+        title: const Text('后台超时锁定'),
+        subtitle: Text(
+          seconds == 0
+              ? '立即锁定 · 任何后台→前台切换都会要求 PIN'
+              : '${_label(seconds)} · 后台超过该时长后回到前台需要 PIN',
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _onTap(context, ref, seconds),
+      ),
+    );
+  }
+}
+
+/// Step 14.4：隐私模式开关 ListTile。
+///
+/// **独立于应用锁开启状态**——隐私模式与"锁屏"是两种正交防护，所以挂在 enabled
+/// 块外。开关切换路径：
+/// 1. UI 调 [AppLockController.setPrivacyMode]——内部先打 native（FLAG_SECURE /
+///    iOS overlay enabled flag）再写 secure storage；
+/// 2. await 后 invalidate [privacyModeProvider] 让 ListTile 重建展示新状态。
+///
+/// 副标题文案根据平台差异化：Android 强调"防截屏"，iOS 仅强调"多任务遮盖"。
+class _PrivacyModeToggle extends ConsumerWidget {
+  const _PrivacyModeToggle();
+
+  Future<void> _onChange(WidgetRef ref, bool next) async {
+    await ref.read(appLockControllerProvider).setPrivacyMode(next);
+    ref.invalidate(privacyModeProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncEnabled = ref.watch(privacyModeProvider);
+    return asyncEnabled.when(
+      loading: () => const ListTile(
+        leading: Icon(Icons.visibility_off_outlined),
+        title: Text('隐私模式'),
+        subtitle: Text('正在读取偏好…'),
+      ),
+      error: (e, _) => ListTile(
+        leading: const Icon(Icons.visibility_off_outlined),
+        title: const Text('隐私模式'),
+        subtitle: Text('读取失败：$e'),
+        enabled: false,
+      ),
+      data: (enabled) => SwitchListTile(
+        secondary: const Icon(Icons.visibility_off_outlined),
+        title: const Text('隐私模式'),
+        subtitle: Text(
+          enabled
+              ? '已开启 · 多任务预览模糊 + Android 阻止截屏'
+              : '关闭中 · 多任务切换器可见 App 当前画面',
+        ),
+        value: enabled,
+        onChanged: (v) => _onChange(ref, v),
+      ),
     );
   }
 }

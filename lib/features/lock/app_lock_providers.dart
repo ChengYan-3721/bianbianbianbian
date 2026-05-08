@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'biometric_authenticator.dart';
 import 'pin_credential.dart';
+import 'privacy_mode_service.dart';
 
 /// Step 14.1：应用锁的 Riverpod provider 链。
 ///
@@ -77,6 +78,42 @@ final biometricCapabilityProvider =
 final biometricEnabledProvider = FutureProvider<bool>((ref) async {
   final store = ref.watch(pinCredentialStoreProvider);
   return store.readBiometricEnabled();
+});
+
+/// Step 14.3：后台超时锁定阈值（秒）。
+///
+/// 真值源是 `PinCredentialStore.readBackgroundLockTimeoutSeconds`。修改路径：
+/// UI 调 [AppLockController.setBackgroundLockTimeoutSeconds] 后
+/// `ref.invalidate(backgroundLockTimeoutProvider)`，[AppLockGuard] 通过 `ref.listen`
+/// 自动同步新阈值——不重建 Notifier，会话状态（lastBackgroundedAt）保留。
+///
+/// 默认 [kDefaultBackgroundLockTimeoutSeconds]（60 秒）；`0` 表示"立即锁定"
+/// （任何 paused→resumed 都触发锁屏）。
+final backgroundLockTimeoutProvider = FutureProvider<int>((ref) async {
+  final store = ref.watch(pinCredentialStoreProvider);
+  return store.readBackgroundLockTimeoutSeconds();
+});
+
+/// Step 14.4：隐私模式开关持久化值。
+///
+/// 真值源是 secure storage 的 `local_app_lock_privacy_mode` 条目。修改路径：UI 调
+/// [AppLockController.setPrivacyMode] —— 内部既写存储又调 [privacyModeServiceProvider]
+/// 的 native 端，再 `ref.invalidate(privacyModeProvider)` 让开关 UI 重建。
+///
+/// **独立于 [appLockEnabledProvider]**：截屏阻止与"锁屏"是两种正交防护，开/关互不
+/// 影响 —— 用户可以"不开应用锁但开隐私模式"，也可以"开应用锁但不开隐私模式"。
+final privacyModeProvider = FutureProvider<bool>((ref) async {
+  final store = ref.watch(pinCredentialStoreProvider);
+  return store.readPrivacyMode();
+});
+
+/// Step 14.4：隐私模式 native 通道封装层 provider。
+///
+/// 生产为 [MethodChannelPrivacyModeService]，测试通过 `ProviderContainer.test(
+/// overrides: [privacyModeServiceProvider.overrideWithValue(FakePrivacyModeService())])`
+/// 注入。
+final privacyModeServiceProvider = Provider<PrivacyModeService>((ref) {
+  return const MethodChannelPrivacyModeService();
 });
 
 /// Step 14.2：生物识别封装层 provider。生产为 [LocalAuthBiometricAuthenticator]，
@@ -303,6 +340,35 @@ class AppLockController {
   Future<void> setBiometricEnabled(bool enabled) async {
     await _store.writeBiometricEnabled(enabled);
   }
+
+  /// Step 14.3：持久化后台超时锁定阈值（秒）。
+  ///
+  /// 调用方在 await 后显式 `ref.invalidate(backgroundLockTimeoutProvider)` 触发
+  /// [AppLockGuard] 同步新阈值。
+  ///
+  /// 接受值：
+  /// - `0` = 立即锁定（任何 paused→resumed 都锁）；
+  /// - 正整数 = 后台超过 N 秒锁定（建议从 [kBackgroundLockTimeoutOptions] 选）；
+  /// - 负值 = 抛 [ArgumentError]（避免误传 -1 之类被当成"立即"）。
+  Future<void> setBackgroundLockTimeoutSeconds(int seconds) async {
+    if (seconds < 0) {
+      throw ArgumentError('seconds must be >= 0, got $seconds');
+    }
+    await _store.writeBackgroundLockTimeoutSeconds(seconds);
+  }
+
+  /// Step 14.4：持久化隐私模式开关并立即同步到 native。
+  ///
+  /// 调用方在 await 后显式 `ref.invalidate(privacyModeProvider)` 触发开关 UI 重建。
+  ///
+  /// 顺序：先写 native 再写 storage。理由：native 调用是即时生效路径（FLAG_SECURE
+  /// 直接打到 Window / iOS overlay state），失败时不应让存储和实际生效状态不一致。
+  /// 失败由 service 内部静默吞 —— 不影响 storage 写入（用户的偏好仍被尊重，下次
+  /// bootstrap 时会再 apply 一次）。
+  Future<void> setPrivacyMode(bool enabled) async {
+    await ref.read(privacyModeServiceProvider).setEnabled(enabled);
+    await _store.writePrivacyMode(enabled);
+  }
 }
 
 final appLockControllerProvider = Provider<AppLockController>((ref) {
@@ -326,3 +392,183 @@ String debugDumpAttemptState(PinAttemptState s) {
   if (!kDebugMode) return '<release>';
   return s.toString();
 }
+
+/// Step 14.3：前台锁屏 Guard 的状态。
+///
+/// 两条核心字段：
+/// - [isLocked]：当前是否需要展示锁屏——`true` 时 [BianBianApp] 在路由器之上覆盖
+///   [PinUnlockPage] overlay；`false` 时 overlay 隐藏，正常路由生效；
+/// - [lastBackgroundedAt]：进入后台的时间戳——`null` 表示当前没有"挂起的后台
+///   会话"（要么从未进过后台，要么已经处理过 resumed）。
+///
+/// 本类不对外暴露 lastBackgroundedAt 的修改语义——所有变更走 [AppLockGuard]
+/// 的方法。**不**持久化：App 冷启动状态归零（冷启动锁逻辑由 main.dart 主动调
+/// `lock()` 触发），与 PinAttemptState 一致。
+@immutable
+class AppLockGuardState {
+  const AppLockGuardState({
+    required this.isLocked,
+    required this.lastBackgroundedAt,
+  });
+
+  final bool isLocked;
+  final DateTime? lastBackgroundedAt;
+
+  static const AppLockGuardState unlocked =
+      AppLockGuardState(isLocked: false, lastBackgroundedAt: null);
+
+  static const AppLockGuardState locked =
+      AppLockGuardState(isLocked: true, lastBackgroundedAt: null);
+
+  AppLockGuardState copyWith({
+    bool? isLocked,
+    DateTime? lastBackgroundedAt,
+    bool clearLastBackgroundedAt = false,
+  }) {
+    return AppLockGuardState(
+      isLocked: isLocked ?? this.isLocked,
+      lastBackgroundedAt: clearLastBackgroundedAt
+          ? null
+          : (lastBackgroundedAt ?? this.lastBackgroundedAt),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is AppLockGuardState &&
+      other.isLocked == isLocked &&
+      other.lastBackgroundedAt == lastBackgroundedAt;
+
+  @override
+  int get hashCode => Object.hash(isLocked, lastBackgroundedAt);
+
+  @override
+  String toString() =>
+      'AppLockGuardState(isLocked: $isLocked, '
+      'lastBackgroundedAt: $lastBackgroundedAt)';
+}
+
+/// Step 14.3：前台锁屏触发器。
+///
+/// 监听三类事件：
+/// - [lock]：冷启动锁——main.dart 在 bootstrap 末尾若 `appLockEnabledProvider == true`
+///   主动调用；
+/// - [onPaused]：[BianBianApp.didChangeAppLifecycleState] 收到 paused/hidden/detached
+///   时调用——记录 [AppLockGuardState.lastBackgroundedAt]；
+/// - [onResumed]：收到 resumed 时调用——若 `(now - lastBackgroundedAt >= timeoutSeconds)`
+///   则锁。`timeoutSeconds == 0` 表示立即锁（任何 paused→resumed 都锁）。
+///
+/// 调用 [unlock] 解锁——成功验证 PIN / 生物识别后由 [PinUnlockPage] overlay 触发。
+///
+/// `enabled` 标志由外部 provider 链联动——`appLockEnabledProvider` 变 false 时
+/// [appLockGuardProvider] 的 listen 自动 `forceUnlock()` 清状态（避免锁屏卡死）。
+class AppLockGuard extends StateNotifier<AppLockGuardState> {
+  AppLockGuard({
+    required this.clock,
+    int initialTimeoutSeconds = kDefaultBackgroundLockTimeoutSeconds,
+  })  : _timeoutSeconds = initialTimeoutSeconds < 0
+            ? kDefaultBackgroundLockTimeoutSeconds
+            : initialTimeoutSeconds,
+        super(AppLockGuardState.unlocked);
+
+  final AppLockClock clock;
+  int _timeoutSeconds;
+
+  /// 当前生效的后台超时阈值（秒）；UI 不直接消费——只用于日志/调试。
+  @visibleForTesting
+  int get timeoutSeconds => _timeoutSeconds;
+
+  /// 由 [appLockGuardProvider] 的 listen 在 [backgroundLockTimeoutProvider]
+  /// 变化时调用，同步新阈值。**不重建 Notifier**——保留 lastBackgroundedAt
+  /// 与 isLocked 状态不被打断。
+  void setTimeoutSeconds(int seconds) {
+    if (seconds < 0) return;
+    _timeoutSeconds = seconds;
+  }
+
+  /// 立即锁屏——main 冷启动 / 测试可手动调。
+  ///
+  /// 同时清空 lastBackgroundedAt——避免锁屏期间 paused→resumed 的额外锁动作
+  /// 干扰（用户已经在锁屏页面，再"加锁"无意义）。
+  void lock() {
+    state = AppLockGuardState.locked;
+  }
+
+  /// 解锁——PIN/生物识别验证成功后由 [PinUnlockPage] 调用。
+  ///
+  /// 同时清 lastBackgroundedAt——下次 paused 事件会重新写入。
+  void unlock() {
+    state = AppLockGuardState.unlocked;
+  }
+
+  /// 应用锁被关闭时由 listen 调用——立即解锁 + 清 lastBackgroundedAt。
+  /// 与 [unlock] 等价；保留独立方法名是为了在 stack trace 里区分调用源。
+  void forceUnlock() {
+    state = AppLockGuardState.unlocked;
+  }
+
+  /// App 进入后台——记录 lastBackgroundedAt 时间戳。**不**直接锁屏，等
+  /// [onResumed] 时按超时阈值判定。
+  ///
+  /// 已锁屏（isLocked == true）时本方法依然记录 lastBackgroundedAt，
+  /// 但不会改变锁屏状态——避免用户在锁屏页面快速切换前后台时丢失"已锁"语义。
+  void onPaused() {
+    state = state.copyWith(lastBackgroundedAt: clock());
+  }
+
+  /// App 回到前台——若距 [onPaused] 时刻已超过 timeoutSeconds 则锁屏。
+  ///
+  /// 边界条件：
+  /// - lastBackgroundedAt == null（未走过 onPaused）→ 不动；
+  /// - timeoutSeconds == 0 → 任何 elapsed >= 0 都触发锁；
+  /// - elapsed < timeoutSeconds → 不锁，但**清空** lastBackgroundedAt（视为"本次
+  ///   后台会话已处理"）；
+  /// - elapsed >= timeoutSeconds → 锁。
+  void onResumed() {
+    final last = state.lastBackgroundedAt;
+    if (last == null) return;
+    final now = clock();
+    final elapsedSeconds = now.difference(last).inSeconds;
+    if (elapsedSeconds >= _timeoutSeconds) {
+      state = AppLockGuardState.locked;
+    } else {
+      // 未触发锁但已"消化"本次后台会话——避免用户多次 resume 重复触发判定。
+      state = state.copyWith(clearLastBackgroundedAt: true);
+    }
+  }
+}
+
+/// Step 14.3：[AppLockGuard] 的 Riverpod 入口。
+///
+/// 创建时 listen 两个上游 provider：
+/// - [appLockEnabledProvider]：true→false 时调 [AppLockGuard.forceUnlock]
+///   （用户关闭应用锁后立即让 overlay 隐藏）；
+/// - [backgroundLockTimeoutProvider]：值变更时调 [AppLockGuard.setTimeoutSeconds]
+///   （即时生效，不重建 Notifier、保留 lastBackgroundedAt）。
+///
+/// **不**主动锁——冷启动锁由 main.dart 在 bootstrap 末尾显式调
+/// `ref.read(appLockGuardProvider.notifier).lock()`，避免 provider 初始化时机
+/// 与 enabled async 状态的 race。
+final appLockGuardProvider =
+    StateNotifierProvider<AppLockGuard, AppLockGuardState>((ref) {
+  final clock = ref.watch(appLockClockProvider);
+  // 用 `read` 拿一次同步初值——provider 已被 main bootstrap 预热到 AsyncData。
+  // 取不到（极少见的 race，例如测试场景）就用 default。
+  final initialTimeout = ref.read(backgroundLockTimeoutProvider).maybeWhen(
+        data: (s) => s,
+        orElse: () => kDefaultBackgroundLockTimeoutSeconds,
+      );
+  final guard = AppLockGuard(
+    clock: clock,
+    initialTimeoutSeconds: initialTimeout,
+  );
+  ref.listen<AsyncValue<int>>(backgroundLockTimeoutProvider, (prev, next) {
+    next.whenData(guard.setTimeoutSeconds);
+  });
+  ref.listen<AsyncValue<bool>>(appLockEnabledProvider, (prev, next) {
+    next.whenData((enabled) {
+      if (!enabled) guard.forceUnlock();
+    });
+  });
+  return guard;
+});

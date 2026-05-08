@@ -11,12 +11,14 @@ import 'pin_credential.dart';
 /// PIN 解锁页——14.1 阶段用于"关闭应用锁"与"修改 PIN"前的旧 PIN 验证；
 /// 14.2 阶段在 PIN 上叠加生物识别快路径（启用 + 设备可用 + 未冷却时自动弹一次系
 /// 统面板，成功直接 pop(true)，失败/取消降级到 PIN 输入）；
-/// 14.3 阶段会作为前台锁屏的输入界面被路由器拦截显示。
+/// 14.3 阶段会作为前台锁屏的输入界面被 [AppLockGuard] overlay 显示——overlay 形态
+/// 下不在路由栈，所以传 [onUnlocked] 让 widget 直接通知 guard 而非 pop。
 ///
 /// UI 协议：
-/// - 验证成功（PIN 或生物识别）→ `Navigator.pop(true)`；
-/// - 用户主动返回（系统返回键 / AppBar back）→ `Navigator.pop(false)`，调用方按
-///   "未完成验证"处理；
+/// - 验证成功（PIN 或生物识别）→ 若传了 [onUnlocked] 则调用 callback；否则
+///   `Navigator.pop(true)`（兼容 push/await pop 的老调用方）；
+/// - 用户主动返回（系统返回键 / AppBar back）→ 仅 push 形态生效，overlay 形态
+///   由调用方用 [PopScope] 拦截；
 /// - 错误 [kPinFailureLimit] 次后进入 [kPinCooldownDuration] 秒冷却——输入框置灰
 ///   + Filled 按钮置灰 + 生物识别按钮也置灰，倒计时通过 1 秒间隔的 `Timer.periodic`
 ///   触发 setState 重绘。倒计时结束自动允许重新输入。
@@ -28,6 +30,8 @@ class PinUnlockPage extends ConsumerStatefulWidget {
     super.key,
     this.subtitle = '请输入应用锁 PIN',
     this.allowBiometric = true,
+    this.onUnlocked,
+    this.showAppBar = true,
   });
 
   final String subtitle;
@@ -35,6 +39,17 @@ class PinUnlockPage extends ConsumerStatefulWidget {
   /// 是否允许走生物识别。"修改 PIN" / "关闭应用锁" 这种"持有人确认"路径建议传
   /// false——避免随手扫脸/按指纹绕过验证；纯锁屏场景传 true。
   final bool allowBiometric;
+
+  /// Step 14.3：成功验证后的回调。
+  ///
+  /// - `null`（push/await 调用方）→ 走 `Navigator.pop(true)`；
+  /// - 非 null（[AppLockGuard] overlay 形态）→ 不 pop，直接 callback——通常调用方
+  ///   会 `ref.read(appLockGuardProvider.notifier).unlock()`，让 overlay 隐藏。
+  final VoidCallback? onUnlocked;
+
+  /// Step 14.3：是否显示 AppBar。锁屏 overlay 形态下传 false——避免出现返回箭头
+  /// 暗示用户"可以退出锁屏"。
+  final bool showAppBar;
 
   @override
   ConsumerState<PinUnlockPage> createState() => _PinUnlockPageState();
@@ -127,7 +142,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
       case BiometricResult.success:
         // 成功后清空 PIN 失败计数，防止上一会话残余触发冷却。
         session.reset();
-        Navigator.of(context).pop(true);
+        _emitSuccess();
         return;
       case BiometricResult.cancelled:
         // 用户主动取消（按取消 / 来电中断）——静默回退到 PIN，不展示报错。
@@ -156,6 +171,16 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
     }
   }
 
+  /// Step 14.3：成功验证后的统一收口——overlay 形态调 callback、push 形态 pop。
+  void _emitSuccess() {
+    final cb = widget.onUnlocked;
+    if (cb != null) {
+      cb();
+      return;
+    }
+    Navigator.of(context).pop(true);
+  }
+
   Future<void> _onSubmit() async {
     if (_busy || _biometricBusy) return;
     final session = ref.read(pinAttemptSessionProvider.notifier);
@@ -176,7 +201,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
     final ok = await session.tryVerify(pin);
     if (!mounted) return;
     if (ok) {
-      Navigator.of(context).pop(true);
+      _emitSuccess();
       return;
     }
 
@@ -225,51 +250,53 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('解锁')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.subtitle,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _ctrl,
-              autofocus: !inputDisabled,
-              enabled: !inputDisabled,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: kPinMaxLength,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(kPinMaxLength),
-              ],
-              decoration: InputDecoration(
-                labelText: 'PIN',
-                errorText: _errorText,
-                border: const OutlineInputBorder(),
+      appBar: widget.showAppBar ? AppBar(title: const Text('解锁')) : null,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.subtitle,
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
-              onSubmitted: (_) => _onSubmit(),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: inputDisabled ? null : _onSubmit,
-              child: Text(coolingDown ? '冷却中（$cooldownLeft 秒）' : '验证'),
-            ),
-            if (biometricAvailable) ...[
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: inputDisabled ? null : _runBiometric,
-                icon: const Icon(Icons.fingerprint),
-                label: Text(
-                  _biometricBusy ? '请按提示完成生物识别…' : '使用指纹 / 面容解锁',
+              const SizedBox(height: 24),
+              TextField(
+                controller: _ctrl,
+                autofocus: !inputDisabled,
+                enabled: !inputDisabled,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: kPinMaxLength,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(kPinMaxLength),
+                ],
+                decoration: InputDecoration(
+                  labelText: 'PIN',
+                  errorText: _errorText,
+                  border: const OutlineInputBorder(),
                 ),
+                onSubmitted: (_) => _onSubmit(),
               ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: inputDisabled ? null : _onSubmit,
+                child: Text(coolingDown ? '冷却中（$cooldownLeft 秒）' : '验证'),
+              ),
+              if (biometricAvailable) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: inputDisabled ? null : _runBiometric,
+                  icon: const Icon(Icons.fingerprint),
+                  label: Text(
+                    _biometricBusy ? '请按提示完成生物识别…' : '使用指纹 / 面容解锁',
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
