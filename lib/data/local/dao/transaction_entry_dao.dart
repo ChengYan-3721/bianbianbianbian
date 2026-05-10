@@ -98,6 +98,22 @@ class TransactionEntryDao extends DatabaseAccessor<AppDatabase>
     return (delete(transactionEntryTable)..where((t) => t.id.equals(id))).go();
   }
 
+  /// 某账本下最近一笔未软删流水的 `occurred_at`（毫秒），无流水返回 null。
+  Future<int?> latestOccurredAtByLedger(String ledgerId) async {
+    final query = selectOnly(transactionEntryTable)
+      ..addColumns([transactionEntryTable.occurredAt])
+      ..where(
+        transactionEntryTable.ledgerId.equals(ledgerId) &
+            transactionEntryTable.deletedAt.isNull(),
+      )
+      ..orderBy([
+        OrderingTerm.desc(transactionEntryTable.occurredAt),
+      ])
+      ..limit(1);
+    final row = await query.getSingleOrNull();
+    return row?.read(transactionEntryTable.occurredAt);
+  }
+
   /// **垃圾桶恢复专用**（Phase 12 Step 12.2）。把软删行清回活跃态——
   /// 写 `deleted_at = null` 并刷新 `updated_at`。返回受影响行数（正常 1 / 不存在 0）。
   Future<int> restoreById(String id, {required int updatedAt}) {

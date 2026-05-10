@@ -102,6 +102,8 @@ class _FakeTransactionRepository implements TransactionRepository {
       fail('FakeTransactionRepository.unsaved');
   @override
   Future<List<TransactionEntry>> listExpired(DateTime cutoff) async => const [];
+  @override
+  Future<DateTime?> latestOccurredAtByLedger(String ledgerId) async => null;
 }
 
 class _FakeAccountRepository implements AccountRepository {

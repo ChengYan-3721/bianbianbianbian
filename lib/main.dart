@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest_10y.dart' as tz_data;
 import 'dart:async';
 
 import 'app/app.dart';
 import 'data/local/providers.dart';
+import 'data/repository/providers.dart'
+    show currentLedgerIdProvider, ledgerRepositoryProvider, transactionRepositoryProvider;
 import 'features/lock/app_lock_providers.dart';
 import 'features/settings/settings_providers.dart';
+import 'features/settings/widget_data_service.dart';
 import 'features/sync/attachment/attachment_orphan_sweeper.dart';
 import 'features/sync/attachment/attachment_providers.dart';
 import 'features/trash/trash_gc_service.dart';
@@ -16,6 +20,12 @@ Future<void> main() async {
   // path_provider / flutter_secure_storage 在 runApp 前就会被 AppDatabase 打开，
   // 必须先初始化绑定。
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Step 16.1：timezone 数据初始化——flutter_local_notifications 的
+  // zonedSchedule 需要 TZDateTime（依赖 timezone 包的时区数据库）。
+  // 必须在 FlutterLocalNotificationsPlugin.initialize 之前完成。
+  // 使用 latest_10y 而非 latest_all 以减小包体积（10 年数据 ~284K vs 全量 ~1.9M）。
+  tz_data.initializeTimeZones();
 
   // Step 1.5 + 1.7：bootstrap 路径走 Riverpod。独立 ProviderContainer 先于 runApp
   // 存在——我们用它预热 defaultSeedProvider.future，连锁触发：
@@ -103,6 +113,16 @@ Future<void> main() async {
     // bootstrap 链 / 首帧渲染抢资源；7 天节流（用 SharedPreferences 记录上次
     // 完成时间）。failure / 超时 / 未配置云服务 一律静默。
     unawaited(_scheduleOrphanSweep(container));
+    // Step 16.1：冷启动恢复提醒调度。读 reminderEnabled + reminderTime；
+    // 已开启 → initialize + scheduleDailyReminder；未开启 → 跳过。
+    // 失败静默——不影响首帧。Android 重启后已调度的通知丢失（需要
+    // RECEIVE_BOOT_COMPLETED + ScheduledNotificationReceiver 重建调度），
+    // 所以每次冷启动都重新 schedule。
+    unawaited(_scheduleReminderIfEnabled(container));
+    // Step 16.3：初始化 home_widget（iOS App Group）+ 刷新桌面小组件数据。
+    // 冷启动后小组件可能展示过期数据，主动 push 一次最新值。
+    // fire-and-forget——平台不支持时静默吞错。
+    unawaited(_updateWidgetData(container));
     runApp(
       UncontrolledProviderScope(
         container: container,
@@ -155,6 +175,51 @@ Future<void> _scheduleOrphanSweep(ProviderContainer container) async {
     await prefs.setInt(
       kLastOrphanSweepAtPrefKey,
       DateTime.now().millisecondsSinceEpoch,
+    );
+  } catch (_) {
+    // 静默——后台任务失败不应影响 App。
+  }
+}
+
+/// Step 16.1：冷启动恢复每日提醒调度。
+///
+/// Android 重启后 `flutter_local_notifications` 的已调度通知丢失——
+/// 需要每次冷启动重新 schedule。读取 DB 中 reminderEnabled + reminderTime，
+/// 已开启 → 调 [ReminderService.scheduleDailyReminder]；未开启 → 跳过。
+/// 失败静默——不影响首帧。
+Future<void> _scheduleReminderIfEnabled(ProviderContainer container) async {
+  try {
+    final enabled = await container.read(reminderEnabledProvider.future);
+    if (!enabled) return;
+    final time = await container.read(reminderTimeProvider.future);
+    if (time == null) return;
+    final service = container.read(reminderServiceProvider);
+    await service.initialize();
+    await service.scheduleDailyReminder(
+      hour: time.hour,
+      minute: time.minute,
+    );
+  } catch (_) {
+    // 静默——后台任务失败不应影响 App。
+  }
+}
+
+/// Step 16.3：冷启动刷新桌面小组件数据。
+///
+/// 1. 初始化 home_widget（iOS App Group ID）；
+/// 2. 从 provider 链读取当前账本 → 计算今日支出 / 本月结余 →
+///    写入 SharedPreferences / UserDefaults → 触发原生小组件刷新。
+/// 3. 任一环节失败静默——不影响首帧。
+Future<void> _updateWidgetData(ProviderContainer container) async {
+  try {
+    await WidgetDataService.initialize();
+    final ledgerId = await container.read(currentLedgerIdProvider.future);
+    final txRepo = await container.read(transactionRepositoryProvider.future);
+    final ledgerRepo = await container.read(ledgerRepositoryProvider.future);
+    await WidgetDataService.computeAndRefresh(
+      ledgerId: ledgerId,
+      txRepo: txRepo,
+      ledgerRepo: ledgerRepo,
     );
   } catch (_) {
     // 静默——后台任务失败不应影响 App。

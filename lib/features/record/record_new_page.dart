@@ -62,11 +62,9 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
   void initState() {
     super.initState();
     _showKeyboard = widget.startAtKeyboard || widget.isTransfer;
-    // Step 8.2：进入新建/转账页时把币种字段设为账本默认币种（fire-and-forget）。
-    // 编辑/复制路径走 preloadFromEntry，已在 currency 字段填好原 entry 值，
-    // initDefaultCurrency 内部会因 currency != 'CNY' 提前 return，不会覆盖。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(recordFormProvider.notifier).reset();
       ref.read(recordFormProvider.notifier).initDefaultCurrency();
     });
   }
@@ -166,10 +164,9 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                   );
                   return;
                 }
-                final navigator = Navigator.of(context);
                 final ok = await notifier.save();
                 if (!mounted) return;
-                if (ok) navigator.pop();
+                if (ok) context.go('/');
               },
               canAction: notifier.hasOperator ? notifier.canAction : form.canSave,
             ),

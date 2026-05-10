@@ -164,8 +164,9 @@ class _RecordingTransactionRepository implements TransactionRepository {
   Future<int> purgeAllDeleted() async => 0;
   @override
   Future<List<TransactionEntry>> listExpired(DateTime cutoff) async => const [];
+  @override
+  Future<DateTime?> latestOccurredAtByLedger(String ledgerId) async => null;
 }
-
 void main() {
   testWidgets(
     'Step 9.2：空文本时点识别 → SnackBar 提示，不弹卡片',

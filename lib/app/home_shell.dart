@@ -127,6 +127,12 @@ class _MeTab extends StatelessWidget {
             onTap: () => context.push('/settings/theme'),
           ),
           ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('提醒'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/reminder'),
+          ),
+          ListTile(
             leading: const Icon(Icons.savings_outlined),
             title: const Text('预算'),
             trailing: const Icon(Icons.chevron_right),

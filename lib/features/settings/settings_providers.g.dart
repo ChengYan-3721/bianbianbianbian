@@ -258,5 +258,47 @@ final multiCurrencyEnabledProvider =
     );
 
 typedef _$MultiCurrencyEnabled = AsyncNotifier<bool>;
+String _$reminderEnabledHash() => r'b32cf614017e4ae2a23ad90e605b5ee2cbc75fd7';
+
+/// Step 16.1：每日记账提醒开关 provider。
+///
+/// 数据源是 `user_pref.reminder_enabled`（INTEGER，0/null = 关闭，1 = 开启）。
+/// UI 通过 `ref.watch(reminderEnabledProvider)` 自动响应。
+///
+/// Copied from [ReminderEnabled].
+@ProviderFor(ReminderEnabled)
+final reminderEnabledProvider =
+    AsyncNotifierProvider<ReminderEnabled, bool>.internal(
+      ReminderEnabled.new,
+      name: r'reminderEnabledProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$reminderEnabledHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$ReminderEnabled = AsyncNotifier<bool>;
+String _$reminderTimeHash() => r'0015507866b1d79162a117ed18267b32272d1494';
+
+/// Step 16.1：每日记账提醒时间 provider。
+///
+/// 数据源是 `user_pref.reminder_time`（TEXT，'HH:mm' 格式，null = 从未设置）。
+/// UI 通过 `ref.watch(reminderTimeProvider)` 拿 `TimeOfDay?` 自动响应。
+///
+/// Copied from [ReminderTime].
+@ProviderFor(ReminderTime)
+final reminderTimeProvider =
+    AsyncNotifierProvider<ReminderTime, TimeOfDay?>.internal(
+      ReminderTime.new,
+      name: r'reminderTimeProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$reminderTimeHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$ReminderTime = AsyncNotifier<TimeOfDay?>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

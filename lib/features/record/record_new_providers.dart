@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -17,6 +18,7 @@ import '../../domain/entity/attachment_meta.dart';
 import '../../domain/entity/transaction_entry.dart';
 import '../budget/budget_providers.dart';
 import '../settings/settings_providers.dart';
+import '../settings/widget_data_service.dart';
 import '../stats/stats_range_providers.dart';
 import '../sync/sync_trigger.dart';
 import 'record_providers.dart';
@@ -432,6 +434,10 @@ class RecordForm extends _$RecordForm {
     // ignore: avoid_manual_providers_as_generated_provider_dependency
     ref.read(syncTriggerProvider.notifier).scheduleDebounced();
 
+    // Step 16.3：记账后刷新桌面小组件数据（fire-and-forget）。
+    // 小组件展示今日支出 / 本月结余，保存流水后应立即同步到原生层。
+    unawaited(_updateWidgetData());
+
     // 持久化本次使用的钱包
     if (d.accountId != null) {
       final prefs = await SharedPreferences.getInstance();
@@ -439,5 +445,21 @@ class RecordForm extends _$RecordForm {
     }
 
     return true;
+  }
+
+  /// Step 16.3：记账后刷新桌面小组件数据。
+  Future<void> _updateWidgetData() async {
+    try {
+      final ledgerId = await ref.read(currentLedgerIdProvider.future);
+      final txRepo = await ref.read(transactionRepositoryProvider.future);
+      final ledgerRepo = await ref.read(ledgerRepositoryProvider.future);
+      await WidgetDataService.computeAndRefresh(
+        ledgerId: ledgerId,
+        txRepo: txRepo,
+        ledgerRepo: ledgerRepo,
+      );
+    } catch (_) {
+      // 静默——小组件数据更新失败不阻塞主流程。
+    }
   }
 }

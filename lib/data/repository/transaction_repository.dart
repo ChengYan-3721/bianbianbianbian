@@ -43,6 +43,9 @@ abstract class TransactionRepository {
   /// **垃圾桶定时清理**（Phase 12 Step 12.3）。返回 `deleted_at <= cutoff`
   /// 的全部软删流水（仅查询，不删除）——调用方据此先清附件、再调 [purgeById]。
   Future<List<TransactionEntry>> listExpired(DateTime cutoff);
+
+  /// Step 16.2：某账本下最近一笔未软删流水的 `occurredAt`，无流水返回 null。
+  Future<DateTime?> latestOccurredAtByLedger(String ledgerId);
 }
 
 class LocalTransactionRepository implements TransactionRepository {
@@ -196,5 +199,12 @@ class LocalTransactionRepository implements TransactionRepository {
   Future<List<TransactionEntry>> listExpired(DateTime cutoff) async {
     final rows = await _dao.listExpired(cutoff.millisecondsSinceEpoch);
     return rows.map(rowToTransactionEntry).toList(growable: false);
+  }
+
+  @override
+  Future<DateTime?> latestOccurredAtByLedger(String ledgerId) async {
+    final ms = await _dao.latestOccurredAtByLedger(ledgerId);
+    if (ms == null) return null;
+    return DateTime.fromMillisecondsSinceEpoch(ms);
   }
 }

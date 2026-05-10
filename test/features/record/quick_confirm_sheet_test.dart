@@ -135,8 +135,9 @@ class _FakeTransactionRepository implements TransactionRepository {
   Future<int> purgeAllDeleted() async => 0;
   @override
   Future<List<TransactionEntry>> listExpired(DateTime cutoff) async => const [];
+  @override
+  Future<DateTime?> latestOccurredAtByLedger(String ledgerId) async => null;
 }
-
 Category _cat({
   required String id,
   required String name,

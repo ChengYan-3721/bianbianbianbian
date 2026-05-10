@@ -8,6 +8,7 @@ import '../../data/local/app_database.dart';
 import '../../data/local/providers.dart';
 import '../../data/repository/providers.dart';
 import 'fx_rate_refresh_service.dart';
+import 'reminder_service.dart';
 
 part 'settings_providers.g.dart';
 
@@ -221,4 +222,92 @@ double computeFxRate(
   final toRate = ratesToCny[to];
   if (fromRate == null || toRate == null || toRate == 0) return 1.0;
   return fromRate / toRate;
+}
+
+/// Step 16.1：每日记账提醒开关 provider。
+///
+/// 数据源是 `user_pref.reminder_enabled`（INTEGER，0/null = 关闭，1 = 开启）。
+/// UI 通过 `ref.watch(reminderEnabledProvider)` 自动响应。
+@Riverpod(keepAlive: true)
+class ReminderEnabled extends _$ReminderEnabled {
+  @override
+  Future<bool> build() async {
+    final db = ref.watch(appDatabaseProvider);
+    final pref = await (db.select(db.userPrefTable)
+          ..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
+    return pref?.reminderEnabled == 1;
+  }
+
+  /// 写入 user_pref 并触发重建。
+  Future<void> set(bool enabled) async {
+    final db = ref.read(appDatabaseProvider);
+    await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+      UserPrefTableCompanion(
+        reminderEnabled: Value(enabled ? 1 : 0),
+      ),
+    );
+    ref.invalidateSelf();
+  }
+}
+
+/// Step 16.1：每日记账提醒时间 provider。
+///
+/// 数据源是 `user_pref.reminder_time`（TEXT，'HH:mm' 格式，null = 从未设置）。
+/// UI 通过 `ref.watch(reminderTimeProvider)` 拿 `TimeOfDay?` 自动响应。
+@Riverpod(keepAlive: true)
+class ReminderTime extends _$ReminderTime {
+  @override
+  Future<TimeOfDay?> build() async {
+    final db = ref.watch(appDatabaseProvider);
+    final pref = await (db.select(db.userPrefTable)
+          ..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
+    final timeStr = pref?.reminderTime;
+    if (timeStr == null) return null;
+    return _parseTimeOfDay(timeStr);
+  }
+
+  /// 写入 user_pref 并触发重建。
+  Future<void> set(TimeOfDay time) async {
+    final db = ref.read(appDatabaseProvider);
+    final timeStr = '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
+    await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+      UserPrefTableCompanion(
+        reminderTime: Value(timeStr),
+      ),
+    );
+    ref.invalidateSelf();
+  }
+
+  /// 清除提醒时间（关闭提醒时调用）。
+  Future<void> clear() async {
+    final db = ref.read(appDatabaseProvider);
+    await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+      const UserPrefTableCompanion(
+        reminderTime: Value(null),
+      ),
+    );
+    ref.invalidateSelf();
+  }
+}
+
+/// Step 16.1：[ReminderService] 实例 provider。
+///
+/// 生产返回真实 [ReminderService]；测试通过 override 注入 mock。
+final reminderServiceProvider = Provider<ReminderService>((ref) {
+  return ReminderService();
+});
+
+/// 解析 'HH:mm' 字符串为 [TimeOfDay]；格式不合法时返回 null。
+TimeOfDay? _parseTimeOfDay(String timeStr) {
+  const pattern = r'^(\d{1,2}):(\d{2})$';
+  final match = RegExp(pattern).firstMatch(timeStr);
+  if (match == null) return null;
+  final hour = int.tryParse(match.group(1) ?? '');
+  final minute = int.tryParse(match.group(2) ?? '');
+  if (hour == null || minute == null) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
 }

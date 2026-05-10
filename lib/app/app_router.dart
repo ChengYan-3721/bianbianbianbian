@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../domain/entity/category.dart';
@@ -19,14 +20,16 @@ import '../features/record/record_search_page.dart';
 import '../features/settings/ai_input_settings_page.dart';
 import '../features/settings/attachment_cache_page.dart';
 import '../features/settings/multi_currency_page.dart';
+import '../features/settings/reminder_page.dart';
 import '../features/settings/theme_page.dart';
 import '../features/sync/cloud_service_page.dart';
 import '../features/trash/trash_page.dart';
 import 'home_shell.dart';
 
-final GoRouter goRouter = GoRouter(
-  initialLocation: '/',
-  routes: [
+final goRouterProvider = Provider<GoRouter>((ref) {
+  return GoRouter(
+    initialLocation: '/',
+    routes: [
     GoRoute(
       path: '/',
       builder: (context, state) => const HomeShell(),
@@ -114,6 +117,10 @@ final GoRouter goRouter = GoRouter(
       builder: (context, state) => const ThemePage(),
     ),
     GoRoute(
+      path: '/settings/reminder',
+      builder: (context, state) => const ReminderPage(),
+    ),
+    GoRoute(
       path: '/settings/ai-input',
       builder: (context, state) => const AiInputSettingsPage(),
     ),
@@ -146,4 +153,5 @@ final GoRouter goRouter = GoRouter(
       builder: (context, state) => const TrashPage(),
     ),
   ],
-);
+  );
+});

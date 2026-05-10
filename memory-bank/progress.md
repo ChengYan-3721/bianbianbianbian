@@ -3579,3 +3579,231 @@ Bootstrap：
 - **`samplePackIcons` 只取每 parentKey 的第一个分类**——如果默认分类顺序变化（如 seeder 增删），预览会跟随，但样本 emoji 对应的是 pack 映射的 `values.first`，而非数据库。
 - **`user_pref.icon_pack` schema v11 新增列**——`addColumn` 迁移，默认 `'sticker'`，老用户无感升级。
 - **新增图标渲染点务必使用 `resolveCategoryIcon`**——不要直接 `category.icon ?? fallback`，否则图标包切换不生效。
+
+---
+
+## Phase 16 · 提醒与小组件
+
+### ✅ Step 16.1 每日记账提醒（2026-05-10）
+
+**改动**
+
+Schema / 数据层：
+- `lib/data/local/tables/user_pref_table.dart`（修改）：
+  - 新增 `reminderEnabled IntColumn`（`reminder_enabled INTEGER DEFAULT 0`）——每日记账提醒开关。
+  - 新增 `reminderTime TextColumn`（`reminder_time TEXT`，nullable，'HH:mm' 格式）——提醒时间。
+- `lib/data/local/app_database.dart`（修改）：
+  - schemaVersion 11 → 12。
+  - `onUpgrade` 新增 `if (from < 12)` 分支：`addColumn(userPrefTable, userPrefTable.reminderEnabled)` + `addColumn(userPrefTable, userPrefTable.reminderTime)`。
+  - schema 版本历史注释追加 v12 条目。
+
+依赖：
+- `pubspec.yaml` `dependencies` 新增 `timezone: ^0.11.0`——`flutter_local_notifications` 的 `zonedSchedule` 需要 `TZDateTime`（带时区信息的日期时间），用于每日定时通知调度。
+
+通知服务：
+- `lib/features/settings/reminder_service.dart`（新建）：
+  - `ReminderService` 类：封装 `FlutterLocalNotificationsPlugin` 的初始化、权限请求、调度、取消、测试通知。
+  - `initialize()`：创建 `InitializationSettings`（Android 用 `@mipmap/ic_launcher`、iOS/macOS 关闭自动权限请求），调用 `plugin.initialize(settings: ...)`（v21 API 全部命名参数）。
+  - `requestPermission()`：Android 13+ 调 `android.requestNotificationsPermission()`；iOS/macOS 调 `ios/macOs.requestPermissions(alert: true, sound: true)`。桌面平台返回 false。
+  - `scheduleDailyReminder(hour, minute)`：用 `tz.TZDateTime` 构造下一个命中时刻 + `matchDateTimeComponents: DateTimeComponents.time` 每天重复。文案从 `_messages` 池随机选。
+  - `cancelReminder()`：调 `plugin.cancel(id: _notificationId)`。
+  - `showTestNotification()`：调 `plugin.show(...)` 立即展示一条测试通知。
+  - 通知详情使用 `AndroidNotificationDetails(channelId, channelName, ...)` + `DarwinNotificationDetails(presentAlert: true, presentSound: true)`，嵌套在 `NotificationDetails(android: ..., iOS: ...)` 中。
+  - 可爱风文案池 7 条（🐻🐰🧸🐷🍯🐱🐼）。
+
+Provider：
+- `lib/features/settings/settings_providers.dart`（修改）：
+  - 新增 `@Riverpod(keepAlive: true) class ReminderEnabled extends _$ReminderEnabled`：`build()` 读 `user_pref.reminder_enabled == 1`；`set(bool)` 写入 + `invalidateSelf()`。
+  - 新增 `@Riverpod(keepAlive: true) class ReminderTime extends _$ReminderTime`：`build()` 读 `user_pref.reminder_time` → `_parseTimeOfDay` 转 `TimeOfDay?`；`set(TimeOfDay)` 格式化为 'HH:mm' 写入；`clear()` 写 null。
+  - 新增 `_parseTimeOfDay(String)` 辅助函数：解析 'HH:mm' → `TimeOfDay?`，格式不合法返回 null。
+  - 新增 `reminderServiceProvider`：`Provider<ReminderService>`，生产返回 `ReminderService()`，测试可 override 注入 fake。
+
+UI：
+- `lib/features/settings/reminder_page.dart`（新建）：
+  - `ReminderPage` ConsumerWidget：`Scaffold('提醒')` + `ListView`。
+  - `SwitchListTile`：标题"每日记账提醒"，subtitle 显示开启状态与时间。
+  - 开启流程：先 `service.requestPermission()` → 被拒则 SnackBar + 不同步状态；通过则 `showTimePicker` 选时间（默认 20:00）→ 写 DB + `service.scheduleDailyReminder` + SnackBar。
+  - 关闭流程：`service.cancelReminder()` + `set(false)` + `clear()` + SnackBar。
+  - 开启状态下展示：提醒时间 `ListTile`（点击 `showTimePicker` 修改）+ 测试提醒 `ListTile`（点击 `showTestNotification`）+ 说明文案。
+  - `TimePicker` 主题跟随 App 色（`_themeTimePicker` 包裹 `TimePickerThemeData`）。
+- `lib/app/app_router.dart`（修改）：新增 `GoRoute('/settings/reminder')` → `const ReminderPage()`。
+- `lib/app/home_shell.dart`（修改）：`_MeTab` 在"外观"后追加"提醒"入口（`Icons.notifications_outlined` → `context.push('/settings/reminder')`）。
+
+Bootstrap / 冷启动恢复：
+- `lib/main.dart`（修改）：
+  - 新增 `import 'package:timezone/data/latest_10y.dart' as tz_data`——timezone 时区数据库（10 年数据 ~284K，比全量 ~1.9M 小）。
+  - `WidgetsFlutterBinding.ensureInitialized()` 后追加 `tz_data.initializeTimeZones()`——必须在 `FlutterLocalNotificationsPlugin.initialize` 之前。
+  - bootstrap 链末尾追加 `unawaited(_scheduleReminderIfEnabled(container))`——冷启动恢复提醒调度（Android 重启后已调度通知丢失，需重新 schedule）。
+  - 新增 `_scheduleReminderIfEnabled(ProviderContainer)`：读 `reminderEnabledProvider` + `reminderTimeProvider`，已开启 → `service.initialize()` + `service.scheduleDailyReminder(hour, minute)`；失败静默。
+
+Android 配置：
+- `android/app/src/main/AndroidManifest.xml`（修改）：
+  - 新增 `RECEIVE_BOOT_COMPLETED` 权限——保证设备重启后 `ScheduledNotificationReceiver` 可重建调度。
+  - 新增 `POST_NOTIFICATIONS` 权限——Android 13+ 通知运行时权限声明。
+  - 新增 `SCHEDULE_EXACT_ALARM` 权限（`maxSdkVersion="32"`）——当前用 `inexactAllowWhileIdle` 不需要，预留给未来精确闹钟模式。
+  - 新增 `<receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />`——定时通知接收器。
+  - 新增 `<receiver android:name="com.dexterous.flutterlocalnotifications.BroadcastReceiver" />`——广播接收器。
+
+测试：
+- `test/features/settings/reminder_test.dart`（新建，11 用例）：
+  - `reminderEnabledProvider`（4）：默认关闭 / set(true) / set(true)→set(false) / 持久化到 DB。
+  - `reminderTimeProvider`（4）：默认 null / set(TimeOfDay) 后可读回 / clear() 后 null / 持久化 DB 格式 'HH:mm'。
+  - `_parseTimeOfDay`（1）：DB 里写坏值 → provider 返回 null。
+  - `reminderServiceProvider`（1）：提供实例。
+  - `TimeOfDay` roundtrip（1）：set 09:05 → DB 读回 '09:05'。
+- `test/features/settings/reminder_page_test.dart`（新建，5 用例）：
+  - 开关关闭时显示 SwitchListTile + "未开启"。
+  - 开关开启时显示提醒时间 + 测试提醒。
+  - 开启时权限被拒 → 不同步开关状态。
+  - 关闭时调 set(false) + cancelReminder。
+  - 开启时说明文案可见（需 scrollUntilVisible）。
+
+**验证**
+- `flutter pub get` 成功。
+- `dart run build_runner build --delete-conflicting-outputs` → 263 outputs，0 error。
+- `flutter analyze` → No issues found。
+- `flutter test` → 742/742 通过（726 前 + 11 reminder_test + 5 reminder_page_test）。
+- `dart run custom_lint` → 预存 INFO（fake notifier 的 `lastSetValue` / `lastSetKey` / `scoped_providers`），与本步无关。
+- 用户本机 `flutter run` 待手工验证：
+  1. "我的"Tab → "提醒"入口（🔔 图标），点击进入 `/settings/reminder`。
+  2. 默认开关关闭，subtitle 显示"未开启"。
+  3. 拨开开关 → 弹出通知权限对话框（Android 13+ / iOS）→ 授权限 → 弹出时间选择器，默认 20:00。
+  4. 选时间 21:00 并确认 → 开关变为开启状态，subtitle 显示"每天 21:00 提醒你记一笔"。
+  5. "提醒时间"行显示 21:00，点击可修改 → 修改为 08:30 → SnackBar "提醒时间已更新为 08:30"。
+  6. "测试提醒"行点击 → 立即收到通知"边边记账：这是一条测试提醒 🐻 记账时间到啦！"。
+  7. 关闭开关 → SnackBar "已关闭每日提醒" → subtitle 回到"未开启" → 时间/测试行消失。
+  8. 冷启动后开启状态下仍能收到每日定时通知（`_scheduleReminderIfEnabled` 恢复调度）。
+
+**给后续开发者的备忘**
+- **`flutter_local_notifications` v21 API 全部命名参数**——`initialize(settings: ...)` / `zonedSchedule(id: ..., scheduledDate: ..., notificationDetails: ..., ...)` / `show(id: ..., title: ..., body: ..., ...)` / `cancel(id: ...)`。旧版 positional 参数写法会报编译错。
+- **`timezone` 包初始化必须在 `FlutterLocalNotificationsPlugin.initialize` 之前**——`tz_data.initializeTimeZones()` 调用位置在 `WidgetsFlutterBinding.ensureInitialized()` 后、bootstrap 链之前。使用 `latest_10y` 而非 `latest_all` 减小包体积。
+- **冷启动恢复调度**：Android 重启后 `flutter_local_notifications` 的已调度通知丢失（需要 `RECEIVE_BOOT_COMPLETED` + `ScheduledNotificationReceiver`），但仅注册 receiver 不够——必须每次冷启动主动调用 `scheduleDailyReminder` 重建。`main.dart` 的 `_scheduleReminderIfEnabled` 完成此工作。
+- **`ReminderService` 不直接依赖 Riverpod**——通过 `reminderServiceProvider` 桥接，测试可 override 注入 `_FakeReminderService`。
+- **`_parseTimeOfDay` 容错**：DB 中 `reminder_time` 为 null / 非法格式时返回 null，provider 不崩溃。UI 层在 `time == null` 时回退 `TimeOfDay(hour: 20, minute: 0)` 作为默认。
+- **`user_pref.reminder_enabled` / `reminder_time` schema v12 新增两列**——`addColumn` 迁移，老用户无感升级。
+- **iOS 无需额外 Info.plist 配置**——本地通知不需要 `UIBackgroundModes` 或 `NSUserNotificationUsageDescription`。
+- **本步完成了 Step 16.1；按用户约束：在用户验证测试前不开始 Step 16.2。**
+
+### ✅ Step 16.2 未记账天数提醒（2026-05-10）
+
+**改动**
+
+数据层：
+- `lib/data/local/dao/transaction_entry_dao.dart`（修改）：新增 `latestOccurredAtByLedger(String ledgerId)`——某账本下最近一笔未软删流水的 `occurred_at`（毫秒），无流水返回 null。用 `selectOnly` + `limit(1)` + `ORDER BY occurred_at DESC` 避免加载全量流水。
+- `lib/data/repository/transaction_repository.dart`（修改）：抽象接口 + 本地实现各新增 `latestOccurredAtByLedger(String ledgerId)` → `Future<DateTime?>`。
+
+Provider：
+- `lib/features/record/record_providers.dart`（修改）：
+  - 新增 `@Riverpod(keepAlive: true) Future<int?> daysSinceLastTransaction(Ref ref)`：计算当前账本距最近一笔未软删流水的天数；无流水返回 null。
+  - 新增 `@Riverpod(keepAlive: true) class IdleReminderShownDate extends _$IdleReminderShownDate`：持久化"今天是否已展示过未记账提醒"到 SharedPreferences（key `idle_reminder_last_date`，值 'yyyy-MM-dd'）。提供 `markToday()` 方法。跨重启后同一天不会重复提醒。
+  - 新增 `import package:intl/intl.dart` + `import package:shared_preferences/shared_preferences.dart`。
+
+UI：
+- `lib/features/record/record_home_page.dart`（修改）：
+  - 在 `_DataCards` 与 `_QuickInputBar` 之间插入 `_IdleReminderCard` 组件。
+  - `_IdleReminderCard`（ConsumerStatefulWidget）：
+    - 条件：`daysSinceLastTransaction >= 2` 且 `idleReminderShownDate != 今天` → 显示轻提示卡片。
+    - 首次渲染时通过 `addPostFrameCallback` 调用 `markToday()` 标记已展示。
+    - 卡片样式：蜜橘色（`#F4A261`）低饱和底 + 圆角 12 + 🍯 emoji + 文案"已经 X 天没记账了，快来记一笔吧 🐻" + 关闭按钮。
+    - 关闭按钮将 `_dismissed` 置 true，当前会话内不再显示（`idleReminderShownDate` 已持久化到今天，跨会话也不重复）。
+
+测试：
+- `test/features/record/idle_reminder_test.dart`（新建，8 用例）：
+  - `daysSinceLastTransactionProvider`（4）：无流水→null / 今天→0 / 3天前→3 / 昨天→1。
+  - `IdleReminderShownDate`（4）：初始null / markToday 持久化 / 跨容器存活 / 已有旧日期读回。
+- 5 个既有测试文件的 `_FakeTransactionRepository` 统一新增 `latestOccurredAtByLedger` 空实现（`async => null`），消除 analyzer error。
+
+**验证**
+- `dart run build_runner build --delete-conflicting-outputs` → 262 outputs，0 error。
+- `flutter analyze` → 仅 1 条既存 INFO（`_container` 命名），与本步无关。
+- `flutter test` → 750/750 通过（742 前 + 8 idle_reminder）。
+- 用户本机 `flutter run` 待手工验证：
+  1. 首页数据卡片下方出现未记账天数轻提示卡片（蜜橘色底 + "已经 X 天没记账了" 文案）。
+  2. 点击关闭按钮后卡片消失，同一天内即使重启 App 也不再出现。
+  3. 当天记一笔流水后刷新首页，若距最近流水 < 2 天则卡片不出现。
+  4. 次日（距最近流水 ≥ 2 天时）重新出现轻提示。
+
+**给后续开发者的备忘**
+- **`daysSinceLastTransactionProvider` 作用域为当前账本**——首页以当前账本为单位展示数据，未记账提醒也按账本维度计算。如果用户在"工作"账本记账了但"生活"账本 3 天没记，切换到"生活"后会触发提醒。
+- **`IdleReminderShownDate` 用 SharedPreferences 持久化**——不入库（不值得加 schema 列），与 Step 16.1 的 `reminder_enabled` / `reminder_time` 走不同存储路径。代价：Android 明文 XML、iOS NSUserDefaults plist；但该值仅为日期字符串"哪天提醒过"，无安全风险。
+- **`_IdleReminderCard` 是 ConsumerStatefulWidget**——需要 `_dismissed` 状态控制关闭行为，纯 ConsumerWidget 无法做到。
+- **`markToday` 通过 `addPostFrameCallback` 调用**——不能在 build 中直接调（Riverpod 不允许 build 期间修改其他 provider 状态），延迟到帧后执行。
+- **轻提示"不是通知"**——不调用 `flutter_local_notifications`，纯 UI 层展示。用户可在同一天通过关闭按钮主动忽略，次日条件满足后重新出现。
+
+### ✅ Step 16.3 Home Screen Widget（2026-05-10）
+
+**改动**
+
+依赖：
+- `pubspec.yaml` `dependencies` 新增 `home_widget: ^0.7.0`（解析到 0.7.0+1）——Flutter ↔ 原生小组件桥接包。提供 `saveWidgetData` / `updateWidget` / `initiallyLaunchedFromHomeWidget` / `widgetClicked` 等方法，通过 SharedPreferences（Android）或 App Group UserDefaults（iOS）共享数据。
+
+Flutter 侧——数据计算与持久化：
+- `lib/features/settings/widget_data_service.dart`（新建）：
+  - `WidgetData` 数据类：`todayExpense` / `monthlyBalance` / `ledgerName` + `empty` 常量。
+  - `computeWidgetData()` 纯函数：从活跃流水列表计算今日支出（`type=='expense'` 且 `occurredAt` 为今天、乘 fxRate）+ 本月结余（本月 income - expense），返回格式化字符串如 `"¥25.00"` / `"-¥30.00"`。可独立测试。
+  - `WidgetDataService` 静态服务类：
+    - `initialize()` — iOS 调 `HomeWidget.setAppGroupId` 设置 App Group；Android 无需此步。
+    - `saveAndRefresh(WidgetData)` — 写 SharedPreferences + 调 `HomeWidget.updateWidget(qualifiedAndroidName: ...)` 触发原生刷新。平台不支持时静默吞错。
+    - `computeAndRefresh(ledgerId, txRepo, ledgerRepo)` — 接受原始仓库实例而非 Riverpod `Ref`，兼容 `WidgetRef` / `ProviderContainer.read` / `Ref` 等各类调用方。内部读流水 + 读账本 → `computeWidgetData` → `saveAndRefresh`。
+  - 常量 `kWidgetAppGroupId = 'group.com.bianbianbianbian.app'`、`kAndroidWidgetQualifiedName = 'com.bianbianbianbian.bianbianbianbian.BianBianWidgetProvider'`。
+
+触发时机：
+- `lib/main.dart`（修改）：bootstrap 链末尾新增 `_updateWidgetData(container)` — 冷启动时 initialize + computeAndRefresh，fire-and-forget。
+- `lib/app/app.dart`（修改）：
+  - `didChangeAppLifecycleState(resumed)` 中追加 `_updateWidgetData()` — 前台恢复时刷新小组件。
+  - `initState` 中 `addPostFrameCallback` 新增 `_handleWidgetDeepLink()` — 冷启动检测 `HomeWidget.initiallyLaunchedFromHomeWidget()`，若返回 `/record/new` 则 `goRouter.go('/record/new')`。
+  - `initState` 中 `addPostFrameCallback` 新增 `_listenWidgetClicks()` — 订阅 `HomeWidget.widgetClicked` stream，App 运行中点击小组件时导航。
+  - `_widgetClickSub` StreamSubscription 在 `dispose` 中取消。
+  - 新增 import `home_widget` + `data/repository/providers.dart`（show 3 个 provider）。
+- `lib/features/record/record_new_providers.dart`（修改）：
+  - `save()` 方法中，`scheduleDebounced()` 之后新增 `unawaited(_updateWidgetData())` — 记账后刷新小组件。
+  - 新增 `_updateWidgetData()` 私有方法 — 读 provider → computeAndRefresh。
+  - 新增 import `dart:async` + `widget_data_service.dart`。
+
+Android 原生小组件：
+- `android/app/src/main/res/layout/bianbian_widget.xml`（新建）：奶油兔风格布局（背景 `#FFF9EF`、文字可可棕 `#8A5A3B`、支出金额苹果红 `#E76F51`），4 个 TextView：ledgerName / todayLabel+todayExpense / balanceLabel+monthlyBalance / hint "点击记一笔 🐰"。根 RelativeLayout 的 `id=widget_root`。
+- `android/app/src/main/res/xml/bianbian_widget_info.xml`（新建）：4×1 格子小部件（`minWidth=250dp`, `minHeight=40dp`），`updatePeriodMillis=0`（Flutter 主动 push，不走系统轮询），可水平+垂直缩放。
+- `android/app/src/main/res/values/strings.xml`（新建）：`widget_description` 字符串资源。
+- `android/app/src/main/kotlin/.../BianBianWidgetProvider.kt`（新建）：继承 `es.antonborri.home_widget.HomeWidgetProvider`。`onUpdate` 读 `HomeWidgetPreferences` SharedPreferences → 填 RemoteViews → 结余为负时苹果红。点击 PendingIntent 打开 `MainActivity` + 携带 `bianbian://app/record/new` URI。
+- `android/app/src/main/AndroidManifest.xml`（修改）：
+  - `<activity>` 新增 `<intent-filter>` 声明 `bianbian` scheme + `app` host（深链命中）。
+  - `<application>` 新增 `<receiver>` 注册 `BianBianWidgetProvider` + `APPWIDGET_UPDATE` intent filter + `android.appwidget.provider` meta-data。
+
+深链导航：
+- Android 小组件 PendingIntent → `bianbian://app/record/new` → Android intent filter 匹配 → Flutter engine 传递给 go_router → 匹配 `/record/new` 路由 → 打开 `RecordNewPage`。
+- iOS 小组件 → SwiftUI `.widgetURL(URL(string: "bianbian://app/record/new"))` → 同样经 Flutter engine → go_router 处理。
+- `BianBianApp` 双重检测：冷启动用 `initiallyLaunchedFromHomeWidget()`，运行中用 `widgetClicked` stream。
+
+测试：
+- `test/features/settings/widget_data_test.dart`（新建，9 用例）：
+  - 空流水→零值、今日单笔支出、今日+昨日混合、其他月份不计入、跨币种 fxRate 折算、转账不计入、负数格式化、empty 常量、不同 ledgerId 流水。
+
+**验证**
+- `flutter pub get` → `home_widget 0.7.0+1` 成功。
+- `dart run build_runner build --delete-conflicting-outputs` → 388 outputs，0 error。
+- `flutter analyze` → 仅 1 条既存 INFO（`_container` 命名），与本步无关。
+- `flutter test` → 759/759 通过（750 前 + 9 widget_data）。
+- 用户本机 `flutter run` 待手工验证（Android 端）：
+  1. 长按桌面空白 → 小部件 → 找到"边边记账" → 拖到桌面。
+  2. 小组件显示"边边记账"、今日支出 ¥0.00、本月结余 ¥0.00。
+  3. 在 App 内记一笔 ¥25.00 支出 → 回到桌面，小组件今日支出更新为 ¥25.00（延迟 ≤ 数秒）。
+  4. 点击小组件 → App 打开并直接跳到"新建记账页"。
+  5. 杀进程后冷启动，小组件数据仍与 App 内一致。
+- iOS 端需用户在 Xcode 中手动创建 Widget Extension target + 配置 App Group（详见下方备注）。
+
+**给后续开发者的备忘**
+- **`home_widget.updateWidget` 参数名是 `qualifiedAndroidName`**——使用全限定类名（含包名）而非简短类名，因为 AppWidgetManager 按全限定名查找 Provider。简短 `androidName` 也可用但需要包名前缀推断，不如 `qualifiedAndroidName` 显式可靠。
+- **`computeAndRefresh` 接受原始仓库而非 `Ref`**——`WidgetRef` 和 `Ref` 是不同类型（Riverpod 2.x 未统一），不共享基类。接受原始接口避免类型体操，三个调用方（`_BianBianAppState` / `main.dart` / `RecordForm`）各读自己的 provider 然后传参。
+- **`HomeWidgetPreferences` SharedPreferences 文件名**——`home_widget` 包内部硬编码为 `HomeWidgetPreferences`，Android Provider 的 `onUpdate` 必须读同一文件。若 `home_widget` 未来版本改文件名，需同步改 Provider。
+- **`updatePeriodMillis=0`**——不使用系统定时轮询，完全依赖 Flutter 侧 `saveAndRefresh` → `HomeWidget.updateWidget()` 触发刷新。好处是避免无效唤醒；代价是 Flutter 进程未运行期间小组件数据不会更新。V1 接受这个权衡（用户不打开 App 时数据不更新是合理的）。
+- **iOS Widget Extension 需手动设置**——无法从 CLI 创建 Xcode target。步骤：
+  1. 用 Xcode 打开 `ios/Runner.xcworkspace`。
+  2. File → New → Target → Widget Extension。
+  3. Product Name: `BianBianWidget`，取消勾选 "Include Live Activity"。
+  4. 在新建的 `BianBianWidget.swift` 中替换为 SwiftUI widget 代码（读取 `group.com.bianbianbianbian.app` UserDefaults 的 `widget_today_expense` / `widget_monthly_balance` / `widget_ledger_name`）。
+  5. 在 main app target 和 widget extension target 的 Signing & Capabilities 中都添加 App Group `group.com.bianbianbianbian.app`。
+  6. Widget Extension 的 `Info.plist` 中添加 `CFBundleURLSchemes` → `bianbian`。
+  7. SwiftUI widget 的 `.widgetURL(URL(string: "bianbian://app/record/new"))` 让点击跳转。
+- **深链路径 `bianbian://app/record/new`**——host 设为 `app` 是为了与 go_router 的 path 匹配：URI 的 path 部分 `/record/new` 直接命中 go_router 的 `GoRoute(path: '/record/new')`。不要省掉 host（`bianbian:///record/new`），部分 Android 版本解析空 host 会出错。
+- **记账后小组件刷新是 fire-and-forget**——`_updateWidgetData()` 不阻塞 `save()` 的返回。失败静默——不影响记账主流程。
+- **结余为负时 Android Provider 变色**——`parseAmount` 从格式化字符串中提取数值，负值时 `setTextColor` 为苹果红 `#E76F51`，与 App 内 `DataCards` 的结余逻辑一致。

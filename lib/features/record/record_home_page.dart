@@ -99,6 +99,7 @@ class RecordHomePage extends ConsumerWidget {
             _TopBar(currentId: currentId, repo: repo),
             _MonthBar(ref: ref),
             _DataCards(summary: summary),
+            const _IdleReminderCard(),
             const _QuickInputBar(),
             Expanded(child: _TransactionList(summary: summary)),
           ],
@@ -1179,6 +1180,76 @@ class _RecordTransferBottomSheetPage extends ConsumerWidget {
     return const SafeArea(
       top: false,
       child: RecordNewPage(isTransfer: true),
+    );
+  }
+}
+
+// ---- Step 16.2：未记账天数轻提示卡片 ----
+
+/// 当距最近一笔流水 ≥ 2 天且当天未提醒过时，在首页数据卡片下方展示一条
+/// 轻提示（不是通知）。用户可关闭；关闭后同一天不再弹出。
+class _IdleReminderCard extends ConsumerStatefulWidget {
+  const _IdleReminderCard();
+
+  @override
+  ConsumerState<_IdleReminderCard> createState() => _IdleReminderCardState();
+}
+
+class _IdleReminderCardState extends ConsumerState<_IdleReminderCard> {
+  bool _dismissed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+
+    final daysAsync = ref.watch(daysSinceLastTransactionProvider);
+    final days = daysAsync.valueOrNull;
+    // days == null 表示无流水数据（新用户），不提醒
+    if (days == null || days < 2) return const SizedBox.shrink();
+
+    // 当天是否已提醒过
+    final shownDate = ref.watch(idleReminderShownDateProvider).valueOrNull;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (shownDate == today) return const SizedBox.shrink();
+
+    // 首次渲染时标记已展示，防止同一天重复弹出
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(idleReminderShownDateProvider.notifier).markToday();
+    });
+
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4A261).withAlpha(36),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFF4A261).withAlpha(80)),
+        ),
+        child: Row(
+          children: [
+            const Text('🍯', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '已经 $days 天没记账了，快来记一笔吧 🐻',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.onSurface.withAlpha(200),
+                    ),
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.close, size: 18, color: colors.onSurface.withAlpha(120)),
+              onPressed: () => setState(() => _dismissed = true),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

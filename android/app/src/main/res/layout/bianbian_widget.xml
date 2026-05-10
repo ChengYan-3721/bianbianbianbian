@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Step 16.3：桌面小组件布局——奶油兔风格。
+     展示"今日支出"和"本月结余"，点击跳转新建记账页。 -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFF9EF"
+    android:padding="12dp">
+
+    <!-- 账本名称 / App 标题 -->
+    <TextView
+        android:id="@+id/widget_ledger_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:text="边边记账"
+        android:textColor="#8A5A3B"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- 今日支出标签 -->
+    <TextView
+        android:id="@+id/widget_today_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_ledger_name"
+        android:layout_marginTop="8dp"
+        android:text="今日支出"
+        android:textColor="#8A5A3B"
+        android:textSize="11sp"
+        android:alpha="0.7" />
+
+    <!-- 今日支出金额 -->
+    <TextView
+        android:id="@+id/widget_today_expense"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_today_label"
+        android:text="¥0.00"
+        android:textColor="#E76F51"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:maxLines="1" />
+
+    <!-- 本月结余标签 -->
+    <TextView
+        android:id="@+id/widget_balance_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_today_expense"
+        android:layout_marginTop="4dp"
+        android:text="本月结余"
+        android:textColor="#8A5A3B"
+        android:textSize="11sp"
+        android:alpha="0.7" />
+
+    <!-- 本月结余金额 -->
+    <TextView
+        android:id="@+id/widget_monthly_balance"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_balance_label"
+        android:text="¥0.00"
+        android:textColor="#8A5A3B"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:maxLines="1" />
+
+    <!-- 底部提示 -->
+    <TextView
+        android:id="@+id/widget_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentEnd="true"
+        android:text="点击记一笔 🐰"
+        android:textColor="#8A5A3B"
+        android:textSize="10sp"
+        android:alpha="0.5" />
+
+</RelativeLayout>

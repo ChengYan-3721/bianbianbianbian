@@ -4,8 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:home_widget/home_widget.dart';
+
 import '../features/lock/app_lock_overlay.dart';
 import '../features/lock/app_lock_providers.dart';
+import '../data/repository/providers.dart'
+    show currentLedgerIdProvider, ledgerRepositoryProvider, transactionRepositoryProvider;
+import '../features/settings/widget_data_service.dart';
 import '../features/sync/sync_trigger.dart';
 import 'app_router.dart';
 import '../features/settings/settings_providers.dart';/// 应用根组件。
@@ -51,6 +56,7 @@ class BianBianApp extends ConsumerStatefulWidget {
 class _BianBianAppState extends ConsumerState<BianBianApp>
     with WidgetsBindingObserver {
   bool _observerRegistered = false;
+  StreamSubscription<Uri?>? _widgetClickSub;
 
   @override
   void initState() {
@@ -59,11 +65,17 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
     }
-    if (!widget.enableSyncLifecycle) return;
     // 不能在 initState 同步阶段读 provider（未 mount 完成前读会被 Riverpod
     // 警告）。延迟到首帧后再启动。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // Step 16.3：检测是否从桌面小组件点击启动，是则跳转到新建记账页。
+      // 延迟 2 帧确保 GoRouter 的 InheritedGoRouter 完全挂载后再导航，
+      // 否则会触发 Duplicate GlobalKey / _debugLocked 断言。
+      _scheduleWidgetDeepLink();
+      // Step 16.3：监听运行中从小组件点击回来的事件。
+      _listenWidgetClicks();
+      if (!widget.enableSyncLifecycle) return;
       final trigger = ref.read(syncTriggerProvider.notifier);
       // 启动同步——内部已经做了 try/catch，不会冒烟。
       unawaited(trigger.trigger());
@@ -74,6 +86,7 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
 
   @override
   void dispose() {
+    _widgetClickSub?.cancel();
     if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
       _observerRegistered = false;
@@ -95,6 +108,9 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
         case AppLifecycleState.resumed:
           unawaited(trigger.trigger());
           trigger.startPeriodic();
+          // Step 16.3：前台恢复时刷新小组件数据——用户可能在后台
+          // 通过其他设备同步了新流水，回来后小组件应立即更新。
+          unawaited(_updateWidgetData());
         case AppLifecycleState.paused:
         case AppLifecycleState.detached:
         case AppLifecycleState.hidden:
@@ -122,6 +138,72 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
     }
   }
 
+  /// Step 16.3：前台恢复时刷新小组件数据。
+  Future<void> _updateWidgetData() async {
+    try {
+      final ledgerId = await ref.read(currentLedgerIdProvider.future);
+      final txRepo = await ref.read(transactionRepositoryProvider.future);
+      final ledgerRepo = await ref.read(ledgerRepositoryProvider.future);
+      await WidgetDataService.computeAndRefresh(
+        ledgerId: ledgerId,
+        txRepo: txRepo,
+        ledgerRepo: ledgerRepo,
+      );
+    } catch (_) {
+      // 静默
+    }
+  }
+
+  /// Step 16.3：延迟检测从桌面小组件启动时的深链并导航。
+  ///
+  /// 必须等待 GoRouter widget 树完全稳定后再导航，否则会触发
+  /// Duplicate GlobalKey（InheritedGoRouter 重复挂载）或
+  /// `_debugLocked` 断言。延迟 2 帧（首帧 postFrameCallback +
+  /// 再一帧 addPostFrameCallback）确保路由器完全就绪。
+  void _scheduleWidgetDeepLink() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleWidgetDeepLink();
+      });
+    });
+  }
+
+  /// Step 16.3：检测从桌面小组件启动时的深链并导航。
+  ///
+  /// [HomeWidget.initiallyLaunchedFromHomeWidget] 在 App 冷启动由小组件
+  /// 点击触发时返回非 null Uri。路径匹配 `/record/new` → go_router 跳转。
+  Future<void> _handleWidgetDeepLink() async {
+    try {
+      final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      if (uri != null && uri.path == '/record/new' && mounted) {
+        ref.read(goRouterProvider).go('/record/new');
+      }
+    } catch (_) {
+      // 非 iOS / Android
+    }
+  }
+
+  /// Step 16.3：监听 App 运行中从小组件点击回来的事件。
+  ///
+  /// [HomeWidget.widgetClicked] 是一个 [Stream]，App 在前台时用户
+  /// 点击小组件，系统会通过此 stream 推送 URI。
+  void _listenWidgetClicks() {
+    try {
+      _widgetClickSub = HomeWidget.widgetClicked.listen((uri) {
+        if (uri != null && uri.path == '/record/new') {
+          // 延迟 1 帧避免 navigator 锁定状态
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) ref.read(goRouterProvider).go('/record/new');
+          });
+        }
+      }, onError: (_) {});
+    } catch (_) {
+      // 非 iOS / Android
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Step 15.1：主题由 provider 驱动，切换后即时变色。
@@ -129,7 +211,7 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
     return MaterialApp.router(
       title: '边边记账',
       theme: theme,
-      routerConfig: goRouter,
+        routerConfig: ref.watch(goRouterProvider),
       debugShowCheckedModeBanner: false,
       locale: const Locale('zh', 'CN'),
       supportedLocales: const [

@@ -8,18 +8,17 @@
 
 ---
 
-## 当前文件一览（Phase 15.3 · 自定义分类图标集完成后）
+## 当前文件一览（Phase 16.3 · Home Screen Widget 完成后）
 
 ```
 bianbianbianbian/
 ├─ lib/
-│  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider + Step 15.1 currentThemeKeyProvider + Step 15.2 currentFontSizeKeyProvider + Step 15.3 currentIconPackKeyProvider）+ Step 14.3 await backgroundLockTimeoutProvider + appLockEnabled → 已开启则 guard.lock() 冷启动锁 + 错误兜底
+│  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider + Step 15.1 currentThemeKeyProvider + Step 15.2 currentFontSizeKeyProvider + Step 15.3 currentIconPackKeyProvider + Step 16.1 _scheduleReminderIfEnabled 冷启动恢复通知调度 + Step 16.3 _updateWidgetData 冷启动刷新小组件数据）+ Step 14.3 await backgroundLockTimeoutProvider + appLockEnabled → 已开启则 guard.lock() 冷启动锁 + Step 16.1 tz_data.initializeTimeZones() 时区初始化 + 错误兜底
 │  ├─ app/
-│  │  ├─ app.dart               BianBianApp 根组件（ConsumerStatefulWidget · Step 15.1 watch currentThemeProvider 驱动 theme · Step 15.2 builder 覆盖 MediaQuery.textScaler（fontSizeScaleFactorProvider × 系统 TextScaler）+ 条件 _AppLockGate · Step 10.7 enableSyncLifecycle WidgetsBindingObserver 联动 syncTrigger · Step 14.3 enableAppLockGuard 同生命周期回调 guard.onPaused/onResumed）
-│  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, /record/search → RecordSearchPage, …, /sync → CloudServicePage）
+│  │  ├─ app.dart               BianBianApp 根组件（ConsumerStatefulWidget · Step 15.1 watch currentThemeProvider 驱动 theme · Step 15.2 builder 覆盖 MediaQuery.textScaler（fontSizeScaleFactorProvider × 系统 TextScaler）+ 条件 _AppLockGate · Step 10.7 enableSyncLifecycle WidgetsBindingObserver 联动 syncTrigger · Step 14.3 enableAppLockGuard 同生命周期回调 guard.onPaused/onResumed · Step 16.3 _updateWidgetData 前台恢复刷新小组件 + _handleWidgetDeepLink 冷启动深链导航 + _listenWidgetClicks 运行中小组件点击 stream）
+│  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, /record/search → RecordSearchPage, …, /sync → CloudServicePage, /settings/reminder → ReminderPage）
 │  │  ├─ app_theme.dart         BianBianTheme 枚举（cream_bunny/thick_brown_bear/moonlight_dark/mint_green）+ BianBianFontSize 枚举（small/standard/large + scaleFactor）+ buildAppTheme(theme) 统一构建 + BianBianSemanticColors ThemeExtension + 向后兼容 appTheme
-│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口）
-│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口）
+│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口；Step 16.1：我的 Tab "提醒"入口）
 │  ├─ core/
 │  │  ├─ crypto/
 │  │  │  └─ bianbian_crypto.dart  BianbianCrypto（PBKDF2 + AES-256-GCM）+ DecryptionFailure
@@ -30,7 +29,7 @@ bianbianbianbian/
 │  │     └─ quick_text_parser.dart  QuickTextParser + QuickParseResult（Step 9.1，本地中文快速记账文本解析器）
 │  ├─ data/
 │  │  ├─ local/
-│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=11；Step 15.3 v10→v11 user_pref 追加 icon_pack 列；Step 15.2 v9→v10 user_pref 追加 font_size 列；Step 11.2 v8→v9 附件 BLOB shape 升级）
+│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=12；Step 16.1 v11→v12 user_pref 追加 reminder_enabled + reminder_time 列；Step 15.3 v10→v11 user_pref 追加 icon_pack 列；Step 15.2 v9→v10 user_pref 追加 font_size 列；Step 11.2 v8→v9 附件 BLOB shape 升级）
 │  │  │  ├─ app_database.g.dart       build_runner 产物
 │  │  │  ├─ attachment_meta_codec.dart Step 11.2 AttachmentMetaCodec（encode/decode + v8 兼容）+ migrateAttachmentsBlobV8ToV9 纯函数
 │  │  │  ├─ db_cipher_key_store.dart  本地 DB 加密密钥的生成/持久化
@@ -42,7 +41,7 @@ bianbianbianbian/
 │  │  │  │  ├─ ledger_dao.dart              LedgerDao + .g.dart（Step 1.4）
 │  │  │  │  ├─ category_dao.dart            CategoryDao + .g.dart（Step 1.4）
 │  │  │  │  ├─ account_dao.dart             AccountDao + .g.dart（Step 1.4）
-│  │  │  │  ├─ transaction_entry_dao.dart   TransactionEntryDao + .g.dart（Step 1.4）
+│  │  │  │  ├─ transaction_entry_dao.dart   TransactionEntryDao + .g.dart（Step 1.4 + Step 16.2 latestOccurredAtByLedger）
 │  │  │  │  ├─ budget_dao.dart              BudgetDao + .g.dart（Step 1.4）
 │  │  │  │  ├─ sync_op_dao.dart             SyncOpDao + .g.dart（Step 2.2，供仓库层写队列）
 │  │  │  │  └─ fx_rate_dao.dart             FxRateDao + .g.dart（Step 8.1，工具表 listAll/getByCode/upsert）
@@ -62,7 +61,7 @@ bianbianbianbian/
 │  │     ├─ ledger_repository.dart      LedgerRepository 接口 + LocalLedgerRepository
 │  │     ├─ category_repository.dart    CategoryRepository 接口 + LocalCategoryRepository
 │  │     ├─ account_repository.dart     AccountRepository 接口 + LocalAccountRepository
-│  │     ├─ transaction_repository.dart TransactionRepository 接口 + LocalTransactionRepository
+│  │     ├─ transaction_repository.dart TransactionRepository 接口 + LocalTransactionRepository（Step 16.2 新增 latestOccurredAtByLedger）
 │  │     ├─ budget_repository.dart      BudgetRepository 接口 + LocalBudgetRepository
 │  │     ├─ providers.dart              7 个 @Riverpod provider；Step 2.3
 │  │     └─ providers.g.dart            riverpod_generator 产物
@@ -77,11 +76,11 @@ bianbianbianbian/
 │  │  └─ usecase/               [空] 跨仓库业务用例
 │  └─ features/
 │     ├─ record/                Step 3.2 已重构：新建记账页采用一级/二级分类 + 收藏 + 自动收支判定；Step 3.6/3.7 已接入搜索页 + 月份选择器；Step 11.3 起附件渲染统一走 AttachmentThumbnail
-│     │  ├─ record_home_page.dart       RecordHomePage + 子组件（顶栏/月份/卡片/快捷输入/流水列表/FAB；Step 9.2 _QuickInputBar 已接线解析器+确认卡片；Step 3.6 搜索图标跳转 /record/search；Step 3.7 月份文字 InkWell 弹年-月选择器；详情/编辑/复制/删除流程已抽到 record_tile_actions.dart）
+│     │  ├─ record_home_page.dart       RecordHomePage + 子组件（顶栏/月份/卡片/Step 16.2 _IdleReminderCard 未记账天数轻提示/快捷输入/流水列表/FAB；Step 9.2 _QuickInputBar 已接线解析器+确认卡片；Step 3.6 搜索图标跳转 /record/search；Step 3.7 月份文字 InkWell 弹年-月选择器；详情/编辑/复制/删除流程已抽到 record_tile_actions.dart）
 │     │  ├─ record_new_page.dart        RecordNewPage + 子组件（一级Tab/收藏/金额/分类/账户/时间/备注/附件/保存；Step 11.3 _NoteAttachments 改用 AttachmentThumbnail）
-│     │  ├─ record_providers.dart       RecordMonth Notifier + recordMonthSummary FutureProvider
+│     │  ├─ record_providers.dart       RecordMonth Notifier + recordMonthSummary FutureProvider + Step 16.2 daysSinceLastTransaction FutureProvider（当前账本距最近流水天数）+ IdleReminderShownDate AsyncNotifier（SharedPreferences 持久化"今天已提醒"）
 │     │  ├─ record_providers.g.dart     riverpod_generator 产物
-│     │  ├─ record_new_providers.dart   RecordFormData + _parseExpr + RecordForm Notifier（自动判定 income/expense；Step 11.2 起 attachmentMetas: List&lt;AttachmentMeta&gt; 替代旧 attachmentPaths，编解码走 AttachmentMetaCodec）
+│     │  ├─ record_new_providers.dart   RecordFormData + _parseExpr + RecordForm Notifier（自动判定 income/expense；Step 11.2 起 attachmentMetas: List&lt;AttachmentMeta&gt; 替代旧 attachmentPaths，编解码走 AttachmentMetaCodec；Step 16.3 save 后 _updateWidgetData 刷新小组件）
 │     │  ├─ record_new_providers.g.dart riverpod_generator 产物
 │     │  ├─ record_search_filters.dart   Step 3.6 SearchQuery 数据类 + SearchTypeFilter 枚举 + searchTransactions 纯函数（关键词/日期/类型/金额取交集）
 │     │  ├─ record_search_page.dart      Step 3.6 RecordSearchPage（关键词输入 + 日期范围 / 类型 / 金额三段筛选 + 结果列表 + 空查询/空结果两种空态；结果点击复用 record_tile_actions 详情底表）
@@ -152,8 +151,8 @@ bianbianbianbian/
 │     │  ├─ import_page.dart       Step 13.3 + 13.4 ImportPage（_Stage idle/parsing/needPassword/preview/applying/done/error 7 阶段单页线性向导 + FilePicker 文件选择 + 元数据卡（含三方模板"识别为：xxx" + 未映射归"其他"提示）+ 20 行预览 + 3 种 dedupe 策略 RadioTile + 结果统计卡）
 │     │  └─ templates/             Step 13.4 三方账单模板
 │     │     └─ third_party_template.dart  ThirdPartyTemplate 抽象 + WechatBillTemplate / AlipayBillTemplate / QianjiTemplate + kAllThirdPartyTemplates 注册表 + detectThirdPartyTemplate(rows) 主入口 + kKeywordToCategory（~80 条关键词 → 本地二级分类名）+ kFallbackCategoryName='其他' + parseAmount / parseFlexibleDate / mapKeywordToCategory @visibleForTesting 工具
-│     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider；Step 8.3：汇率刷新服务 + 手动覆盖；Step 9.3：AI 增强配置；Step 11.3：附件缓存设置页；Step 15.1：主题切换；Step 15.2：字号调节；Step 15.3：图标包切换
-│        ├─ settings_providers.dart      CurrentThemeKey AsyncNotifier + currentThemeProvider + CurrentFontSizeKey AsyncNotifier + fontSizeScaleFactorProvider + CurrentIconPackKey AsyncNotifier + currentIconPackProvider + MultiCurrencyEnabled + currentLedgerDefaultCurrency + fxRates + fxRateRows + fxRateRefreshService + computeFxRate
+│     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider；Step 8.3：汇率刷新服务 + 手动覆盖；Step 9.3：AI 增强配置；Step 11.3：附件缓存设置页；Step 15.1：主题切换；Step 15.2：字号调节；Step 15.3：图标包切换；Step 16.1：每日记账提醒
+│        ├─ settings_providers.dart      CurrentThemeKey AsyncNotifier + currentThemeProvider + CurrentFontSizeKey AsyncNotifier + fontSizeScaleFactorProvider + CurrentIconPackKey AsyncNotifier + currentIconPackProvider + ReminderEnabled AsyncNotifier + ReminderTime AsyncNotifier + reminderServiceProvider + MultiCurrencyEnabled + currentLedgerDefaultCurrency + fxRates + fxRateRows + fxRateRefreshService + computeFxRate
 │        ├─ settings_providers.g.dart    riverpod_generator 产物
 │        ├─ fx_rate_refresh_service.dart Step 8.3 FxRateRefreshService（节流 / 失败静默 / 手动覆盖 / CNY 守护）+ defaultFxRateFetcher（open.er-api.com）
 │        ├─ multi_currency_page.dart     MultiCurrencyPage（开关 SwitchListTile + 内置币种概览 + 汇率管理列表 + 立即刷新按钮 + 手动覆盖对话框）
@@ -161,8 +160,16 @@ bianbianbianbian/
 │        ├─ ai_input_settings_providers.g.dart riverpod_generator 产物
 │        ├─ ai_input_settings_page.dart  Step 9.3 AiInputSettingsPage（开关 + endpoint/key/model/prompt 5 字段表单 + 保存按钮 + API key 显示切换）
 │        ├─ theme_page.dart             Step 15.1 + 15.2 + 15.3 ThemePage（标题"外观"；主题区 4 套预览卡片 + 字号区 SegmentedButton 三档 + 图标包区 2 套 _IconPackCard 含样本 emoji 预览）
+│        ├─ reminder_service.dart        Step 16.1 ReminderService（flutter_local_notifications 封装：initialize / requestPermission / scheduleDailyReminder / cancelReminder / showTestNotification + 可爱风文案池 7 条）
+│        ├─ reminder_page.dart           Step 16.1 ReminderPage（每日记账提醒开关 + 时间选择 + 测试提醒 + 说明文案）
+│        ├─ widget_data_service.dart     Step 16.3 WidgetData 数据类 + computeWidgetData 纯函数（今日支出/本月结余计算）+ WidgetDataService（initialize / saveAndRefresh / computeAndRefresh）+ 常量 kWidgetAppGroupId / kAndroidWidgetQualifiedName
 │        └─ attachment_cache_page.dart   Step 11.3 AttachmentCachePage（FutureBuilder 显示当前占用 + 上限 + 刷新按钮 + 红色"清除缓存"二次确认对话框 → pruner.clear()）
 ├─ android/app/build.gradle.kts Android 构建脚本（core library desugaring + minSdk 23）
+│  android/app/src/main/AndroidManifest.xml  Step 16.1 通知权限+receiver；Step 16.3 小组件 Provider receiver + bianbian 深链 intent-filter
+│  android/app/src/main/res/layout/bianbian_widget.xml  Step 16.3 桌面小组件布局（奶油兔风格）
+│  android/app/src/main/res/xml/bianbian_widget_info.xml  Step 16.3 小组件元数据（4×1 格子）
+│  android/app/src/main/res/values/strings.xml  Step 16.3 widget_description 字符串
+│  android/app/src/main/kotlin/.../BianBianWidgetProvider.kt  Step 16.3 Android AppWidgetProvider（HomeWidgetProvider 子类 + SharedPreferences 读取 + PendingIntent 深链）
 ├─ test/
 │  ├─ core/
 │  │  ├─ crypto/
@@ -197,6 +204,7 @@ bianbianbianbian/
 │  │  │     └─ attachment_thumbnail_test.dart Step 11.3 AttachmentThumbnail widget 测试（5 用例：downloader null + remoteKey 占位 / 双 null 占位 / storage 异常占位 / Provider loading 骨架屏 / onTap 触发 InkWell）
 │  │  │  └─ quick_confirm_sheet_test.dart    Step 9.2 QuickConfirmCard 单元测试（13 用例 + Step 9.3 新增 4 用例 = 17 用例，覆盖字段初始展示 / 低置信度横幅 / 保存路径 / 取消 / 分类选择器 / subcategory 二次匹配 / AI 增强按钮显隐 + 成功/失败路径）
 │  │  │  └─ quick_input_bar_test.dart        Step 9.2 首页输入条 → 卡片 → 保存全链路集成测试（2 用例）
+│  │  │  └─ idle_reminder_test.dart         Step 16.2 daysSinceLastTransaction + IdleReminderShownDate 单元测试（8 用例）
 │  │  │  └─ ai_input_enhance_service_test.dart Step 9.3 AiInputEnhanceService + parseEnhanceJson 测试（24 用例：schema 严格校验 + HTTP 协议 + prompt 占位符）
 │  │  │  └─ record_search_filters_test.dart  Step 3.6 searchTransactions 纯函数 + SearchQuery copyWith/isEmpty（11 用例：关键词命中备注/分类/账户、日期闭区间、类型筛选、金额范围、多维度交集）
 │  │  │  └─ record_search_page_test.dart     Step 3.6 RecordSearchPage widget 测试（5 用例：空查询提示 / 关键词命中 / 空结果提示 / 点击结果弹详情 / 删除流程从列表消失）
@@ -217,6 +225,9 @@ bianbianbianbian/
 │  │  └─ ai_input_settings_page_test.dart    Step 9.3 AiInputSettingsPage widget 测试（3 用例：预填 / 保存 / API key 显示切换）
 │  │  └─ theme_test.dart                    Step 15.1 + 15.2 BianBianTheme 枚举 + buildAppTheme 四套 + BianBianSemanticColors lerp/copyWith + currentThemeProvider 四 key + BianBianFontSize 枚举 + fontSizeScaleFactorProvider 四 key（27 用例）
 │  │  └─ theme_page_test.dart               Step 15.1 + 15.2 ThemePage widget 测试（7 用例：4 卡片渲染 / 点击切换 / 描述文案 / 标题"外观" / 字号 SegmentedButton / 点击"大" / 字号描述文案）
+│  │  └─ reminder_test.dart                Step 16.1 ReminderEnabled + ReminderTime provider DB 集成 roundtrip + _parseTimeOfDay 容错（11 用例）
+│  │  └─ reminder_page_test.dart           Step 16.1 ReminderPage widget 测试（5 用例：关闭态 / 开启态 / 权限被拒 / 关闭调 cancelReminder / 描述文案）
+│  │  └─ widget_data_test.dart             Step 16.3 computeWidgetData 纯函数单元测试（9 用例：空流水/单笔/混合/跨月/fxRate/转账/负数/empty/跨账本）
 │  ├─ features/sync/
 │  │  ├─ sync_trigger_test.dart              Step 10.7 SyncTrigger 单元测试（8 用例：notConfigured / 成功 / SocketException / TimeoutException / failure / skipped / 防抖语义 / cancelTimers）
 │  │  ├─ attachment_uploader_test.dart       Step 11.2 AttachmentUploader（6 用例：透传已 remoteKey、sha256 去重、单条失败隔离、null path 跳过、远端路径模式断言）

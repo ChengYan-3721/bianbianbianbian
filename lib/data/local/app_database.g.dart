@@ -202,6 +202,29 @@ class $UserPrefTableTable extends UserPrefTable
     requiredDuringInsert: false,
     defaultValue: const Constant('sticker'),
   );
+  static const VerificationMeta _reminderEnabledMeta = const VerificationMeta(
+    'reminderEnabled',
+  );
+  @override
+  late final GeneratedColumn<int> reminderEnabled = GeneratedColumn<int>(
+    'reminder_enabled',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reminderTimeMeta = const VerificationMeta(
+    'reminderTime',
+  );
+  @override
+  late final GeneratedColumn<String> reminderTime = GeneratedColumn<String>(
+    'reminder_time',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -221,6 +244,8 @@ class $UserPrefTableTable extends UserPrefTable
     aiInputEnabled,
     fontSize,
     iconPack,
+    reminderEnabled,
+    reminderTime,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -371,6 +396,24 @@ class $UserPrefTableTable extends UserPrefTable
         iconPack.isAcceptableOrUnknown(data['icon_pack']!, _iconPackMeta),
       );
     }
+    if (data.containsKey('reminder_enabled')) {
+      context.handle(
+        _reminderEnabledMeta,
+        reminderEnabled.isAcceptableOrUnknown(
+          data['reminder_enabled']!,
+          _reminderEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reminder_time')) {
+      context.handle(
+        _reminderTimeMeta,
+        reminderTime.isAcceptableOrUnknown(
+          data['reminder_time']!,
+          _reminderTimeMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -448,6 +491,14 @@ class $UserPrefTableTable extends UserPrefTable
         DriftSqlType.string,
         data['${effectivePrefix}icon_pack'],
       ),
+      reminderEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reminder_enabled'],
+      ),
+      reminderTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reminder_time'],
+      ),
     );
   }
 
@@ -504,6 +555,13 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
 
   /// Step 15.3：分类图标包。'sticker'(默认/手绘贴纸) / 'flat'(扁平简约)。
   final String? iconPack;
+
+  /// Step 16.1：每日记账提醒开关。0/null = 关闭（默认），1 = 开启。
+  final int? reminderEnabled;
+
+  /// Step 16.1：每日记账提醒时间，格式 'HH:mm'（如 '20:00'）。
+  /// null = 从未设置（默认）；开启提醒时 UI 应要求用户先选时间。
+  final String? reminderTime;
   const UserPrefEntry({
     required this.id,
     required this.deviceId,
@@ -522,6 +580,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     this.aiInputEnabled,
     this.fontSize,
     this.iconPack,
+    this.reminderEnabled,
+    this.reminderTime,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -572,6 +632,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     }
     if (!nullToAbsent || iconPack != null) {
       map['icon_pack'] = Variable<String>(iconPack);
+    }
+    if (!nullToAbsent || reminderEnabled != null) {
+      map['reminder_enabled'] = Variable<int>(reminderEnabled);
+    }
+    if (!nullToAbsent || reminderTime != null) {
+      map['reminder_time'] = Variable<String>(reminderTime);
     }
     return map;
   }
@@ -625,6 +691,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       iconPack: iconPack == null && nullToAbsent
           ? const Value.absent()
           : Value(iconPack),
+      reminderEnabled: reminderEnabled == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reminderEnabled),
+      reminderTime: reminderTime == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reminderTime),
     );
   }
 
@@ -657,6 +729,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       aiInputEnabled: serializer.fromJson<int?>(json['aiInputEnabled']),
       fontSize: serializer.fromJson<String?>(json['fontSize']),
       iconPack: serializer.fromJson<String?>(json['iconPack']),
+      reminderEnabled: serializer.fromJson<int?>(json['reminderEnabled']),
+      reminderTime: serializer.fromJson<String?>(json['reminderTime']),
     );
   }
   @override
@@ -680,6 +754,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       'aiInputEnabled': serializer.toJson<int?>(aiInputEnabled),
       'fontSize': serializer.toJson<String?>(fontSize),
       'iconPack': serializer.toJson<String?>(iconPack),
+      'reminderEnabled': serializer.toJson<int?>(reminderEnabled),
+      'reminderTime': serializer.toJson<String?>(reminderTime),
     };
   }
 
@@ -701,6 +777,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     Value<int?> aiInputEnabled = const Value.absent(),
     Value<String?> fontSize = const Value.absent(),
     Value<String?> iconPack = const Value.absent(),
+    Value<int?> reminderEnabled = const Value.absent(),
+    Value<String?> reminderTime = const Value.absent(),
   }) => UserPrefEntry(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
@@ -735,6 +813,10 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
         : this.aiInputEnabled,
     fontSize: fontSize.present ? fontSize.value : this.fontSize,
     iconPack: iconPack.present ? iconPack.value : this.iconPack,
+    reminderEnabled: reminderEnabled.present
+        ? reminderEnabled.value
+        : this.reminderEnabled,
+    reminderTime: reminderTime.present ? reminderTime.value : this.reminderTime,
   );
   UserPrefEntry copyWithCompanion(UserPrefTableCompanion data) {
     return UserPrefEntry(
@@ -779,6 +861,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           : this.aiInputEnabled,
       fontSize: data.fontSize.present ? data.fontSize.value : this.fontSize,
       iconPack: data.iconPack.present ? data.iconPack.value : this.iconPack,
+      reminderEnabled: data.reminderEnabled.present
+          ? data.reminderEnabled.value
+          : this.reminderEnabled,
+      reminderTime: data.reminderTime.present
+          ? data.reminderTime.value
+          : this.reminderTime,
     );
   }
 
@@ -801,7 +889,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ..write('aiApiPromptTemplate: $aiApiPromptTemplate, ')
           ..write('aiInputEnabled: $aiInputEnabled, ')
           ..write('fontSize: $fontSize, ')
-          ..write('iconPack: $iconPack')
+          ..write('iconPack: $iconPack, ')
+          ..write('reminderEnabled: $reminderEnabled, ')
+          ..write('reminderTime: $reminderTime')
           ..write(')'))
         .toString();
   }
@@ -825,6 +915,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     aiInputEnabled,
     fontSize,
     iconPack,
+    reminderEnabled,
+    reminderTime,
   );
   @override
   bool operator ==(Object other) =>
@@ -849,7 +941,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           other.aiApiPromptTemplate == this.aiApiPromptTemplate &&
           other.aiInputEnabled == this.aiInputEnabled &&
           other.fontSize == this.fontSize &&
-          other.iconPack == this.iconPack);
+          other.iconPack == this.iconPack &&
+          other.reminderEnabled == this.reminderEnabled &&
+          other.reminderTime == this.reminderTime);
 }
 
 class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
@@ -870,6 +964,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
   final Value<int?> aiInputEnabled;
   final Value<String?> fontSize;
   final Value<String?> iconPack;
+  final Value<int?> reminderEnabled;
+  final Value<String?> reminderTime;
   const UserPrefTableCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -888,6 +984,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.aiInputEnabled = const Value.absent(),
     this.fontSize = const Value.absent(),
     this.iconPack = const Value.absent(),
+    this.reminderEnabled = const Value.absent(),
+    this.reminderTime = const Value.absent(),
   });
   UserPrefTableCompanion.insert({
     this.id = const Value.absent(),
@@ -907,6 +1005,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.aiInputEnabled = const Value.absent(),
     this.fontSize = const Value.absent(),
     this.iconPack = const Value.absent(),
+    this.reminderEnabled = const Value.absent(),
+    this.reminderTime = const Value.absent(),
   }) : deviceId = Value(deviceId);
   static Insertable<UserPrefEntry> custom({
     Expression<int>? id,
@@ -926,6 +1026,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Expression<int>? aiInputEnabled,
     Expression<String>? fontSize,
     Expression<String>? iconPack,
+    Expression<int>? reminderEnabled,
+    Expression<String>? reminderTime,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -947,6 +1049,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       if (aiInputEnabled != null) 'ai_input_enabled': aiInputEnabled,
       if (fontSize != null) 'font_size': fontSize,
       if (iconPack != null) 'icon_pack': iconPack,
+      if (reminderEnabled != null) 'reminder_enabled': reminderEnabled,
+      if (reminderTime != null) 'reminder_time': reminderTime,
     });
   }
 
@@ -968,6 +1072,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Value<int?>? aiInputEnabled,
     Value<String?>? fontSize,
     Value<String?>? iconPack,
+    Value<int?>? reminderEnabled,
+    Value<String?>? reminderTime,
   }) {
     return UserPrefTableCompanion(
       id: id ?? this.id,
@@ -987,6 +1093,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       aiInputEnabled: aiInputEnabled ?? this.aiInputEnabled,
       fontSize: fontSize ?? this.fontSize,
       iconPack: iconPack ?? this.iconPack,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      reminderTime: reminderTime ?? this.reminderTime,
     );
   }
 
@@ -1048,6 +1156,12 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     if (iconPack.present) {
       map['icon_pack'] = Variable<String>(iconPack.value);
     }
+    if (reminderEnabled.present) {
+      map['reminder_enabled'] = Variable<int>(reminderEnabled.value);
+    }
+    if (reminderTime.present) {
+      map['reminder_time'] = Variable<String>(reminderTime.value);
+    }
     return map;
   }
 
@@ -1070,7 +1184,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
           ..write('aiApiPromptTemplate: $aiApiPromptTemplate, ')
           ..write('aiInputEnabled: $aiInputEnabled, ')
           ..write('fontSize: $fontSize, ')
-          ..write('iconPack: $iconPack')
+          ..write('iconPack: $iconPack, ')
+          ..write('reminderEnabled: $reminderEnabled, ')
+          ..write('reminderTime: $reminderTime')
           ..write(')'))
         .toString();
   }
@@ -5620,6 +5736,8 @@ typedef $$UserPrefTableTableCreateCompanionBuilder =
       Value<int?> aiInputEnabled,
       Value<String?> fontSize,
       Value<String?> iconPack,
+      Value<int?> reminderEnabled,
+      Value<String?> reminderTime,
     });
 typedef $$UserPrefTableTableUpdateCompanionBuilder =
     UserPrefTableCompanion Function({
@@ -5640,6 +5758,8 @@ typedef $$UserPrefTableTableUpdateCompanionBuilder =
       Value<int?> aiInputEnabled,
       Value<String?> fontSize,
       Value<String?> iconPack,
+      Value<int?> reminderEnabled,
+      Value<String?> reminderTime,
     });
 
 class $$UserPrefTableTableFilterComposer
@@ -5733,6 +5853,16 @@ class $$UserPrefTableTableFilterComposer
 
   ColumnFilters<String> get iconPack => $composableBuilder(
     column: $table.iconPack,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reminderEnabled => $composableBuilder(
+    column: $table.reminderEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reminderTime => $composableBuilder(
+    column: $table.reminderTime,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5830,6 +5960,16 @@ class $$UserPrefTableTableOrderingComposer
     column: $table.iconPack,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get reminderEnabled => $composableBuilder(
+    column: $table.reminderEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reminderTime => $composableBuilder(
+    column: $table.reminderTime,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserPrefTableTableAnnotationComposer
@@ -5915,6 +6055,16 @@ class $$UserPrefTableTableAnnotationComposer
 
   GeneratedColumn<String> get iconPack =>
       $composableBuilder(column: $table.iconPack, builder: (column) => column);
+
+  GeneratedColumn<int> get reminderEnabled => $composableBuilder(
+    column: $table.reminderEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reminderTime => $composableBuilder(
+    column: $table.reminderTime,
+    builder: (column) => column,
+  );
 }
 
 class $$UserPrefTableTableTableManager
@@ -5965,6 +6115,8 @@ class $$UserPrefTableTableTableManager
                 Value<int?> aiInputEnabled = const Value.absent(),
                 Value<String?> fontSize = const Value.absent(),
                 Value<String?> iconPack = const Value.absent(),
+                Value<int?> reminderEnabled = const Value.absent(),
+                Value<String?> reminderTime = const Value.absent(),
               }) => UserPrefTableCompanion(
                 id: id,
                 deviceId: deviceId,
@@ -5983,6 +6135,8 @@ class $$UserPrefTableTableTableManager
                 aiInputEnabled: aiInputEnabled,
                 fontSize: fontSize,
                 iconPack: iconPack,
+                reminderEnabled: reminderEnabled,
+                reminderTime: reminderTime,
               ),
           createCompanionCallback:
               ({
@@ -6003,6 +6157,8 @@ class $$UserPrefTableTableTableManager
                 Value<int?> aiInputEnabled = const Value.absent(),
                 Value<String?> fontSize = const Value.absent(),
                 Value<String?> iconPack = const Value.absent(),
+                Value<int?> reminderEnabled = const Value.absent(),
+                Value<String?> reminderTime = const Value.absent(),
               }) => UserPrefTableCompanion.insert(
                 id: id,
                 deviceId: deviceId,
@@ -6021,6 +6177,8 @@ class $$UserPrefTableTableTableManager
                 aiInputEnabled: aiInputEnabled,
                 fontSize: fontSize,
                 iconPack: iconPack,
+                reminderEnabled: reminderEnabled,
+                reminderTime: reminderTime,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

@@ -53,6 +53,9 @@ dependencies:
   flutter_svg: ^2.2.4
   local_auth: ^3.0.1
   flutter_local_notifications: ^21.0.0
+  # Step 16.1：flutter_local_notifications 的 zonedSchedule 需要 timezone 包
+  # 构造 TZDateTime（带时区信息的日期时间），用于每日定时通知调度。
+  timezone: ^0.11.0
   intl: ^0.20.2
   uuid: ^4.5.3
   image_picker: ^1.1.2
@@ -62,6 +65,10 @@ dependencies:
   # Step 11.2: MIME 推断（按扩展名 → image/jpeg / image/png …）
   # 用于 attachment_meta.mime 字段；纯 Dart，不引入 native 依赖。
   mime: ^2.0.0
+  # Step 16.3：桌面小组件桥接。提供 saveWidgetData / updateWidget /
+  # registerInteractivityCallback 等方法，Flutter ↔ 原生小组件通过
+  # SharedPreferences（Android）或 App Group UserDefaults（iOS）共享数据。
+  home_widget: ^0.7.0
   # Step 13.3: 系统文件选择器，用于导入 .json / .csv / .bbbak 备份文件。
   # 跨平台（Android / iOS / 桌面），返回文件绝对路径供 dart:io 读取。
   file_picker: ^11.0.0

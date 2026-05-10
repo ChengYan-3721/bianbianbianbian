@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Step 16.3：桌面小组件元数据。
+     minWidth/minHeight 按 4×1 格子（标准小部件）≈ 250×40 dp。
+     updatePeriodMillis=0——Flutter 侧主动 push 数据 + 触发 onUpdate，
+     不走系统定时轮询（避免无效唤醒）。 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/bianbian_widget"
+    android:minWidth="250dp"
+    android:minHeight="40dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description"
+    android:previewLayout="@layout/bianbian_widget" />

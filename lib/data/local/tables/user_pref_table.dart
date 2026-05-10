@@ -92,6 +92,17 @@ class UserPrefTable extends Table {
   TextColumn get iconPack =>
       text().nullable().named('icon_pack').withDefault(const Constant('sticker'))();
 
+  /// Step 16.1：每日记账提醒开关。0/null = 关闭（默认），1 = 开启。
+  IntColumn get reminderEnabled => integer()
+      .named('reminder_enabled')
+      .nullable()
+      .withDefault(const Constant(0))();
+
+  /// Step 16.1：每日记账提醒时间，格式 'HH:mm'（如 '20:00'）。
+  /// null = 从未设置（默认）；开启提醒时 UI 应要求用户先选时间。
+  TextColumn get reminderTime =>
+      text().nullable().named('reminder_time')();
+
   @override
   Set<Column> get primaryKey => {id};
 }

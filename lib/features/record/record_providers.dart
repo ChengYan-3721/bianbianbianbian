@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/repository/providers.dart'
     show
@@ -140,4 +142,44 @@ Future<RecordMonthSummary> recordMonthSummary(Ref ref) async {
     dailyGroups: dailyGroups,
     balance: income - expense,
   );
+}
+
+// ---- Step 16.2：未记账天数提醒 ----
+
+/// 当前账本距最近一笔未软删流水的天数；无流水时返回 null。
+///
+/// UI 消费本 provider 判断是否展示"未记账天数"轻提示卡片。
+@Riverpod(keepAlive: true)
+Future<int?> daysSinceLastTransaction(Ref ref) async {
+  final ledgerId = await ref.watch(currentLedgerIdProvider.future);
+  final repo = await ref.watch(transactionRepositoryProvider.future);
+  final latest = await repo.latestOccurredAtByLedger(ledgerId);
+  if (latest == null) return null;
+  final now = DateTime.now();
+  final lastDate = DateTime(latest.year, latest.month, latest.day);
+  final today = DateTime(now.year, now.month, now.day);
+  return today.difference(lastDate).inDays;
+}
+
+/// 当天是否已展示过未记账天数轻提示。
+///
+/// 持久化到 SharedPreferences（key: `idle_reminder_last_date`），
+/// 值为 'yyyy-MM-dd' 格式。跨重启后同一天不会重复提醒。
+@Riverpod(keepAlive: true)
+class IdleReminderShownDate extends _$IdleReminderShownDate {
+  static const _prefKey = 'idle_reminder_last_date';
+
+  @override
+  Future<String?> build() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prefKey);
+  }
+
+  /// 标记今天已展示过轻提示。
+  Future<void> markToday() async {
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKey, today);
+    state = AsyncValue.data(today);
+  }
 }
