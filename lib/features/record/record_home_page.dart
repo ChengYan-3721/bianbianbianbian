@@ -13,6 +13,7 @@ import 'record_providers.dart';
 import 'record_tile_actions.dart';
 
 import '../../core/util/currencies.dart';
+import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/providers.dart'
     show
@@ -967,6 +968,8 @@ class _TxTileState extends ConsumerState<_TxTile> {
     // 保留上一帧值 → 闪烁消除。
     final categories =
         ref.watch(categoriesListProvider).valueOrNull ?? const <Category>[];
+    // Step 15.3：当前图标包——流水列表图标解析。
+    final iconPack = ref.watch(currentIconPackProvider);
     Category? matched;
     final id = tx.categoryId;
     if (id != null) {
@@ -980,8 +983,10 @@ class _TxTileState extends ConsumerState<_TxTile> {
 
     final iconText = isTransfer
         ? '🔁'
-        : (matched?.icon ??
-            (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
+        : (matched != null
+            ? resolveCategoryIcon(
+                matched.icon, matched.parentKey, matched.name, iconPack)
+            : (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
     final nameText = isTransfer ? '转账' : (matched?.name ?? '未分类');
     final parentKey = _inferParentKey(matched, tx);
 

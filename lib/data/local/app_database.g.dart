@@ -178,6 +178,30 @@ class $UserPrefTableTable extends UserPrefTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _fontSizeMeta = const VerificationMeta(
+    'fontSize',
+  );
+  @override
+  late final GeneratedColumn<String> fontSize = GeneratedColumn<String>(
+    'font_size',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('standard'),
+  );
+  static const VerificationMeta _iconPackMeta = const VerificationMeta(
+    'iconPack',
+  );
+  @override
+  late final GeneratedColumn<String> iconPack = GeneratedColumn<String>(
+    'icon_pack',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('sticker'),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -195,6 +219,8 @@ class $UserPrefTableTable extends UserPrefTable
     aiApiModel,
     aiApiPromptTemplate,
     aiInputEnabled,
+    fontSize,
+    iconPack,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -333,6 +359,18 @@ class $UserPrefTableTable extends UserPrefTable
         ),
       );
     }
+    if (data.containsKey('font_size')) {
+      context.handle(
+        _fontSizeMeta,
+        fontSize.isAcceptableOrUnknown(data['font_size']!, _fontSizeMeta),
+      );
+    }
+    if (data.containsKey('icon_pack')) {
+      context.handle(
+        _iconPackMeta,
+        iconPack.isAcceptableOrUnknown(data['icon_pack']!, _iconPackMeta),
+      );
+    }
     return context;
   }
 
@@ -402,6 +440,14 @@ class $UserPrefTableTable extends UserPrefTable
         DriftSqlType.int,
         data['${effectivePrefix}ai_input_enabled'],
       ),
+      fontSize: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}font_size'],
+      ),
+      iconPack: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_pack'],
+      ),
     );
   }
 
@@ -452,6 +498,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
   /// Step 9.3：AI 增强全局开关。0/null = 关闭（默认；确认卡片不显示 AI 增强按钮），
   /// 1 = 开启（且只有 endpoint + key + model 三件齐全才会真正显示按钮）。
   final int? aiInputEnabled;
+
+  /// Step 15.2：字号档位。'small' / 'standard'(默认) / 'large'。
+  final String? fontSize;
+
+  /// Step 15.3：分类图标包。'sticker'(默认/手绘贴纸) / 'flat'(扁平简约)。
+  final String? iconPack;
   const UserPrefEntry({
     required this.id,
     required this.deviceId,
@@ -468,6 +520,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     this.aiApiModel,
     this.aiApiPromptTemplate,
     this.aiInputEnabled,
+    this.fontSize,
+    this.iconPack,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -512,6 +566,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     }
     if (!nullToAbsent || aiInputEnabled != null) {
       map['ai_input_enabled'] = Variable<int>(aiInputEnabled);
+    }
+    if (!nullToAbsent || fontSize != null) {
+      map['font_size'] = Variable<String>(fontSize);
+    }
+    if (!nullToAbsent || iconPack != null) {
+      map['icon_pack'] = Variable<String>(iconPack);
     }
     return map;
   }
@@ -559,6 +619,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       aiInputEnabled: aiInputEnabled == null && nullToAbsent
           ? const Value.absent()
           : Value(aiInputEnabled),
+      fontSize: fontSize == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fontSize),
+      iconPack: iconPack == null && nullToAbsent
+          ? const Value.absent()
+          : Value(iconPack),
     );
   }
 
@@ -589,6 +655,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
         json['aiApiPromptTemplate'],
       ),
       aiInputEnabled: serializer.fromJson<int?>(json['aiInputEnabled']),
+      fontSize: serializer.fromJson<String?>(json['fontSize']),
+      iconPack: serializer.fromJson<String?>(json['iconPack']),
     );
   }
   @override
@@ -610,6 +678,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       'aiApiModel': serializer.toJson<String?>(aiApiModel),
       'aiApiPromptTemplate': serializer.toJson<String?>(aiApiPromptTemplate),
       'aiInputEnabled': serializer.toJson<int?>(aiInputEnabled),
+      'fontSize': serializer.toJson<String?>(fontSize),
+      'iconPack': serializer.toJson<String?>(iconPack),
     };
   }
 
@@ -629,6 +699,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     Value<String?> aiApiModel = const Value.absent(),
     Value<String?> aiApiPromptTemplate = const Value.absent(),
     Value<int?> aiInputEnabled = const Value.absent(),
+    Value<String?> fontSize = const Value.absent(),
+    Value<String?> iconPack = const Value.absent(),
   }) => UserPrefEntry(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
@@ -661,6 +733,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     aiInputEnabled: aiInputEnabled.present
         ? aiInputEnabled.value
         : this.aiInputEnabled,
+    fontSize: fontSize.present ? fontSize.value : this.fontSize,
+    iconPack: iconPack.present ? iconPack.value : this.iconPack,
   );
   UserPrefEntry copyWithCompanion(UserPrefTableCompanion data) {
     return UserPrefEntry(
@@ -703,6 +777,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       aiInputEnabled: data.aiInputEnabled.present
           ? data.aiInputEnabled.value
           : this.aiInputEnabled,
+      fontSize: data.fontSize.present ? data.fontSize.value : this.fontSize,
+      iconPack: data.iconPack.present ? data.iconPack.value : this.iconPack,
     );
   }
 
@@ -723,7 +799,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted, ')
           ..write('aiApiModel: $aiApiModel, ')
           ..write('aiApiPromptTemplate: $aiApiPromptTemplate, ')
-          ..write('aiInputEnabled: $aiInputEnabled')
+          ..write('aiInputEnabled: $aiInputEnabled, ')
+          ..write('fontSize: $fontSize, ')
+          ..write('iconPack: $iconPack')
           ..write(')'))
         .toString();
   }
@@ -745,6 +823,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     aiApiModel,
     aiApiPromptTemplate,
     aiInputEnabled,
+    fontSize,
+    iconPack,
   );
   @override
   bool operator ==(Object other) =>
@@ -767,7 +847,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ) &&
           other.aiApiModel == this.aiApiModel &&
           other.aiApiPromptTemplate == this.aiApiPromptTemplate &&
-          other.aiInputEnabled == this.aiInputEnabled);
+          other.aiInputEnabled == this.aiInputEnabled &&
+          other.fontSize == this.fontSize &&
+          other.iconPack == this.iconPack);
 }
 
 class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
@@ -786,6 +868,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
   final Value<String?> aiApiModel;
   final Value<String?> aiApiPromptTemplate;
   final Value<int?> aiInputEnabled;
+  final Value<String?> fontSize;
+  final Value<String?> iconPack;
   const UserPrefTableCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -802,6 +886,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.aiApiModel = const Value.absent(),
     this.aiApiPromptTemplate = const Value.absent(),
     this.aiInputEnabled = const Value.absent(),
+    this.fontSize = const Value.absent(),
+    this.iconPack = const Value.absent(),
   });
   UserPrefTableCompanion.insert({
     this.id = const Value.absent(),
@@ -819,6 +905,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.aiApiModel = const Value.absent(),
     this.aiApiPromptTemplate = const Value.absent(),
     this.aiInputEnabled = const Value.absent(),
+    this.fontSize = const Value.absent(),
+    this.iconPack = const Value.absent(),
   }) : deviceId = Value(deviceId);
   static Insertable<UserPrefEntry> custom({
     Expression<int>? id,
@@ -836,6 +924,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Expression<String>? aiApiModel,
     Expression<String>? aiApiPromptTemplate,
     Expression<int>? aiInputEnabled,
+    Expression<String>? fontSize,
+    Expression<String>? iconPack,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -855,6 +945,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       if (aiApiPromptTemplate != null)
         'ai_api_prompt_template': aiApiPromptTemplate,
       if (aiInputEnabled != null) 'ai_input_enabled': aiInputEnabled,
+      if (fontSize != null) 'font_size': fontSize,
+      if (iconPack != null) 'icon_pack': iconPack,
     });
   }
 
@@ -874,6 +966,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Value<String?>? aiApiModel,
     Value<String?>? aiApiPromptTemplate,
     Value<int?>? aiInputEnabled,
+    Value<String?>? fontSize,
+    Value<String?>? iconPack,
   }) {
     return UserPrefTableCompanion(
       id: id ?? this.id,
@@ -891,6 +985,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       aiApiModel: aiApiModel ?? this.aiApiModel,
       aiApiPromptTemplate: aiApiPromptTemplate ?? this.aiApiPromptTemplate,
       aiInputEnabled: aiInputEnabled ?? this.aiInputEnabled,
+      fontSize: fontSize ?? this.fontSize,
+      iconPack: iconPack ?? this.iconPack,
     );
   }
 
@@ -946,6 +1042,12 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     if (aiInputEnabled.present) {
       map['ai_input_enabled'] = Variable<int>(aiInputEnabled.value);
     }
+    if (fontSize.present) {
+      map['font_size'] = Variable<String>(fontSize.value);
+    }
+    if (iconPack.present) {
+      map['icon_pack'] = Variable<String>(iconPack.value);
+    }
     return map;
   }
 
@@ -966,7 +1068,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
           ..write('aiApiKeyEncrypted: $aiApiKeyEncrypted, ')
           ..write('aiApiModel: $aiApiModel, ')
           ..write('aiApiPromptTemplate: $aiApiPromptTemplate, ')
-          ..write('aiInputEnabled: $aiInputEnabled')
+          ..write('aiInputEnabled: $aiInputEnabled, ')
+          ..write('fontSize: $fontSize, ')
+          ..write('iconPack: $iconPack')
           ..write(')'))
         .toString();
   }
@@ -5514,6 +5618,8 @@ typedef $$UserPrefTableTableCreateCompanionBuilder =
       Value<String?> aiApiModel,
       Value<String?> aiApiPromptTemplate,
       Value<int?> aiInputEnabled,
+      Value<String?> fontSize,
+      Value<String?> iconPack,
     });
 typedef $$UserPrefTableTableUpdateCompanionBuilder =
     UserPrefTableCompanion Function({
@@ -5532,6 +5638,8 @@ typedef $$UserPrefTableTableUpdateCompanionBuilder =
       Value<String?> aiApiModel,
       Value<String?> aiApiPromptTemplate,
       Value<int?> aiInputEnabled,
+      Value<String?> fontSize,
+      Value<String?> iconPack,
     });
 
 class $$UserPrefTableTableFilterComposer
@@ -5615,6 +5723,16 @@ class $$UserPrefTableTableFilterComposer
 
   ColumnFilters<int> get aiInputEnabled => $composableBuilder(
     column: $table.aiInputEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fontSize => $composableBuilder(
+    column: $table.fontSize,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconPack => $composableBuilder(
+    column: $table.iconPack,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5702,6 +5820,16 @@ class $$UserPrefTableTableOrderingComposer
     column: $table.aiInputEnabled,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get fontSize => $composableBuilder(
+    column: $table.fontSize,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get iconPack => $composableBuilder(
+    column: $table.iconPack,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserPrefTableTableAnnotationComposer
@@ -5781,6 +5909,12 @@ class $$UserPrefTableTableAnnotationComposer
     column: $table.aiInputEnabled,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get fontSize =>
+      $composableBuilder(column: $table.fontSize, builder: (column) => column);
+
+  GeneratedColumn<String> get iconPack =>
+      $composableBuilder(column: $table.iconPack, builder: (column) => column);
 }
 
 class $$UserPrefTableTableTableManager
@@ -5829,6 +5963,8 @@ class $$UserPrefTableTableTableManager
                 Value<String?> aiApiModel = const Value.absent(),
                 Value<String?> aiApiPromptTemplate = const Value.absent(),
                 Value<int?> aiInputEnabled = const Value.absent(),
+                Value<String?> fontSize = const Value.absent(),
+                Value<String?> iconPack = const Value.absent(),
               }) => UserPrefTableCompanion(
                 id: id,
                 deviceId: deviceId,
@@ -5845,6 +5981,8 @@ class $$UserPrefTableTableTableManager
                 aiApiModel: aiApiModel,
                 aiApiPromptTemplate: aiApiPromptTemplate,
                 aiInputEnabled: aiInputEnabled,
+                fontSize: fontSize,
+                iconPack: iconPack,
               ),
           createCompanionCallback:
               ({
@@ -5863,6 +6001,8 @@ class $$UserPrefTableTableTableManager
                 Value<String?> aiApiModel = const Value.absent(),
                 Value<String?> aiApiPromptTemplate = const Value.absent(),
                 Value<int?> aiInputEnabled = const Value.absent(),
+                Value<String?> fontSize = const Value.absent(),
+                Value<String?> iconPack = const Value.absent(),
               }) => UserPrefTableCompanion.insert(
                 id: id,
                 deviceId: deviceId,
@@ -5879,6 +6019,8 @@ class $$UserPrefTableTableTableManager
                 aiApiModel: aiApiModel,
                 aiApiPromptTemplate: aiApiPromptTemplate,
                 aiInputEnabled: aiInputEnabled,
+                fontSize: fontSize,
+                iconPack: iconPack,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

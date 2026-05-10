@@ -8,27 +8,29 @@
 
 ---
 
-## 当前文件一览（Phase 14.4 · 隐私模式完成后）
+## 当前文件一览（Phase 15.3 · 自定义分类图标集完成后）
 
 ```
 bianbianbianbian/
 ├─ lib/
-│  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider）+ Step 14.3 await backgroundLockTimeoutProvider + appLockEnabled → 已开启则 guard.lock() 冷启动锁 + 错误兜底
+│  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider + Step 15.1 currentThemeKeyProvider + Step 15.2 currentFontSizeKeyProvider + Step 15.3 currentIconPackKeyProvider）+ Step 14.3 await backgroundLockTimeoutProvider + appLockEnabled → 已开启则 guard.lock() 冷启动锁 + 错误兜底
 │  ├─ app/
-│  │  ├─ app.dart               BianBianApp 根组件（MaterialApp.router · Step 10.7 enableSyncLifecycle WidgetsBindingObserver 联动 syncTrigger · Step 14.3 enableAppLockGuard 同生命周期回调 guard.onPaused/onResumed + builder 套 _AppLockGate Stack 在 router child 之上挂 AppLockOverlay）
+│  │  ├─ app.dart               BianBianApp 根组件（ConsumerStatefulWidget · Step 15.1 watch currentThemeProvider 驱动 theme · Step 15.2 builder 覆盖 MediaQuery.textScaler（fontSizeScaleFactorProvider × 系统 TextScaler）+ 条件 _AppLockGate · Step 10.7 enableSyncLifecycle WidgetsBindingObserver 联动 syncTrigger · Step 14.3 enableAppLockGuard 同生命周期回调 guard.onPaused/onResumed）
 │  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, /record/search → RecordSearchPage, …, /sync → CloudServicePage）
-│  │  ├─ app_theme.dart         appTheme + BianBianSemanticColors ThemeExtension
-│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口）
+│  │  ├─ app_theme.dart         BianBianTheme 枚举（cream_bunny/thick_brown_bear/moonlight_dark/mint_green）+ BianBianFontSize 枚举（small/standard/large + scaleFactor）+ buildAppTheme(theme) 统一构建 + BianBianSemanticColors ThemeExtension + 向后兼容 appTheme
+│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口）
+│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口）
 │  ├─ core/
 │  │  ├─ crypto/
 │  │  │  └─ bianbian_crypto.dart  BianbianCrypto（PBKDF2 + AES-256-GCM）+ DecryptionFailure
 │  │  ├─ network/               [空]
 │  │  └─ util/
 │  │     ├─ currencies.dart     Currency 数据类 + kBuiltInCurrencies (11 种) + kFxRateSnapshot 写死快照（Step 8.1）
+│  │     ├─ category_icon_packs.dart  BianBianIconPack 枚举（sticker/flat）+ 两套 emoji 映射 + resolveCategoryIcon 运行时解析 + samplePackIcons 预览（Step 15.3）
 │  │     └─ quick_text_parser.dart  QuickTextParser + QuickParseResult（Step 9.1，本地中文快速记账文本解析器）
 │  ├─ data/
 │  │  ├─ local/
-│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=9；Step 11.2 v8→v9 附件 BLOB shape 升级）
+│  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=11；Step 15.3 v10→v11 user_pref 追加 icon_pack 列；Step 15.2 v9→v10 user_pref 追加 font_size 列；Step 11.2 v8→v9 附件 BLOB shape 升级）
 │  │  │  ├─ app_database.g.dart       build_runner 产物
 │  │  │  ├─ attachment_meta_codec.dart Step 11.2 AttachmentMetaCodec（encode/decode + v8 兼容）+ migrateAttachmentsBlobV8ToV9 纯函数
 │  │  │  ├─ db_cipher_key_store.dart  本地 DB 加密密钥的生成/持久化
@@ -150,14 +152,15 @@ bianbianbianbian/
 │     │  ├─ import_page.dart       Step 13.3 + 13.4 ImportPage（_Stage idle/parsing/needPassword/preview/applying/done/error 7 阶段单页线性向导 + FilePicker 文件选择 + 元数据卡（含三方模板"识别为：xxx" + 未映射归"其他"提示）+ 20 行预览 + 3 种 dedupe 策略 RadioTile + 结果统计卡）
 │     │  └─ templates/             Step 13.4 三方账单模板
 │     │     └─ third_party_template.dart  ThirdPartyTemplate 抽象 + WechatBillTemplate / AlipayBillTemplate / QianjiTemplate + kAllThirdPartyTemplates 注册表 + detectThirdPartyTemplate(rows) 主入口 + kKeywordToCategory（~80 条关键词 → 本地二级分类名）+ kFallbackCategoryName='其他' + parseAmount / parseFlexibleDate / mapKeywordToCategory @visibleForTesting 工具
-│     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider；Step 8.3：汇率刷新服务 + 手动覆盖；Step 9.3：AI 增强配置；Step 11.3：附件缓存设置页
-│        ├─ settings_providers.dart      MultiCurrencyEnabled + currentLedgerDefaultCurrency + fxRates + fxRateRows + fxRateRefreshService + computeFxRate
+│     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider；Step 8.3：汇率刷新服务 + 手动覆盖；Step 9.3：AI 增强配置；Step 11.3：附件缓存设置页；Step 15.1：主题切换；Step 15.2：字号调节；Step 15.3：图标包切换
+│        ├─ settings_providers.dart      CurrentThemeKey AsyncNotifier + currentThemeProvider + CurrentFontSizeKey AsyncNotifier + fontSizeScaleFactorProvider + CurrentIconPackKey AsyncNotifier + currentIconPackProvider + MultiCurrencyEnabled + currentLedgerDefaultCurrency + fxRates + fxRateRows + fxRateRefreshService + computeFxRate
 │        ├─ settings_providers.g.dart    riverpod_generator 产物
 │        ├─ fx_rate_refresh_service.dart Step 8.3 FxRateRefreshService（节流 / 失败静默 / 手动覆盖 / CNY 守护）+ defaultFxRateFetcher（open.er-api.com）
 │        ├─ multi_currency_page.dart     MultiCurrencyPage（开关 SwitchListTile + 内置币种概览 + 汇率管理列表 + 立即刷新按钮 + 手动覆盖对话框）
 │        ├─ ai_input_settings_providers.dart Step 9.3 AiInputSettings 数据类 + AiInputSettingsNotifier AsyncNotifier + aiInputEnhanceServiceProvider + kDefaultAiInputPromptTemplate
 │        ├─ ai_input_settings_providers.g.dart riverpod_generator 产物
 │        ├─ ai_input_settings_page.dart  Step 9.3 AiInputSettingsPage（开关 + endpoint/key/model/prompt 5 字段表单 + 保存按钮 + API key 显示切换）
+│        ├─ theme_page.dart             Step 15.1 + 15.2 + 15.3 ThemePage（标题"外观"；主题区 4 套预览卡片 + 字号区 SegmentedButton 三档 + 图标包区 2 套 _IconPackCard 含样本 emoji 预览）
 │        └─ attachment_cache_page.dart   Step 11.3 AttachmentCachePage（FutureBuilder 显示当前占用 + 上限 + 刷新按钮 + 红色"清除缓存"二次确认对话框 → pruner.clear()）
 ├─ android/app/build.gradle.kts Android 构建脚本（core library desugaring + minSdk 23）
 ├─ test/
@@ -165,6 +168,7 @@ bianbianbianbian/
 │  │  ├─ crypto/
 │  │  │  └─ bianbian_crypto_test.dart     PBKDF2 + AES-GCM KAT + 往返 + 篡改检测（11 用例，Step 1.6）
 │  │  └─ util/
+│  │     ├─ category_icon_packs_test.dart  BianBianIconPack 枚举 + packDefaultIcon + resolveCategoryIcon + samplePackIcons（20 用例，Step 15.3）
 │  │     └─ quick_text_parser_test.dart   QuickTextParser 解析器（34 用例，Step 9.1）
 │  ├─ data/
 │  │  └─ local/
@@ -211,6 +215,8 @@ bianbianbianbian/
 │  │  └─ fx_rate_refresh_service_test.dart   FxRateRefreshService 节流 / 失败静默 / 手动覆盖（15 用例，Step 8.3）
 │  │  └─ ai_input_settings_providers_test.dart Step 9.3 AiInputSettings 数据类 + DB 集成 roundtrip（10 用例）
 │  │  └─ ai_input_settings_page_test.dart    Step 9.3 AiInputSettingsPage widget 测试（3 用例：预填 / 保存 / API key 显示切换）
+│  │  └─ theme_test.dart                    Step 15.1 + 15.2 BianBianTheme 枚举 + buildAppTheme 四套 + BianBianSemanticColors lerp/copyWith + currentThemeProvider 四 key + BianBianFontSize 枚举 + fontSizeScaleFactorProvider 四 key（27 用例）
+│  │  └─ theme_page_test.dart               Step 15.1 + 15.2 ThemePage widget 测试（7 用例：4 卡片渲染 / 点击切换 / 描述文案 / 标题"外观" / 字号 SegmentedButton / 点击"大" / 字号描述文案）
 │  ├─ features/sync/
 │  │  ├─ sync_trigger_test.dart              Step 10.7 SyncTrigger 单元测试（8 用例：notConfigured / 成功 / SocketException / TimeoutException / failure / skipped / 防抖语义 / cancelTimers）
 │  │  ├─ attachment_uploader_test.dart       Step 11.2 AttachmentUploader（6 用例：透传已 remoteKey、sha256 去重、单条失败隔离、null path 跳过、远端路径模式断言）
@@ -247,22 +253,25 @@ bianbianbianbian/
   1. `WidgetsFlutterBinding.ensureInitialized()`——因 `AppDatabase()` / `flutter_secure_storage` 都依赖 platform channel，必须先初始化 binding；
   2. `final container = ProviderContainer()`——独立于 Widget 树创建的 Riverpod 容器；
   3. `await container.read(defaultSeedProvider.future)`——一次性触发连锁：`defaultSeedProvider` → `deviceIdProvider` → `appDatabaseProvider` → `AppDatabase()` 构造 → `LazyDatabase` 打开 `bbb.db` → `PRAGMA key` 注入 → `PRAGMA cipher_version` 断言 → `LocalDeviceIdStore.loadOrCreate()` → `DefaultSeeder.seedIfEmpty()`。任何一环抛错都冒泡到 catch，兜底页显示 stack trace；
+  3.5. Step 15.1：`await container.read(currentThemeKeyProvider.future)`——预热主题 key，让 `BianBianApp` 第一帧就能拿到正确的 `ThemeData`（否则 `currentThemeProvider` 的 `valueOrNull` 回退 cream_bunny）；
   4. 成功 → `runApp(UncontrolledProviderScope(container: container, child: BianBianApp()))`——把 main 里已预热的 container 原样交给 Widget 树，避免 runApp 后 ProviderScope 又开一次 DB。失败 → `container.dispose()` 释放资源、`runApp(ProviderScope(_BootstrapErrorApp(...)))` 渲染红字错误页。
 - Step 1.4 之前的 `import 'data/local/app_database.dart'` 已被移除，现在只 import `data/local/providers.dart`——意味着 main.dart **不再直接 new AppDatabase()**，一切走 provider。
 
 ### `lib/app/`
 应用装配层。Step 0.4 已填充四个文件：
 
-- **`app.dart`**：`BianBianApp`（StatelessWidget）。返回 `MaterialApp.router`，注入 `theme: appTheme`、`routerConfig: goRouter`、`title: '边边记账'`、`debugShowCheckedModeBanner: false`。未来 Step 15.1 主题切换时，此处改为 `ConsumerWidget` 并从 provider 读 theme。
+- **`app.dart`**：`BianBianApp`（ConsumerStatefulWidget，Step 10.7 升级 + Step 15.1 主题动态化）。返回 `MaterialApp.router`，注入 `theme: ref.watch(currentThemeProvider)`（Step 15.1：由 provider 驱动，切换后即时变色）、`routerConfig: goRouter`、`title: '边边记账'`、`debugShowCheckedModeBanner: false`。Step 10.7 `enableSyncLifecycle` WidgetsBindingObserver 联动 syncTrigger；Step 14.3 `enableAppLockGuard` + builder 套 `_AppLockGate` Stack 在 router child 之上挂 `AppLockOverlay`。
 - **`app_router.dart`**：顶层 `final GoRouter goRouter`。当前只有一条 `GoRoute('/')` → `HomeShell`；后续各 Phase 在此数组追加路由（`/record/new`、`/ledger`、`/settings/sync` …）。若 Phase 10 同步启动后需要监听登录态重定向，应改为 `@riverpod GoRouter goRouter(Ref ref)`。
-- **`app_theme.dart`**：
-  - 顶层 `final ThemeData appTheme`：Material 3 light 主题，基于 design-document §10.2 奶油兔色板构造**显式** `ColorScheme`（不使用 `fromSeed`，以确保奶油黄 `#FFE9B0` 保真）。`cardTheme`（圆角 16 / 阴影 `Color(0x148A5A3B)`）与 `bottomNavigationBarTheme`（背景奶油黄 / 选中可可棕）按 §10.5 落地。
-  - `BianBianSemanticColors`：`ThemeExtension`，承载抹茶绿 / 蜜橘 / 苹果红三色（对应成功/警告/错误语义）。故意不塞进 `ColorScheme`，避免 Material 组件错把这些当作 `colorScheme.error` 使用。读取方式：`Theme.of(context).extension<BianBianSemanticColors>()!`。
+- **`app_theme.dart`**（Step 15.1 重构）：
+  - `BianBianTheme` 枚举：`creamBunny` / `thickBrownBear` / `moonlightDark` / `mintGreen`，与 `user_pref.theme` 列值一一对应。`fromKey(key)` 解析 + 回退默认；`isDark` / `label` 属性。
+  - `buildAppTheme(BianBianTheme)`：统一构建入口——按枚举选出 `ColorScheme` + `BianBianSemanticColors` + 阴影色 + scaffold 背景，产出完整 `ThemeData`。四套色板：奶油兔（design-document §10.2 奶油黄/樱花粉/可可棕）、厚棕熊（暖棕/米）、月见黑（深色模式）、薄荷绿（清新）。
+  - `BianBianSemanticColors`：`ThemeExtension`（不变），承载 success / warning / danger 三语义色，每套主题各自配色。
+  - `final ThemeData appTheme = buildAppTheme(BianBianTheme.creamBunny)`：向后兼容，供 widget_test 等不依赖 provider 的场景。
 - **`home_shell.dart`**：`HomeShell`（StatefulWidget）。`BottomNavigationBar` 4 Tab：记账 / 统计 / 账本 / 我的。使用**本地 index**（`setState`）管理当前 Tab。各 Tab body：
   - 记账（index=0）：`RecordHomePage`（Step 3.1 接入，ConsumerWidget，独立 Scaffold + FAB）。
   - 统计（index=1）：`StatsPage`（Step 5.1 接入，时间区间选择器 + 区间展示）。
   - 账本（index=2）：`LedgerListPage`（Step 4.1 接入，ConsumerWidget，正式卡片列表 + 点击切换）。
-  - 我的（index=3）：`_MeTab`（Step 6.1 接入，文件内私有 StatelessWidget）。当前仅承载"预算"入口（`Icons.savings_outlined` → `context.push('/budget')`）；Phase 17 会扩展为完整设置页（同步 / 主题 / 导入导出 / 应用锁等）。
+  - 我的（index=3）：`_MeTab`（Step 6.1 接入，文件内私有 StatelessWidget）。当前承载"主题 / 预算 / 资产 / 多币种 / 快速输入 · AI 增强 / 云服务 / 附件缓存 / 导入 / 导出 / 应用锁 / 垃圾桶"等入口；Phase 17 会扩展为完整设置页。
   - 若未来某 Tab 要求"深链 + 各自独立历史栈"，迁移到 `StatefulShellRoute.indexedStack`。
 
 ### `lib/core/`
@@ -271,8 +280,9 @@ bianbianbianbian/
   - **`bianbian_crypto.dart`**：`BianbianCrypto` 工具类（私有构造，只暴露 static 方法）+ `DecryptionFailure` 异常。三个公开 API：`deriveKey(password, salt, {iterations=100000})` 走 PBKDF2-HMAC-SHA256；`encrypt(plaintext, key)` 走 AES-256-GCM 并返回 `nonce(12) ‖ ciphertext(N) ‖ tag(16)` 连续打包的 `Uint8List`；`decrypt(packed, key)` 反向解包，任何失败（长度不足 / tag 校验失败 / 错误 key）统一抛 `DecryptionFailure`。nonce 由 `AesGcm.newNonce()` 生成（`Random.secure()` 内核）每次都独立，避免同一 key 下重用导致 GCM 泄密。`@visibleForTesting` 的 `encryptWithFixedNonce` 让 KAT 能对照固定 `(K, N, P) → (C, T)` 向量。key 长度严格校验 32 字节，nonce 严格 12 字节，非法输入抛 `ArgumentError`。
   - 消费者：当前实际消费方仅 `user_pref.ai_api_key_encrypted` 存取（Step 9.3 起，落 UTF-8 raw bytes，DB 由 SQLCipher 加密保护）。**Phase 11（附件云同步）不再消费**——附件直接明文上传到用户自有云，无字段级加密；原计划的「note 加密 / 附件密文 / 同步码对称外壳」整段废弃。`bianbian_crypto.dart` 留作未来可选加密层（如 Phase 13 `.bbbak` 备份包密码加密）的工具备件。**与 SQLCipher/`DbCipherKeyStore` 走两条独立路径**——本工具加密的是"出站字段"，SQLCipher 加密的是"本机 DB 文件"。
 - **`network/`**：`SupabaseClient` 工厂，支持用户自建 Supabase（BYO 单模——Phase 10 已废弃"官方托管 + 自建双模"，所有用户都填自己的 URL + anon key）。Step 10.2 填充。
-- **`util/`**：无分类的纯函数工具；目前承载两个文件——
+- **`util/`**：无分类的纯函数工具；目前承载三个文件——
   - `currencies.dart`（Step 8.1）：`Currency` 数据类 + `kBuiltInCurrencies` (11 种) + `kFxRateSnapshot` 初始汇率快照。
+  - `category_icon_packs.dart`（Step 15.3）：`BianBianIconPack` 枚举（sticker/flat）+ 两套静态 emoji 映射 + `resolveCategoryIcon` 运行时解析函数 + `samplePackIcons` 预览辅助。解析策略：若 `category.icon` 匹配任一 pack 默认值 → 返回当前 pack 的默认值（切换即时生效）；否则 → 用户自定义，原样返回。不批量写 DB、不产生 sync_op。
   - `quick_text_parser.dart`（Step 9.1）：`QuickTextParser` + `QuickParseResult`。中文快速记账文本本地解析器。**纯 Dart**——不依赖 Flutter / Riverpod / drift。解析 5 步串行（**时间在金额之前**——避免 `3天前 烧烤 88` 中的 `3` 被金额正则先吃掉）：① 时间（内置相对天数 `大前天/前天/昨天/今天/明天/后天/大后天` + `上周X/这周X/下周X` + `N天前`）；② 金额（阿拉伯数字正则 `[¥￥]?(\d+(?:\.\d+)?)\s*(?:元|块|RMB|CNY|￥|¥)?` 优先，未命中则中文数字回退 `[零一二两三四五六七八九十百千万]+` + 可选尾缀；单字中文数字若无尾缀视为非金额，避免 `买了一些菜` 中 `一` 误判）；③ 分类（53 词词典，长词优先扫描，覆盖餐饮/交通/购物/娱乐/收入等 11 个一级分类 key，与 `seeder.dart::categoriesByParent.keys` 同集）；④ 置信度（阿拉伯金额 +0.5 / 中文金额 +0.4 / 分类 +0.4 / 时间 +0.1，上限 1.0；Step 9.2 阈值 0.6 决定"AI 增强"按钮是否出现）；⑤ 备注（剥离已识别片段后的残余文本）。`clock` 钩子让测试锁定参考时间。Step 9.2 会在 `features/record` 起 `quickTextParserProvider`，但本文件保持纯函数式无副作用。
 
 ### `lib/data/`
@@ -2217,6 +2227,51 @@ Android 多任务预览（运行期）：
 
 合计：14.1（40）+ 14.2（28）+ 14.3（27）+ 14.4（17）= **128 lock 单元测试**（实际跑出来 111，差 17 是因为部分 14.4 测试合并了原有 group）。全量回归：645 + 17 = **662 用例全绿**。
 
+---
+
+## Phase 15.1 · 四套主题实现（2026-05-10）
+
+### 架构决策
+
+1. **主题标识用枚举 + 字符串 key 双层映射**。`BianBianTheme` 枚举提供 Dart 类型安全和 switch 完备性；`user_pref.theme` 列存字符串 key（`cream_bunny` / `thick_brown_bear` / `moonlight_dark` / `mint_green`）以保持 DB 层可读性和未来跨平台兼容。`BianBianTheme.fromKey()` 做解析 + 未知值回退默认。
+
+2. **`currentThemeKeyProvider` 是 AsyncNotifier，`currentThemeProvider` 是同步 Provider**。前者读 `user_pref.theme` 列（async IO），后者做 `fromKey → buildAppTheme` 的同步转换。这样 `BianBianApp.build` 用 `ref.watch(currentThemeProvider)` 即时拿 `ThemeData`，不需要 await。
+
+3. **`buildAppTheme(BianBianTheme)` 统一构建入口**。4 套色板各自产 `ColorScheme` + `BianBianSemanticColors` + 阴影色 + scaffold 背景，统一 merge 进 `ThemeData`。所有 component theme（card / bottomNav / appBar / button / input）逻辑一份代码，不按主题重复。好处：新增第 5 套主题只需加 2 个 switch 分支（`_colorSchemeFor` / `_semanticColorsFor`）。
+
+4. **月见黑的 scaffold 用 `ColorScheme.surface` 而非硬编码米白**。light 主题 scaffold 是 `_rice`（米白），dark 主题需从 `cs.surface` 取——`buildAppTheme` 通过 `_scaffoldBgFor(theme, cs)` 分支处理。
+
+5. **`appTheme` 保留为向后兼容**。`final ThemeData appTheme = buildAppTheme(BianBianTheme.creamBunny)` 供 widget_test 等不依赖 provider 的场景使用。生产路径全部走 `currentThemeProvider`。
+
+6. **`BianBianApp` 已是 ConsumerStatefulWidget**（Step 10.7 升级），所以 `ref.watch(currentThemeProvider)` 自然可用，无需再改基类。
+
+7. **bootstrap 预热 `currentThemeKeyProvider.future`**。`BianBianApp` 第一帧需要 `currentThemeProvider` 已是 `AsyncData`——否则 `valueOrNull` 为 null → 回退 cream_bunny → 首帧闪一下再变正确主题。在 `defaultSeedProvider` 之后 await 一次即可。
+
+8. **主题页用 `_ThemeCard` 展示色板预览**。每张卡片渲染 6 个色板圆点（主色/容器/辅助/成功/警告/错误）+ 背景色块内嵌 Aa 字样 + 编辑图标。点击整张卡片调 `ref.read(currentThemeKeyProvider.notifier).set(theme.key)` 即时切换。
+
+9. **"我的"Tab "主题"入口排在最前面**（`Icons.palette_outlined`）。主题是高频设置项，放顶部方便发现。
+
+10. **深色模式对比度暂不自动校验**。implementation-plan §15.1 要求"深色模式下对比度符合 WCAG AA（手工抽查首页与新建页）"，本步色板设计时已选择高对比度文字色（`_moonOnSurface = #E0E0E8` 在 `#1E1E2E` 背景上对比度 > 7:1），手工验证留给用户。
+
+11. **未实现"跟随系统深浅色"**。design-document §5.11 提到"跟随系统深浅色自动切换"，但月见黑只是固定深色主题，不读 `MediaQuery.platformBrightness`。若将来要实现，需新增 `BianBianTheme.systemDark` 虚拟选项 + `didChangePlatformBrightness` 监听。当前四套都是手动选择。
+
+12. **iOS overlay 颜色仍硬编码奶黄**（Step 14.4 备忘提到）。15.1 落地后 native 层获取 Flutter Theme 较复杂，仍用设计稿主色调硬编码；未来可改为"读当前主题 primaryContainer 色"。
+
+### 单元测试策略（20 新增）
+
+- **theme_test.dart 新建（17 用例）**：
+  - `BianBianTheme` 枚举（5）：fromKey 4 个已知 / fromKey 未知+null 回退 / key roundtrip / isDark 只有 moonlightDark / label 非空。
+  - `buildAppTheme`（4）：每个主题产合法 ThemeData / moonlightDark dark brightness / creamBunny scaffold rice / 每个主题有 BianBianSemanticColors extension / 不同主题 primary 不全相同。
+  - `BianBianSemanticColors`（3）：lerp 插值 / lerp null 返回 self / copyWith 保留未指定字段。
+  - `currentThemeProvider`（4）：cream_bunny key → light + cocoaBrown primary / moonlight_dark → dark / mint_green → green primary / thick_brown_bear → brown primary。各测试 await keyProvider.future 后再读同步 provider。
+
+- **theme_page_test.dart 新建（3 用例）**：
+  - 4 张主题卡片渲染 + 奶油兔 check_circle 选中态。
+  - 点击月见黑 → `_FakeCurrentThemeKey.lastSetKey == 'moonlight_dark'`。
+  - 底部描述文案可见（需 scrollUntilVisible）。
+
+全量回归：662 + 20 = **682 用例全绿**。
+
 ### 故意不做的事
 
 - **截屏检测告警**：决策 15 已论证扰民。
@@ -2232,3 +2287,40 @@ Android 多任务预览（运行期）：
 
 - 15.1 主题：与隐私模式独立——主题是 Material colorScheme 切换，不碰 native；隐私模式 overlay 用的颜色（iOS 端 UIColor 硬编码）需要在 15.1 主题落地后改成读 `appTheme.colorScheme.primaryContainer` 之类的同步值，否则深色主题下 overlay 还是奶黄色显得突兀。本步先用奶兔默认色，15.1 阶段统一处理。
 - secure storage 字段：当前 7 条 secure_storage 条目（salt/hash/iter/enabled/biometric/timeout/privacy_mode）已经定型，15.1 没有新增 PIN 锁相关 secure storage，与本模块无依赖。
+
+## Phase 15.2 · 字号调节（2026-05-10）
+
+### 架构决策
+
+1. **`BianBianFontSize` 枚举放在 `app_theme.dart`**——与 `BianBianTheme` 同文件，所有外观相关枚举集中一处。`scaleFactor` 是枚举字段而非 switch 函数，因为三档值固定不变。
+
+2. **字号乘以系统 TextScaler 而非覆盖**——`BianBianApp.builder` 里 `systemScaler.scale(1.0) * scaleFactor`。尊重系统无障碍字号放大设置，"大"档在系统 130% 下实际 1.495。纯覆盖会破坏可访问性。
+
+3. **`fontSizeScaleFactorProvider` 返回 `double` 而非 `TextScaler`**——Provider 无 BuildContext，无法读系统 TextScaler；返回纯乘数让 widget 层自行组合。避免 provider 层耦合 MediaQuery。
+
+4. **字号覆盖在 `MaterialApp.router.builder` 里做**——包在 router child 之上，全 app 所有 widget（包括对话框、底部表等）都通过 `MediaQuery.textScalerOf` 读到缩放值。builder 统一处理字号覆盖 + 条件 AppLockGate，`enableAppLockGuard=false` 时字号仍生效。
+
+5. **`user_pref.font_size` 列 schema v10 新增**——`addColumn` 迁移，默认 `'standard'`，老用户无感升级。与 theme 列（Step 0.3 即存在）不同，font_size 是全新列，需 schema 版本 +1。
+
+6. **`CurrentFontSizeKey` 与 `CurrentThemeKey` 同模式**——`@Riverpod(keepAlive: true) class CurrentFontSizeKey extends _$CurrentFontSizeKey`，`build()` 读 `user_pref.font_size`，`set()` 写 + `invalidateSelf()`。样板代码重复是有意的——未来可抽象 `UserPrefField<T>` 泛型 Notifier（progress.md Step 8.1 备忘提到），但当前仅 2 个字段不值得提前抽象。
+
+7. **SegmentedButton 而非 ListTile**——三档互斥选择用 Material 3 的 SegmentedButton 更紧凑；ListTile 配 Radio 占空间过大且视觉上不像"档位选择"。
+
+8. **主题页改标题"外观"**——字号不属于"主题"范畴，"外观"涵盖两者更准确。路由 `/settings/theme` 保持不变——路由名改动收益低，且不影响用户可见 UI。
+
+9. **bootstrap 预热 `currentFontSizeKeyProvider.future`**——与主题预热同理：`fontSizeScaleFactorProvider` 的 `valueOrNull` 默认 null → 回退 `'standard'`(1.0)，恰好等于系统默认。理论上不预热也行，但为一致性仍预热，且未来如改默认值可避免首帧跳变。
+
+10. **测试：`_FakeCurrentFontSizeKey` 与 `_FakeCurrentThemeKey` 同结构**——记录 `lastSetKey` + `ref.invalidateSelf()`，widget 测试点击字号按钮后断言 set 被调用。所有 ThemePage 测试均需 override 两个 provider，否则 `currentFontSizeKeyProvider` 链触达真实 DB 崩溃。
+
+### 测试策略
+
+- 枚举单元测试（6）：fromKey 3 个已知 / 未知+null 回退 / roundtrip / scaleFactor 值 / label 非空 / label 中文。
+- provider 单元测试（4）：standard→1.0 / small→0.85 / large→1.15 / AsyncLoading 态回退 1.0。
+- widget 测试（4）：标题"外观" / SegmentedButton 3 选项 + 选中态 / 点击"大"→set 调用 / 描述文案可见。
+
+### 故意不做的事
+
+- **字号预览**：SegmentedButton 自身文字已受 textScaler 影响，额外在按钮旁放"Aa"预览文字是多余。
+- **更多档位（特大 / 超大）**：implementation-plan §15.2 明确"小三档"，设计文档 §5.11 也只写"字体大小"。
+- **跟随系统字号但不额外缩放的选项**：standard 档 `scaleFactor=1.0` 已等效——`system * 1.0 = system`。
+- **自定义字号滑块**：三档互斥足够；滑块增加精确度但用户认知成本高，且 0.85/1.0/1.15 已覆盖设计文档 §10 可访问性"支持系统字号放大"的需求。

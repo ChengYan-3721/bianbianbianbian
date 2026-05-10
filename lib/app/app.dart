@@ -8,9 +8,7 @@ import '../features/lock/app_lock_overlay.dart';
 import '../features/lock/app_lock_providers.dart';
 import '../features/sync/sync_trigger.dart';
 import 'app_router.dart';
-import 'app_theme.dart';
-
-/// 应用根组件。
+import '../features/settings/settings_providers.dart';/// 应用根组件。
 ///
 /// Step 10.7：升级为 [ConsumerStatefulWidget] + [WidgetsBindingObserver]，
 /// 在 App 启动 / 前台恢复 / 后台 三个生命周期点上调度同步任务：
@@ -126,9 +124,11 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
 
   @override
   Widget build(BuildContext context) {
+    // Step 15.1：主题由 provider 驱动，切换后即时变色。
+    final theme = ref.watch(currentThemeProvider);
     return MaterialApp.router(
       title: '边边记账',
-      theme: appTheme,
+      theme: theme,
       routerConfig: goRouter,
       debugShowCheckedModeBanner: false,
       locale: const Locale('zh', 'CN'),
@@ -141,11 +141,28 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      builder: widget.enableAppLockGuard
-          ? (context, child) {
-              return _AppLockGate(child: child ?? const SizedBox.shrink());
-            }
-          : null,
+      // Step 15.2：字号调节 + 应用锁 overlay。
+      // 字号覆盖需包在 router child 之上，这样全 app 所有 widget 都能
+      // 通过 MediaQuery.textScalerOf 读到缩放后的值。应用锁 overlay 叠
+      // 在最外层，锁屏时遮挡一切内容。
+      builder: (context, child) {
+        child = child ?? const SizedBox.shrink();
+        // 字号缩放：app 因子 × 系统 TextScaler。
+        final scaleFactor = ref.watch(fontSizeScaleFactorProvider);
+        final systemScaler = MediaQuery.textScalerOf(context);
+        child = MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(
+              systemScaler.scale(1.0) * scaleFactor,
+            ),
+          ),
+          child: child,
+        );
+        if (widget.enableAppLockGuard) {
+          child = _AppLockGate(child: child);
+        }
+        return child;
+      },
     );
   }
 }

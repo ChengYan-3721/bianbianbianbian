@@ -130,9 +130,26 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
       final repo = await ref.read(categoryRepositoryProvider.future);
       final iconText = _iconController.text.trim();
       final newName = _nameController.text.trim();
+      final parentKey =
+          _isEditing ? widget.initialCategory!.parentKey : widget.parentKey!;
+
+      // 同级重名检查
+      final siblings = await repo.listActiveByParentKey(parentKey);
+      final duplicate = siblings.any(
+        (c) =>
+            c.name == newName &&
+            (_isEditing ? c.id != widget.initialCategory!.id : true),
+      );
+      if (duplicate) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('该一级分类下已存在同名分类')),
+        );
+        setState(() => _saving = false);
+        return;
+      }
 
       if (_isEditing) {
-        // 编辑模式：保留原有 id、parentKey、sortOrder、isFavorite
         final updated = widget.initialCategory!.copyWith(
           name: newName,
           icon: iconText.isEmpty ? null : iconText,
@@ -140,9 +157,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
         );
         await repo.save(updated);
       } else {
-        // 新建模式
-        final existing = await repo.listActiveByParentKey(widget.parentKey!);
-        final maxSort = existing.fold<int>(
+        final maxSort = siblings.fold<int>(
           0,
           (acc, c) => c.sortOrder > acc ? c.sortOrder : acc,
         );
@@ -150,11 +165,11 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
           id: const Uuid().v4(),
           name: newName,
           icon: iconText.isEmpty ? null : iconText,
-          parentKey: widget.parentKey!,
+          parentKey: parentKey,
           sortOrder: maxSort + 1,
           isFavorite: false,
           updatedAt: DateTime.now(),
-          deviceId: '', // repo 会覆写
+          deviceId: '',
         );
         await repo.save(entity);
       }

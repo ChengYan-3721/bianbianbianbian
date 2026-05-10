@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../app/app_theme.dart';
+import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/budget.dart';
 import '../../domain/entity/category.dart';
+import '../settings/settings_providers.dart';
 import 'budget_progress.dart';
 import 'budget_providers.dart';
 
@@ -174,7 +176,13 @@ class _BudgetCard extends ConsumerWidget {
               Row(
                 children: [
                   Text(
-                    category?.icon ?? '💰',
+                    resolveCategoryIcon(
+                      category?.icon,
+                      category?.parentKey ?? 'other',
+                      category?.name ?? '',
+                      ref.watch(currentIconPackProvider),
+                      '💰',
+                    ),
                     style: const TextStyle(fontSize: 28),
                   ),
                   const SizedBox(width: 12),

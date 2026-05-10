@@ -6,7 +6,7 @@ part of 'record_new_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$recordFormHash() => r'ee899e78ea9263a0523be8d0226889ce6c550de7';
+String _$recordFormHash() => r'a2447cea22fff7c40a9f082457b2abfa386e60e8';
 
 /// See also [RecordForm].
 @ProviderFor(RecordForm)

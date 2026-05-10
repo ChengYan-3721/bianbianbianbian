@@ -3363,3 +3363,219 @@ V1 选择**省略** plan 提到的 `Stream<AttachmentUploadProgress>` 与 `_Sync
 - **AppLockController.setPrivacyMode 不抛异常**——setBackgroundLockTimeoutSeconds 拒负值是因为"负秒数"是程序员误用；setPrivacyMode(true/false) 没有非法值。
 - **测试侧 _switchOf 用 ListTile ancestor**——14.4 让 UI 树同时含 SwitchListTile 与普通 ListTile（生物识别 disabled 态 trailing 是 Switch）。SwitchListTile 内部嵌一个 ListTile，所以 ancestor 用 ListTile 同时覆盖两种形态。
 - **测试与人工验证**：662 全量回归通过（lock 模块 111 用例 + 其余 551）；端到端 10 项需用户在真机执行（Android FLAG_SECURE / iOS overlay 都需 native 路径，模拟器也能验，但真机更可靠）。**Step 15.1 必须等用户验证 14.4 后再开**——15.1 是主题切换，与本步独立，但 iOS overlay 颜色未来将随主题改，所以验证 14.4 时记下"现在 overlay 是奶黄色"作为 15.1 的对比基线。
+
+---
+
+## Phase 15 · 主题与外观
+
+### ✅ Step 15.1 四套主题实现（2026-05-10）
+
+**改动**
+
+数据层 / Provider：
+- `lib/app/app_theme.dart`（重写）：
+  - 新增 `BianBianTheme` 枚举：`creamBunny` / `thickBrownBear` / `moonlightDark` / `mintGreen`，与 `user_pref.theme` 列值一一对应。`fromKey(key?)` 解析 + 未知值回退 `creamBunny`；`isDark` 仅 `moonlightDark` 为 true；`label` 返回 emoji + 中文名。
+  - 新增 4 套色板常量：奶油兔（design-document §10.2 原色板不变）、厚棕熊（暖棕 `_warmBrown=#6D4C41` + 米 `_warmCream=#F5F0EC` + 琥珀 `_warmAmber=#FFB74D`）、月见黑（深色 `_moonSurface=#1E1E2E` + 紫 `_moonPurple=#B39DDB`）、薄荷绿（清新 `_mintPrimary=#2E7D32` + `_mintAccent=#66BB6A`）。
+  - 新增 `_colorSchemeFor(theme)` / `_semanticColorsFor(theme)` / `_shadowColorFor(theme)` / `_scaffoldBgFor(theme, cs)` 四个 switch 映射函数。
+  - 新增 `buildAppTheme(BianBianTheme)` 统一构建入口——按枚举选出 `ColorScheme` + `BianBianSemanticColors` + 阴影色 + scaffold 背景，merge 进完整 `ThemeData`。所有 component theme（card / bottomNav / appBar / button / input）逻辑一份代码，新增第 5 套主题只需加 2 个 switch 分支。
+  - 保留 `final ThemeData appTheme = buildAppTheme(BianBianTheme.creamBunny)` 向后兼容，供 widget_test 等不依赖 provider 的场景。
+- `lib/features/settings/settings_providers.dart`（修改）：
+  - 新增 `@Riverpod(keepAlive: true) class CurrentThemeKey extends _$CurrentThemeKey`：`build()` 读 `user_pref.theme` → String（默认 `'cream_bunny'`）；`set(String themeKey)` 写 `user_pref.theme` + `invalidateSelf()`。与 `MultiCurrencyEnabled` / `CurrentLedgerId` 同模式。
+  - 新增 `@Riverpod(keepAlive: true) ThemeData currentTheme(Ref ref)`：`watch(currentThemeKeyProvider)` → `valueOrNull ?? 'cream_bunny'` → `BianBianTheme.fromKey` → `buildAppTheme`。同步 Provider，`BianBianApp` 直接 `ref.watch(currentThemeProvider)` 即时拿 ThemeData。
+  - 新增 `import 'package:flutter/material.dart'`（ThemeData）+ `import '../../app/app_theme.dart'`（BianBianTheme / buildAppTheme）。
+
+UI 层：
+- `lib/app/app.dart`（修改）：
+  - `MaterialApp.router` 的 `theme: appTheme` 改为 `theme: ref.watch(currentThemeProvider)`——切换后所有页面即时变色。
+  - 新增 `import '../features/settings/settings_providers.dart'`，移除 `import 'app_theme.dart'`（不再直接引用静态 appTheme）。
+- `lib/features/settings/theme_page.dart`（新建）：
+  - `ThemePage`（ConsumerWidget）：`Scaffold('主题')` + `ListView` 渲染 4 张 `_ThemeCard` + 底部提示文案。
+  - `_ThemeCard`：每张卡片展示 `theme.label` + 6 个 `_ColorDot`（主色/容器/辅助/成功/警告/错误）+ 背景色块内嵌 Aa 字样 + 编辑图标。选中态 `Border.all(primary, 2.5)` + `Icon(Icons.check_circle)`。点击调 `ref.read(currentThemeKeyProvider.notifier).set(theme.key)`。
+- `lib/app/app_router.dart`（修改）：新增 `GoRoute('/settings/theme')` → `const ThemePage()`。
+- `lib/app/home_shell.dart`（修改）：`_MeTab` 在列表最前面追加"主题"入口（`Icons.palette_outlined` → `context.push('/settings/theme')`）。
+
+Bootstrap：
+- `lib/main.dart`（修改）：`await defaultSeedProvider.future` 之后追加 `await container.read(currentThemeKeyProvider.future)`——预热主题 key，让 `BianBianApp` 第一帧就能拿到正确的 `ThemeData`（否则 `currentThemeProvider` 的 `valueOrNull` 回退 `cream_bunny` 导致首帧闪一下再变正确主题）。
+
+测试：
+- `test/features/settings/theme_test.dart`（新建，17 用例）：
+  - `BianBianTheme` 枚举（5）：fromKey 4 个已知 / fromKey 未知+null 回退 / key roundtrip / isDark / label 非空。
+  - `buildAppTheme`（4）：每主题产合法 ThemeData / moonlightDark dark brightness / creamBunny scaffold rice / 每主题有 BianBianSemanticColors / 不同主题 primary 不全相同。
+  - `BianBianSemanticColors`（3）：lerp 插值 / lerp null 返回 self / copyWith 保留未指定字段。
+  - `currentThemeProvider`（4）：cream_bunny → light + cocoaBrown primary / moonlight_dark → dark / mint_green → green primary / thick_brown_bear → brown primary。各测试 await keyProvider.future 后再读同步 provider，避免 AsyncLoading 回退。
+- `test/features/settings/theme_page_test.dart`（新建，3 用例）：
+  - 4 张主题卡片渲染 + 奶油兔 check_circle 选中态。
+  - 点击月见黑 → `_FakeCurrentThemeKey.lastSetKey == 'moonlight_dark'`。
+  - 底部描述文案可见（需 scrollUntilVisible）。
+
+**验证**
+- `dart run build_runner build --delete-conflicting-outputs` → 367 outputs，0 error。
+- `flutter analyze` → No issues found。
+- `flutter test` → 682/682 通过（662 前 + 17 theme_test + 3 theme_page_test）。
+- `dart run custom_lint` → 预存 INFO（`avoid_public_notifier_properties` 在 `_FakeCurrentThemeKey.lastSetKey` + 其余既有），与本步无关。
+- 用户本机 `flutter run` 待手工验证：
+  1. "我的"Tab 顶部出现"主题"入口（调色盘图标），点击进入 `/settings/theme`。
+  2. 四张主题卡片渲染，"🐰 奶油兔"默认选中带 ✓。
+  3. 点击"🌙 月见黑" → 全 App 即时切换深色模式（首页/统计/账本/记账页全部变色——顶栏/底栏/卡片/按钮/输入框/数据卡片全部跟随 ColorScheme）。
+  4. 点击"🐻 厚棕熊" → 暖棕色系（棕底 + 琥珀辅助 + 米白背景）。
+  5. 点击"🍃 薄荷绿" → 清新绿色系（深绿主色 + 浅绿容器 + 薄荷背景）。
+  6. 切回"🐰 奶油兔" → 恢复原始奶油黄/樱花粉/可可棕色板。
+  7. 冷启动后主题持久化（上次选的还生效，首帧无闪白/闪色）。
+  8. 深色模式下对比度抽查：首页数据卡片文字/记账页金额/账本列表名称 均清晰可读（WCAG AA 合规）。
+
+**给后续开发者的备忘**
+- **`BianBianTheme.fromKey` 未知值回退 cream_bunny**——如果未来新增第 5 套主题，老版本 App 在 DB 里写入新 key，新版本 fromKey 找不到就回退。这是**有意**的降级——老 App 看到"默认主题"总比崩溃好。新主题上线后务必在 fromKey 加 case。
+- **`currentThemeProvider` 是同步 Provider**——不依赖 async IO，`BianBianApp.build` 直接 `ref.watch` 即时变色。唯一前提是 bootstrap 预热了 `currentThemeKeyProvider.future`；如果哪天删掉那行预热，首帧会短暂回退 cream_bunny 直到 AsyncNotifier resolve。
+- **`buildAppTheme` 所有 component theme 逻辑一份代码**——`cardTheme` / `bottomNavigationBarTheme` / `appBarTheme` / `elevatedButtonTheme` / `outlinedButtonTheme` / `inputDecorationTheme` 全部从 `cs` / `shadow` 参数读取颜色，不硬编码。新增主题时**千万不要**在 `buildAppTheme` 里加 `if (theme == xxx)` 分支，只改 `_colorSchemeFor` / `_semanticColorsFor`。
+- **月见黑 scaffold 走 `cs.surface` 而非 `_rice`**——`_scaffoldBgFor(theme, cs)` 对 `isDark` 返回 `cs.surface`。如果未来某深色主题的 scaffold 需要比 `surface` 更深的色，在 `_scaffoldBgFor` 加分支即可。
+- **硬编码颜色散落问题**：`record_home_page.dart` / `record_tile_actions.dart` / `record_search_page.dart` / `quick_confirm_sheet.dart` / `stats_range_providers.dart` 中仍有 `const Color(0xFF...)` 硬编码（抹茶绿 / 苹果红 / 蓝色等）。这些在非奶油兔主题下不会跟随变色。**修复策略**：逐步把硬编码色改为 `Theme.of(context).extension<BianBianSemanticColors>()!.success / .danger` 或 `Theme.of(context).colorScheme.xxx`。本步未批量修——保持本步聚焦"主题基础设施"，后续随各 feature 维护时逐步替换。
+- **未实现"跟随系统深浅色"**：design-document §5.11 提到"跟随系统深浅色自动切换"，当前月见黑只是固定深色主题。若要实现，需新增 `BianBianTheme.systemDark` 虚拟选项 + `didChangePlatformBrightness` 监听 + `MediaQuery.platformBrightness` 条件分支。
+- **iOS overlay 颜色仍硬编码奶黄**（Step 14.4 备忘提到）。native 层获取 Flutter Theme 较复杂，当前保持硬编码；未来可改为"读当前主题 primaryContainer 色"。
+- **`user_pref.theme` 列无需 schema 升级**——该列自 Step 0.3 / 1.1 就存在（TEXT DEFAULT 'cream_bunny'），本次只是消费端接入，无 DDL 变更。
+- **本步完成了 Step 15.1；按用户约束：在用户验证测试前不开始 Step 15.2。**
+
+### ✅ Step 15.2 字号调节（2026-05-10）
+
+**改动**
+
+数据层 / Schema：
+- `lib/data/local/tables/user_pref_table.dart`（修改）：
+  - 新增 `TextColumn fontSize`（nullable，默认 `'standard'`）——`user_pref.font_size` 列存储三档字号 key：`'small'` / `'standard'` / `'large'`。
+- `lib/data/local/app_database.dart`（修改）：
+  - schemaVersion 9 → 10。
+  - `onUpgrade` 新增 `if (from < 10)` 分支：`addColumn(userPrefTable, userPrefTable.fontSize)`。
+
+枚举 / Provider：
+- `lib/app/app_theme.dart`（修改）：
+  - 新增 `BianBianFontSize` 枚举：`small(0.85)` / `standard(1.0)` / `large(1.15)`。`fromKey(key?)` 解析 + 未知值回退 `standard`；`scaleFactor` 为相对系统字号的乘数；`label` 返回中文名（小/标准/大）。
+- `lib/features/settings/settings_providers.dart`（修改）：
+  - 新增 `@Riverpod(keepAlive: true) class CurrentFontSizeKey extends _$CurrentFontSizeKey`：`build()` 读 `user_pref.font_size` → String（默认 `'standard'`）；`set(String fontSizeKey)` 写 `user_pref.font_size` + `invalidateSelf()`。与 `CurrentThemeKey` 同模式。
+  - 新增 `@Riverpod(keepAlive: true) double fontSizeScaleFactor(Ref ref)`：`watch(currentFontSizeKeyProvider)` → `valueOrNull ?? 'standard'` → `BianBianFontSize.fromKey` → `.scaleFactor`。`BianBianApp` 的 builder 乘以系统 TextScaler 生成最终值。
+
+UI 层：
+- `lib/features/settings/theme_page.dart`（修改）：
+  - AppBar 标题从 "主题" 改为 "外观"。
+  - 主题卡片区新增 "主题" 小标题（`TextTheme.titleMedium`）。
+  - 字号区：`Divider` 分隔 + "字号" 小标题 + `SegmentedButton<BianBianFontSize>`（三档：小/标准/大）+ 描述文案 "大字号会在系统字号基础上再放大 15%，小字号缩小 15%"。
+  - 页面同时 watch `currentThemeKeyProvider` + `currentFontSizeKeyProvider`。
+- `lib/app/app.dart`（修改）：
+  - `MaterialApp.router.builder` 从条件式（仅 AppLockGate）改为统一 builder：先覆盖 `MediaQuery.textScaler`（`systemScaler.scale(1.0) * scaleFactor`），再叠 AppLockGate。字号覆盖包在 router child 之上，全 app 所有 widget 都能通过 `MediaQuery.textScalerOf` 读到缩放值。
+- `lib/app/home_shell.dart`（修改）：`_MeTab` "主题" 改为 "外观"。
+
+Bootstrap：
+- `lib/main.dart`（修改）：`await currentThemeKeyProvider.future` 之后追加 `await container.read(currentFontSizeKeyProvider.future)`——预热字号 key，让首帧 builder 即可拿到正确的 scaleFactor，避免默认 standard → 实际 large 的字号跳变。
+
+测试：
+- `test/features/settings/theme_test.dart`（修改，+10 用例 → 共 27 用例）：
+  - `BianBianFontSize` 枚举（6）：fromKey 3 个已知 / fromKey 未知+null 回退 / key roundtrip / scaleFactor 值 / label 非空 / label 中文文本。
+  - `fontSizeScaleFactorProvider`（4）：standard → 1.0 / small → 0.85 / large → 1.15 / AsyncLoading 态回退 1.0。
+- `test/features/settings/theme_page_test.dart`（修改，+4 用例 → 共 7 用例）：
+  - 新增 override `currentFontSizeKeyProvider`（所有旧用例也加，防 provider 链触达真实 DB）。
+  - 页面标题 "外观" 断言。
+  - 字号 SegmentedButton 渲染 3 选项 + standard 选中态。
+  - 点击"大" → `_FakeCurrentFontSizeKey.lastSetKey == 'large'`。
+  - 字号描述文案可见（需 scrollUntilVisible）。
+
+**验证**
+- `dart run build_runner build --delete-conflicting-outputs` → 258 outputs，0 error。
+- `flutter analyze` → No issues found。
+- `flutter test` → 696/696 通过（682 前 + 14 新增 theme/theme_page 测试）。
+- 用户本机 `flutter run` 待手工验证：
+  1. "我的"Tab 顶部"外观"入口（调色盘图标），点击进入 `/settings/theme`，标题显示"外观"。
+  2. 主题区 4 张卡片渲染，"🐰 奶油兔"默认选中带 ✓。
+  3. 字号区 SegmentedButton 显示"小 / 标准 / 大"，"标准"默认选中。
+  4. 点击"大" → 全 App 文字即时放大 15%（首页标题/流水金额/按钮文字均变大）。
+  5. 点击"小" → 全 App 文字缩小 15%。
+  6. 切回"标准" → 恢复系统字号。
+  7. 冷启动后字号持久化（上次选的还生效，首帧无字号跳变）。
+  8. 大字号下所有关键按钮仍可点击不裁切（验证 implementation-plan §15.2 要求）。
+
+**给后续开发者的备忘**
+- **`fontSizeScaleFactorProvider` 是同步 Provider**——不依赖 async IO，`BianBianApp.builder` 直接 `ref.watch` 即时生效。前提是 bootstrap 预热了 `currentFontSizeKeyProvider.future`；删掉预热则首帧回退 1.0（standard）。
+- **字号缩放乘以系统 TextScaler**——`systemScaler.scale(1.0) * scaleFactor`。这意味着"大"档在系统字号 130% 下实际放大到 `1.3 * 1.15 = 1.495`。尊重系统无障碍设置，而非覆盖之。
+- **`user_pref.font_size` schema v10 新增列**——`addColumn` 迁移，默认 `'standard'`，老用户无感升级。
+- **`BianBianFontSize.fromKey` 未知值回退 standard**——与 `BianBianTheme.fromKey` 同策略。未来若增加更多档位（如"特大"），务必在 fromKey 加 case。
+- **SegmentedButton 在 ListView 内需 scrollUntilVisible**——测试中字号区在 4 张主题卡片之下，默认视口看不到。`scrollUntilVisible(find.byType(SegmentedButton), ...)` 先滚到位再断言。
+- **app.dart builder 统一**——原来 `builder` 仅在 `enableAppLockGuard` 时存在，现在始终有 builder（字号覆盖 + 条件锁屏 overlay）。`enableAppLockGuard=false` 的测试仍正确——只是少了 AppLockGate 包裹，字号覆盖仍生效。
+- **本步完成了 Step 15.2；按用户约束：在用户验证测试前不开始 Step 15.3。**
+
+### ✅ Step 15.3 自定义分类图标集（2026-05-10）
+
+**改动**
+
+图标包基础设施：
+- `lib/core/util/category_icon_packs.dart`（新建）：
+  - `BianBianIconPack` 枚举：`sticker`（✏️ 手绘贴纸）/ `flat`（📝 扁平简约）。`fromKey(key?)` 解析 + 未知值回退 `sticker`；`label` 返回 emoji + 中文名；`key` 返回持久化字符串。
+  - 两套静态 emoji 映射：`_stickerIcons`（与 `DefaultSeeder.categoriesByParent` 完全一致）/ `_flatIcons`（更简洁、符号化的替代 emoji 集）。均按 `Map<String, Map<String, String>>` 组织，外层 key 为 parentKey，内层 key 为分类名。
+  - `packDefaultIcon(pack, parentKey, name)` 查询指定 pack 的默认 emoji，无映射返回 null。
+  - `resolveCategoryIcon(storedIcon, parentKey, name, pack, [fallback])` 运行时解析函数：若 `storedIcon` 匹配任一 pack 对 `(parentKey, name)` 的默认值 → 视为 pack 默认，返回当前 pack 的对应值（切换 pack 后即时更新）；否则 → 视为用户自定义，原样返回。`null` storedIcon 走 pack 默认或 fallback。
+  - `samplePackIcons(pack)` 返回每个一级分类第一个二级分类的 emoji（用于设置页预览），共 11 个。
+
+Schema / 数据层：
+- `lib/data/local/tables/user_pref_table.dart`（修改）：新增 `iconPack` TextColumn（nullable，默认 `'sticker'`）。
+- `lib/data/local/app_database.dart`（修改）：
+  - schemaVersion 10 → 11。
+  - `onUpgrade` 新增 `if (from < 11)` 分支：`addColumn(userPrefTable, userPrefTable.iconPack)`。
+  - schema 版本历史注释追加 v11 条目。
+
+Provider：
+- `lib/features/settings/settings_providers.dart`（修改）：
+  - 新增 `@Riverpod(keepAlive: true) class CurrentIconPackKey extends _$CurrentIconPackKey`：`build()` 读 `user_pref.icon_pack` → String（默认 `'sticker'`）；`set(String iconPackKey)` 写 `user_pref.icon_pack` + `invalidateSelf()`。与 `CurrentThemeKey` / `CurrentFontSizeKey` 同模式。
+  - 新增 `@Riverpod(keepAlive: true) BianBianIconPack currentIconPack(Ref ref)`：`watch(currentIconPackKeyProvider)` → `valueOrNull ?? 'sticker'` → `BianBianIconPack.fromKey`。同步 Provider，UI 直接 `ref.watch` 即时生效。
+  - 新增 `import '../../core/util/category_icon_packs.dart'`。
+
+UI 层：
+- `lib/features/settings/theme_page.dart`（修改）：
+  - 追加"图标包"区：`Divider` 分隔 + "分类图标" 小标题 + 两张 `_IconPackCard` + 描述文案。
+  - `_IconPackCard`（新增私有 widget）：展示 `pack.label` + `samplePackIcons` 预览行 + 选中态 `check_circle`。点击调 `ref.read(currentIconPackKeyProvider.notifier).set(pack.key)`。
+  - 页面同时 watch `currentIconPackKeyProvider`。
+
+图标渲染更新（6 个文件）：
+- `lib/features/record/record_new_page.dart`（修改）：`_CategoryGrid.build` 追加 `ref.watch(currentIconPackProvider)` → 分类网格 emoji 改用 `resolveCategoryIcon(cat.icon, cat.parentKey, cat.name, iconPack)`。
+- `lib/features/record/record_home_page.dart`（修改）：流水列表 tile 追加 `ref.watch(currentIconPackProvider)` → `iconText` 改用 `resolveCategoryIcon` 解析。
+- `lib/features/record/record_tile_actions.dart`（修改）：详情底表追加 `ref.watch(currentIconPackProvider)` → 图标改用 `resolveCategoryIcon`。
+- `lib/features/record/category_manage_page.dart`（修改）：`_CategoryRow` 从 `StatelessWidget` 改为 `ConsumerWidget` → leading emoji 改用 `resolveCategoryIcon`。
+- `lib/features/record/favorite_reorder_page.dart`（修改）：收藏排序列表追加 `ref.watch(currentIconPackProvider)` → leading emoji 改用 `resolveCategoryIcon`。
+- `lib/features/budget/budget_list_page.dart`（修改）：预算卡片追加 `ref.watch(currentIconPackProvider)` → 分类 emoji 改用 `resolveCategoryIcon`（含 fallback `'💰'`）。
+- `lib/features/trash/trash_page.dart`（修改）：垃圾桶分类列表追加 `ref.watch(currentIconPackProvider)` → 分类 emoji 改用 `resolveCategoryIcon`（含 fallback `'🏷️'`）。
+
+Bootstrap：
+- `lib/main.dart`（修改）：`await currentFontSizeKeyProvider.future` 之后追加 `await container.read(currentIconPackKeyProvider.future)`——预热图标包 key，让首帧图标渲染就能拿到正确的 pack，避免 sticker→flat 的图标闪变。
+
+测试：
+- `test/core/util/category_icon_packs_test.dart`（新建，20 用例）：
+  - `BianBianIconPack` 枚举（4）：fromKey 2 个已知 / fromKey 未知+null 回退 / key roundtrip / label 非空。
+  - `packDefaultIcon`（4）：sticker 已知 / flat 已知 / 未知 parentKey / 未知 name。
+  - `resolveCategoryIcon`（8）：null stored → pack 默认 / null + 未知分类 → fallback / sticker 默认 + flat pack / flat 默认 + sticker pack / 用户自定义 / 两 pack 共享 emoji / 自定义 + 未知 parentKey / null + 未知 parentKey。
+  - `all 11 parentKeys`（1）：验证两 pack 对 11 个 parentKey 的首个分类都有映射 + `samplePackIcons` 返回 11 个。
+  - `samplePackIcons`（3）：11 个样本 / sticker 首项 / flat 首项。
+- `test/features/settings/theme_test.dart`（修改，+7 用例 → 共 34 用例）：
+  - `BianBianIconPack` 枚举（4）。
+  - `currentIconPackProvider`（3）：sticker / flat / AsyncLoading 回退。
+- `test/features/settings/theme_page_test.dart`（修改，+3 用例 → 共 10 用例）：
+  - 所有用例追加 `currentIconPackKeyProvider` override。
+  - 图标包区两卡片渲染 + sticker 选中态。
+  - 点击扁平简约 → `_FakeCurrentIconPackKey.lastSetKey == 'flat'`。
+  - 图标包描述文案可见。
+
+**验证**
+- `dart run build_runner build --delete-conflicting-outputs` → 257 outputs，0 error。
+- `flutter analyze` → No issues found。
+- `flutter test` → 726/726 通过（696 前 + 20 icon_packs_test + 7 theme_test + 3 theme_page_test）。
+- `dart run custom_lint` → 预存 INFO（fake notifier 的 `lastSetKey` / scoped_providers），与本步无关。
+- 用户本机 `flutter run` 待手工验证：
+  1. "我的"Tab → "外观" → 滚动到底部 → "分类图标"区可见，含"✏️ 手绘贴纸"和"📝 扁平简约"两张卡片。
+  2. "手绘贴纸"默认选中带 ✓，卡片内显示 11 个样本 emoji 预览。
+  3. 点击"扁平简约" → 全 App 分类图标即时切换（记账页分类网格、首页流水列表、详情底表、分类管理页、收藏排序页、预算列表、垃圾桶分类）。
+  4. 在记账页选"午餐"分类 → 切到扁平简约 → "午餐"图标从 🍱 变成 🍜 → 切回手绘贴纸 → 变回 🍱。
+  5. 在分类编辑页手动将某分类图标设为自定义 emoji（如🎯）→ 切换图标包 → 该自定义图标不受影响。
+  6. 冷启动后图标包持久化（上次选的还生效，首帧无图标闪变）。
+
+**给后续开发者的备忘**
+- **`resolveCategoryIcon` 匹配逻辑**——若 `storedIcon` 匹配**任一** pack 对 `(parentKey, name)` 的默认值，则视为 pack 默认。极端情况：用户手动设置了与 pack 默认相同的 emoji（如午餐设 🍱），切换 pack 时该 emoji 也会变——这是可接受的，用户可再次设置。
+- **`BianBianIconPack.fromKey` 未知值回退 sticker**——与 `BianBianTheme` / `BianBianFontSize` 同策略。新增第 3 套 pack 时务必在 fromKey 加 case。
+- **两 pack 的 emoji 映射是静态常量**——不依赖 DB，不依赖运行时状态。新增分类后若想加入 pack 默认，需同时在 `_stickerIcons` 和 `_flatIcons` 中加条目。
+- **不批量写 DB**——切换 pack 不更新 `category.icon`，所有图标更新在展示层解析。这意味着 sync_op 不产生新行，云端数据不受图标包切换影响。
+- **`samplePackIcons` 只取每 parentKey 的第一个分类**——如果默认分类顺序变化（如 seeder 增删），预览会跟随，但样本 emoji 对应的是 pack 映射的 `values.first`，而非数据库。
+- **`user_pref.icon_pack` schema v11 新增列**——`addColumn` 迁移，默认 `'sticker'`，老用户无感升级。
+- **新增图标渲染点务必使用 `resolveCategoryIcon`**——不要直接 `category.icon ?? fallback`，否则图标包切换不生效。

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/util/category_icon_packs.dart';
 import '../../data/local/attachment_meta_codec.dart';
 import '../../data/repository/providers.dart' show transactionRepositoryProvider;
 import '../../domain/entity/attachment_meta.dart';
@@ -56,9 +57,12 @@ class RecordDetailSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = category;
+    final iconPack = ref.watch(currentIconPackProvider);
     final icon = tx.type == 'transfer'
         ? '🔁'
-        : (c?.icon ?? (tx.type == 'income' ? '💰' : '💸'));
+        : (c != null
+            ? resolveCategoryIcon(c.icon, c.parentKey, c.name, iconPack)
+            : (tx.type == 'income' ? '💰' : '💸'));
     final name = tx.type == 'transfer' ? '转账' : (c?.name ?? '未分类');
     final attachments = _decodeAttachmentMetas();
     final date =

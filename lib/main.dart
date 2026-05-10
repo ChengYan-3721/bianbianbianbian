@@ -30,6 +30,15 @@ Future<void> main() async {
   final container = ProviderContainer();
   try {
     await container.read(defaultSeedProvider.future);
+    // Step 15.1：预热主题 key——让 BianBianApp 第一帧就能拿到正确的
+    // ThemeData（否则 currentThemeProvider 的 valueOrNull 会回退 cream_bunny）。
+    await container.read(currentThemeKeyProvider.future);
+    // Step 15.2：预热字号 key——让首帧 builder 里 fontSizeScaleFactorProvider
+    // 就能拿到正确的 scaleFactor，避免默认 standard→实际 large 的字号跳变。
+    await container.read(currentFontSizeKeyProvider.future);
+    // Step 15.3：预热图标包 key——让首帧图标渲染就能拿到正确的 pack，
+    // 避免 sticker→flat 的图标闪变。
+    await container.read(currentIconPackKeyProvider.future);
     // Step 14.3：冷启动锁——若用户已启用应用锁则在 BianBianApp 渲染前把
     // [AppLockGuard] 锁上。这样首帧就会被 overlay 遮盖，避免有人冷启动期间瞄
     // 到任何受保护内容。await 两个 future 顺序无关：先读 timeout 让

@@ -1,12 +1,133 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../app/app_theme.dart';
+import '../../core/util/category_icon_packs.dart';
 import '../../data/local/app_database.dart';
 import '../../data/local/providers.dart';
 import '../../data/repository/providers.dart';
 import 'fx_rate_refresh_service.dart';
 
 part 'settings_providers.g.dart';
+
+/// Step 15.1：当前主题标识 provider。
+///
+/// 数据源是 `user_pref.theme`（TEXT，默认 `'cream_bunny'`）。
+/// UI 通过 `ref.watch(currentThemeKeyProvider)` 拿字符串 key 供
+/// [currentThemeProvider] 消费。
+@Riverpod(keepAlive: true)
+class CurrentThemeKey extends _$CurrentThemeKey {
+  @override
+  Future<String> build() async {
+    final db = ref.watch(appDatabaseProvider);
+    final pref = await (db.select(db.userPrefTable)
+          ..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
+    return pref?.theme ?? 'cream_bunny';
+  }
+
+  /// 写入 user_pref.theme 并触发重建。
+  Future<void> set(String themeKey) async {
+    final db = ref.read(appDatabaseProvider);
+    await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+      UserPrefTableCompanion(
+        theme: Value(themeKey),
+      ),
+    );
+    ref.invalidateSelf();
+  }
+}
+
+/// Step 15.1：当前主题的 [ThemeData] provider。
+///
+/// 消费 [currentThemeKeyProvider] 后经 [BianBianTheme.fromKey] 枚举转换，
+/// 再由 [buildAppTheme] 构建完整 [ThemeData]。[BianBianApp] 的
+/// `MaterialApp.router.theme` 直接 watch 本 provider。
+@Riverpod(keepAlive: true)
+ThemeData currentTheme(Ref ref) {
+  final themeKeyAsync = ref.watch(currentThemeKeyProvider);
+  final key = themeKeyAsync.valueOrNull ?? 'cream_bunny';
+  return buildAppTheme(BianBianTheme.fromKey(key));
+}
+
+/// Step 15.2：当前字号档位 provider。
+///
+/// 数据源是 `user_pref.font_size`（TEXT，默认 `'standard'`）。
+/// UI 通过 `ref.watch(currentFontSizeKeyProvider)` 拿字符串 key 供
+/// [fontSizeScaleFactorProvider] 消费。
+@Riverpod(keepAlive: true)
+class CurrentFontSizeKey extends _$CurrentFontSizeKey {
+  @override
+  Future<String> build() async {
+    final db = ref.watch(appDatabaseProvider);
+    final pref = await (db.select(db.userPrefTable)
+          ..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
+    return pref?.fontSize ?? 'standard';
+  }
+
+  /// 写入 user_pref.font_size 并触发重建。
+  Future<void> set(String fontSizeKey) async {
+    final db = ref.read(appDatabaseProvider);
+    await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+      UserPrefTableCompanion(
+        fontSize: Value(fontSizeKey),
+      ),
+    );
+    ref.invalidateSelf();
+  }
+}
+
+/// Step 15.2：字号缩放因子 provider。
+///
+/// 消费 [currentFontSizeKeyProvider] 后经 [BianBianFontSize.fromKey] 枚举转换，
+/// 返回 [BianBianFontSize.scaleFactor]（0.85 / 1.0 / 1.15）。
+/// [BianBianApp] 在 `MaterialApp.router.builder` 里乘以系统 TextScaler
+/// 生成最终 [TextScaler]。
+@Riverpod(keepAlive: true)
+double fontSizeScaleFactor(Ref ref) {
+  final keyAsync = ref.watch(currentFontSizeKeyProvider);
+  final key = keyAsync.valueOrNull ?? 'standard';
+  return BianBianFontSize.fromKey(key).scaleFactor;
+}
+
+/// Step 15.3：当前图标包标识 provider。
+///
+/// 数据源是 `user_pref.icon_pack`（TEXT，默认 `'sticker'`）。
+@Riverpod(keepAlive: true)
+class CurrentIconPackKey extends _$CurrentIconPackKey {
+  @override
+  Future<String> build() async {
+    final db = ref.watch(appDatabaseProvider);
+    final pref = await (db.select(db.userPrefTable)
+          ..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
+    return pref?.iconPack ?? 'sticker';
+  }
+
+  /// 写入 user_pref.icon_pack 并触发重建。
+  Future<void> set(String iconPackKey) async {
+    final db = ref.read(appDatabaseProvider);
+    await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+      UserPrefTableCompanion(
+        iconPack: Value(iconPackKey),
+      ),
+    );
+    ref.invalidateSelf();
+  }
+}
+
+/// Step 15.3：当前图标包枚举 provider。
+///
+/// 消费 [currentIconPackKeyProvider] 后经 [BianBianIconPack.fromKey] 枚举转换。
+/// UI 与图标解析函数通过本 provider 获取激活的 [BianBianIconPack]。
+@Riverpod(keepAlive: true)
+BianBianIconPack currentIconPack(Ref ref) {
+  final keyAsync = ref.watch(currentIconPackKeyProvider);
+  final key = keyAsync.valueOrNull ?? 'sticker';
+  return BianBianIconPack.fromKey(key);
+}
 
 /// Step 8.1：多币种全局开关。
 ///

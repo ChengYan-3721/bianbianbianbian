@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
+import '../settings/settings_providers.dart';
 
 /// 分类管理页：
 /// - 按固定一级分类分组展示二级分类
@@ -37,6 +39,7 @@ class CategoryManagePage extends ConsumerStatefulWidget {
 
 class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
   List<Category>? _categories;
+  String _selectedParentKey = CategoryManagePage.parentTabs.first.$2;
 
   Future<void> _openAddCategory(String parentKey) async {
     final saved = await context.push<bool>(
@@ -130,6 +133,9 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
 
           if (widget.parentKey == null) {
             return _GlobalCategoryManageLayout(
+              selectedParentKey: _selectedParentKey,
+              onSelectedParentKeyChanged: (key) =>
+                  setState(() => _selectedParentKey = key),
               grouped: grouped,
               onToggleFavorite: onToggleFavorite,
               onAddCategory: _openAddCategory,
@@ -178,32 +184,29 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
   }
 }
 
-class _GlobalCategoryManageLayout extends StatefulWidget {
+class _GlobalCategoryManageLayout extends StatelessWidget {
   const _GlobalCategoryManageLayout({
     required this.grouped,
     required this.onToggleFavorite,
     required this.onAddCategory,
     required this.onEditCategory,
+    required this.selectedParentKey,
+    required this.onSelectedParentKeyChanged,
   });
 
   final Map<String, List<Category>> grouped;
+  final String selectedParentKey;
+  final ValueChanged<String> onSelectedParentKeyChanged;
   final Future<void> Function(String id, bool toValue) onToggleFavorite;
   final Future<void> Function(String parentKey) onAddCategory;
   final Future<void> Function() onEditCategory;
 
   @override
-  State<_GlobalCategoryManageLayout> createState() => _GlobalCategoryManageLayoutState();
-}
-
-class _GlobalCategoryManageLayoutState extends State<_GlobalCategoryManageLayout> {
-  String _selectedParentKey = CategoryManagePage.parentTabs.first.$2;
-
-  @override
   Widget build(BuildContext context) {
     final tabs = CategoryManagePage.parentTabs;
-    final categories = widget.grouped[_selectedParentKey] ?? const <Category>[];
+    final categories = grouped[selectedParentKey] ?? const <Category>[];
     final parentLabel = tabs
-            .where((e) => e.$2 == _selectedParentKey)
+            .where((e) => e.$2 == selectedParentKey)
             .map((e) => e.$1)
             .firstOrNull ??
         '分类';
@@ -221,9 +224,9 @@ class _GlobalCategoryManageLayoutState extends State<_GlobalCategoryManageLayout
             itemCount: tabs.length,
             itemBuilder: (context, index) {
               final (label, key) = tabs[index];
-              final selected = key == _selectedParentKey;
+              final selected = key == selectedParentKey;
               return InkWell(
-                onTap: () => setState(() => _selectedParentKey = key),
+                onTap: () => onSelectedParentKeyChanged(key),
                 child: Container(
                   height: 48,
                   alignment: Alignment.center,
@@ -248,12 +251,12 @@ class _GlobalCategoryManageLayoutState extends State<_GlobalCategoryManageLayout
             children: [
               _ParentSection(
                 parentLabel: parentLabel,
-                parentKey: _selectedParentKey,
+                parentKey: selectedParentKey,
                 showHeaderAction: true,
                 categories: categories,
-                onHeaderTap: () => widget.onAddCategory(_selectedParentKey),
-                onToggleFavorite: widget.onToggleFavorite,
-                onEditCategory: widget.onEditCategory,
+                onHeaderTap: () => onAddCategory(selectedParentKey),
+                onToggleFavorite: onToggleFavorite,
+                onEditCategory: onEditCategory,
               ),
               const SizedBox(height: 12),
             ],
@@ -337,7 +340,7 @@ class _ParentSection extends StatelessWidget {
   }
 }
 
-class _CategoryRow extends StatelessWidget {
+class _CategoryRow extends ConsumerWidget {
   const _CategoryRow({
     required this.category,
     required this.onToggleFavorite,
@@ -349,9 +352,12 @@ class _CategoryRow extends StatelessWidget {
   final Future<void> Function()? onEdit;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final iconPack = ref.watch(currentIconPackProvider);
+    final icon = resolveCategoryIcon(
+        category.icon, category.parentKey, category.name, iconPack);
     return ListTile(
-      leading: Text(category.icon ?? '📁', style: const TextStyle(fontSize: 20)),
+      leading: Text(icon, style: const TextStyle(fontSize: 20)),
       title: Text(category.name),
       trailing: IconButton(
         tooltip: category.isFavorite ? '取消收藏' : '收藏',

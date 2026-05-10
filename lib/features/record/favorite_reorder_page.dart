@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
+import '../settings/settings_providers.dart';
 import 'record_providers.dart';
 
 /// 收藏排序页（跳转逻辑.md 中的 R）。
@@ -77,9 +79,12 @@ class _FavoriteReorderPageState extends ConsumerState<FavoriteReorderPage> {
             },
             itemBuilder: (context, index) {
               final c = items[index];
+              final iconPack = ref.watch(currentIconPackProvider);
+              final icon = resolveCategoryIcon(
+                  c.icon, c.parentKey, c.name, iconPack);
               return ListTile(
                 key: ValueKey(c.id),
-                leading: Text(c.icon ?? '📁', style: const TextStyle(fontSize: 20)),
+                leading: Text(icon, style: const TextStyle(fontSize: 20)),
                 title: Text(c.name),
                 trailing: ReorderableDragStartListener(
                   index: index,

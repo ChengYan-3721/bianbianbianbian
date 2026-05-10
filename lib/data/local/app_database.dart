@@ -73,6 +73,8 @@ part 'app_database.g.dart';
 /// > version；实际落地中 Phase 9 与现有 v8 复用了 user_pref 列，schema
 /// > 没动。所以本步真实跨度是 v8 → v9，语义与 plan 完全一致，只是版本号
 /// > 序列连续少一格。后续 Phase 文档勘误时统一以代码为准。
+/// - v10（Step 15.2）：`user_pref` 追加 `font_size TEXT DEFAULT 'standard'`。
+/// - v11（Step 15.3）：`user_pref` 追加 `icon_pack TEXT DEFAULT 'sticker'`。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -101,7 +103,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -189,6 +191,18 @@ class AppDatabase extends _$AppDatabase {
             // size / mime 现场推断，本地文件不存在的标记 missing: true）→
             // 写回原行。
             await _upgradeAttachmentsBlobToV9();
+          }
+
+          if (from < 10) {
+            // v9 → v10（Step 15.2）：user_pref 追加 font_size 列（默认
+            // 'standard'，与新装行为一致）。
+            await m.addColumn(userPrefTable, userPrefTable.fontSize);
+          }
+
+          if (from < 11) {
+            // v10 → v11（Step 15.3）：user_pref 追加 icon_pack 列（默认
+            // 'sticker'，与新装行为一致）。
+            await m.addColumn(userPrefTable, userPrefTable.iconPack);
           }
         },
       );

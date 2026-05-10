@@ -84,6 +84,14 @@ class UserPrefTable extends Table {
       .nullable()
       .withDefault(const Constant(0))();
 
+  /// Step 15.2：字号档位。'small' / 'standard'(默认) / 'large'。
+  TextColumn get fontSize =>
+      text().nullable().named('font_size').withDefault(const Constant('standard'))();
+
+  /// Step 15.3：分类图标包。'sticker'(默认/手绘贴纸) / 'flat'(扁平简约)。
+  TextColumn get iconPack =>
+      text().nullable().named('icon_pack').withDefault(const Constant('sticker'))();
+
   @override
   Set<Column> get primaryKey => {id};
 }

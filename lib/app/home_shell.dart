@@ -121,6 +121,12 @@ class _MeTab extends StatelessWidget {
       body: ListView(
         children: [
           ListTile(
+            leading: const Icon(Icons.palette_outlined),
+            title: const Text('外观'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/theme'),
+          ),
+          ListTile(
             leading: const Icon(Icons.savings_outlined),
             title: const Text('预算'),
             trailing: const Icon(Icons.chevron_right),

@@ -6,6 +6,76 @@ part of 'settings_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
+String _$currentThemeHash() => r'90d0cee26237474366010936ebf3609be2241278';
+
+/// Step 15.1：当前主题的 [ThemeData] provider。
+///
+/// 消费 [currentThemeKeyProvider] 后经 [BianBianTheme.fromKey] 枚举转换，
+/// 再由 [buildAppTheme] 构建完整 [ThemeData]。[BianBianApp] 的
+/// `MaterialApp.router.theme` 直接 watch 本 provider。
+///
+/// Copied from [currentTheme].
+@ProviderFor(currentTheme)
+final currentThemeProvider = Provider<ThemeData>.internal(
+  currentTheme,
+  name: r'currentThemeProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$currentThemeHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef CurrentThemeRef = ProviderRef<ThemeData>;
+String _$fontSizeScaleFactorHash() =>
+    r'f4bb99ef0057a2efc42d4e0ffd638e27c52df85b';
+
+/// Step 15.2：字号缩放因子 provider。
+///
+/// 消费 [currentFontSizeKeyProvider] 后经 [BianBianFontSize.fromKey] 枚举转换，
+/// 返回 [BianBianFontSize.scaleFactor]（0.85 / 1.0 / 1.15）。
+/// [BianBianApp] 在 `MaterialApp.router.builder` 里乘以系统 TextScaler
+/// 生成最终 [TextScaler]。
+///
+/// Copied from [fontSizeScaleFactor].
+@ProviderFor(fontSizeScaleFactor)
+final fontSizeScaleFactorProvider = Provider<double>.internal(
+  fontSizeScaleFactor,
+  name: r'fontSizeScaleFactorProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$fontSizeScaleFactorHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef FontSizeScaleFactorRef = ProviderRef<double>;
+String _$currentIconPackHash() => r'fe6fe57a79bb5c5809f69cf1eab8cf16f8f9cb63';
+
+/// Step 15.3：当前图标包枚举 provider。
+///
+/// 消费 [currentIconPackKeyProvider] 后经 [BianBianIconPack.fromKey] 枚举转换。
+/// UI 与图标解析函数通过本 provider 获取激活的 [BianBianIconPack]。
+///
+/// Copied from [currentIconPack].
+@ProviderFor(currentIconPack)
+final currentIconPackProvider = Provider<BianBianIconPack>.internal(
+  currentIconPack,
+  name: r'currentIconPackProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$currentIconPackHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef CurrentIconPackRef = ProviderRef<BianBianIconPack>;
 String _$currentLedgerDefaultCurrencyHash() =>
     r'a32f0f9a09f6d90532ed14d173a02d803ed2fb32';
 
@@ -97,6 +167,72 @@ final fxRateRefreshServiceProvider = Provider<FxRateRefreshService>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef FxRateRefreshServiceRef = ProviderRef<FxRateRefreshService>;
+String _$currentThemeKeyHash() => r'e14eb3149091066465f17282be8d528e0df9ad5d';
+
+/// Step 15.1：当前主题标识 provider。
+///
+/// 数据源是 `user_pref.theme`（TEXT，默认 `'cream_bunny'`）。
+/// UI 通过 `ref.watch(currentThemeKeyProvider)` 拿字符串 key 供
+/// [currentThemeProvider] 消费。
+///
+/// Copied from [CurrentThemeKey].
+@ProviderFor(CurrentThemeKey)
+final currentThemeKeyProvider =
+    AsyncNotifierProvider<CurrentThemeKey, String>.internal(
+      CurrentThemeKey.new,
+      name: r'currentThemeKeyProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$currentThemeKeyHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$CurrentThemeKey = AsyncNotifier<String>;
+String _$currentFontSizeKeyHash() =>
+    r'1054ffcaf6d213184bd0bdecc8e558a305b5a3d5';
+
+/// Step 15.2：当前字号档位 provider。
+///
+/// 数据源是 `user_pref.font_size`（TEXT，默认 `'standard'`）。
+/// UI 通过 `ref.watch(currentFontSizeKeyProvider)` 拿字符串 key 供
+/// [fontSizeScaleFactorProvider] 消费。
+///
+/// Copied from [CurrentFontSizeKey].
+@ProviderFor(CurrentFontSizeKey)
+final currentFontSizeKeyProvider =
+    AsyncNotifierProvider<CurrentFontSizeKey, String>.internal(
+      CurrentFontSizeKey.new,
+      name: r'currentFontSizeKeyProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$currentFontSizeKeyHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$CurrentFontSizeKey = AsyncNotifier<String>;
+String _$currentIconPackKeyHash() =>
+    r'5ba3dbffc1e1bc49d25b58f8911f9adc902ab747';
+
+/// Step 15.3：当前图标包标识 provider。
+///
+/// 数据源是 `user_pref.icon_pack`（TEXT，默认 `'sticker'`）。
+///
+/// Copied from [CurrentIconPackKey].
+@ProviderFor(CurrentIconPackKey)
+final currentIconPackKeyProvider =
+    AsyncNotifierProvider<CurrentIconPackKey, String>.internal(
+      CurrentIconPackKey.new,
+      name: r'currentIconPackKeyProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$currentIconPackKeyHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$CurrentIconPackKey = AsyncNotifier<String>;
 String _$multiCurrencyEnabledHash() =>
     r'19098f58ad0972a1159f65a8aaa0da8223d14fdc';
 

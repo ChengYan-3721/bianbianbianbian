@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
@@ -12,6 +13,7 @@ import '../budget/budget_providers.dart';
 import '../ledger/ledger_list_page.dart' show ledgerGroupsProvider;
 import '../ledger/ledger_providers.dart';
 import '../record/record_providers.dart';
+import '../settings/settings_providers.dart';
 import '../stats/stats_range_providers.dart';
 import '../sync/sync_trigger.dart';
 import 'trash_attachment_cleaner.dart';
@@ -349,7 +351,8 @@ class _TrashCategoriesTab extends ConsumerWidget {
           itemBuilder: (context, i) {
             final c = visible[i];
             return _TrashRow(
-              icon: c.icon ?? '🏷️',
+              icon: resolveCategoryIcon(
+                  c.icon, c.parentKey, c.name, ref.watch(currentIconPackProvider), '🏷️'),
               title: c.name,
               subtitle: kParentKeyLabels[c.parentKey] ?? c.parentKey,
               deletedAt: c.deletedAt!,

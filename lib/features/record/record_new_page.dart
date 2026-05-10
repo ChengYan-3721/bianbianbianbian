@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/util/currencies.dart';
+import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
@@ -411,6 +412,8 @@ class _CategoryGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(categoryRepositoryProvider).valueOrNull;
+    // Step 15.3：当前图标包——分类网格图标解析。
+    final iconPack = ref.watch(currentIconPackProvider);
     if (repo == null) {
       return const Center(child: Text('加载分类…'));
     }
@@ -497,7 +500,7 @@ class _CategoryGrid extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(cat.icon ?? '📁', style: const TextStyle(fontSize: 20)),
+                    Text(resolveCategoryIcon(cat.icon, cat.parentKey, cat.name, iconPack), style: const TextStyle(fontSize: 20)),
                     const SizedBox(height: 4),
                     Text(
                       cat.name,
