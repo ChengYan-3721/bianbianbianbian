@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
 
 // ─── 主题枚举 ───────────────────────────────────────────────────────────────
 
@@ -20,15 +21,20 @@ enum BianBianTheme {
     );
   }
 
-  /// 显示名 + emoji 前缀。
-  String get label => switch (this) {
-        BianBianTheme.creamBunny => '🐰 奶油兔',
-        BianBianTheme.thickBrownBear => '🐻 厚棕熊',
-        BianBianTheme.moonlightDark => '🌙 月见黑',
-        BianBianTheme.mintGreen => '🍃 薄荷绿',
-      };
-
   bool get isDark => this == BianBianTheme.moonlightDark;
+}
+
+extension BianBianThemeL10n on BianBianTheme {
+  /// 显示名 + emoji 前缀。
+  String label(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return switch (this) {
+      BianBianTheme.creamBunny => l10n.themeCreamBunny,
+      BianBianTheme.thickBrownBear => l10n.themeThickBrownBear,
+      BianBianTheme.moonlightDark => l10n.themeMoonlightDark,
+      BianBianTheme.mintGreen => l10n.themeMintGreen,
+    };
+  }
 }
 
 // ─── 字号枚举 ───────────────────────────────────────────────────────────────
@@ -37,20 +43,30 @@ enum BianBianTheme {
 /// [scaleFactor] 为相对系统字号的乘数——`standard` 完全跟随系统，
 /// `small` / `large` 在系统基础上缩小 / 放大 15%。
 enum BianBianFontSize {
-  small('small', 0.85, '小'),
-  standard('standard', 1.0, '标准'),
-  large('large', 1.15, '大');
+  small('small', 0.85),
+  standard('standard', 1.0),
+  large('large', 1.15);
 
-  const BianBianFontSize(this.key, this.scaleFactor, this.label);
+  const BianBianFontSize(this.key, this.scaleFactor);
   final String key;
   final double scaleFactor;
-  final String label;
 
   static BianBianFontSize fromKey(String? key) => switch (key) {
         'small' => BianBianFontSize.small,
         'large' => BianBianFontSize.large,
         _ => BianBianFontSize.standard,
       };
+}
+
+extension BianBianFontSizeL10n on BianBianFontSize {
+  String label(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return switch (this) {
+      BianBianFontSize.small => l10n.fontSizeSmall,
+      BianBianFontSize.standard => l10n.fontSizeStandard,
+      BianBianFontSize.large => l10n.fontSizeLarge,
+    };
+  }
 }
 
 // ─── 色板常量 ───────────────────────────────────────────────────────────────

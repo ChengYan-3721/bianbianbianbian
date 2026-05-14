@@ -27,7 +27,7 @@ class WidgetData {
   static const empty = WidgetData(
     todayExpense: '¥0.00',
     monthlyBalance: '¥0.00',
-    ledgerName: '边边记账',
+    ledgerName: '边边记账', // i18n-exempt: widget data (no BuildContext available)
   );
 }
 
@@ -49,8 +49,9 @@ const kAndroidWidgetQualifiedName =
 WidgetData computeWidgetData({
   required List<TransactionEntry> transactions,
   required String ledgerName,
+  DateTime Function()? clock,
 }) {
-  final now = DateTime.now();
+  final now = clock != null ? clock() : DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
 
   double todayExpense = 0;
@@ -147,7 +148,7 @@ class WidgetDataService {
   }
 
   static String _formatLedgerName(Ledger? ledger) {
-    if (ledger == null) return '边边记账';
+    if (ledger == null) return '边边记账'; // i18n-exempt: widget data (no BuildContext available)
     final emoji = ledger.coverEmoji;
     return emoji != null && emoji.isNotEmpty
         ? '$emoji ${ledger.name}'

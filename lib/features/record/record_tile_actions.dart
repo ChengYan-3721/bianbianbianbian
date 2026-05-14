@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../data/local/attachment_meta_codec.dart';
 import '../../data/repository/providers.dart' show transactionRepositoryProvider;
@@ -45,12 +46,6 @@ class RecordDetailSheet extends ConsumerWidget {
   final String accountName;
   final String? toAccountName;
 
-  String get _typeLabel {
-    if (tx.type == 'income') return '收入';
-    if (tx.type == 'expense') return '支出';
-    return '转账';
-  }
-
   List<AttachmentMeta> _decodeAttachmentMetas() =>
       AttachmentMetaCodec.decode(tx.attachmentsEncrypted);
 
@@ -63,7 +58,7 @@ class RecordDetailSheet extends ConsumerWidget {
         : (c != null
             ? resolveCategoryIcon(c.icon, c.parentKey, c.name, iconPack)
             : (tx.type == 'income' ? '💰' : '💸'));
-    final name = tx.type == 'transfer' ? '转账' : (c?.name ?? '未分类');
+    final name = tx.type == 'transfer' ? context.l10n.txTypeTransfer : (c?.name ?? context.l10n.txTypeUncategorized);
     final attachments = _decodeAttachmentMetas();
     final date =
         '${tx.occurredAt.year}-${tx.occurredAt.month.toString().padLeft(2, '0')}-${tx.occurredAt.day.toString().padLeft(2, '0')} '
@@ -107,16 +102,16 @@ class RecordDetailSheet extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
-            _DetailKV(label: '类型', value: _typeLabel),
+            _DetailKV(label: context.l10n.detailType, value: tx.type == 'income' ? context.l10n.txTypeIncome : (tx.type == 'expense' ? context.l10n.txTypeExpense : context.l10n.txTypeTransfer)),
             _DetailKV(
-              label: tx.type == 'transfer' ? '转出' : '钱包',
+              label: tx.type == 'transfer' ? context.l10n.detailTransferFrom : context.l10n.recordNewWallet,
               value: accountName,
             ),
             if (tx.type == 'transfer')
-              _DetailKV(label: '转入', value: toAccountName ?? '账户'),
-            _DetailKV(label: '时间', value: date),
+              _DetailKV(label: context.l10n.detailTransferTo, value: toAccountName ?? context.l10n.detailAccount),
+            _DetailKV(label: context.l10n.detailTime, value: date),
             _DetailKV(
-              label: '备注',
+              label: context.l10n.recordNewNote,
               value: (tx.tags == null || tx.tags!.isEmpty) ? '—' : tx.tags!,
             ),
             if (attachments.isNotEmpty)
@@ -125,7 +120,7 @@ class RecordDetailSheet extends ConsumerWidget {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '图片',
+                    context.l10n.detailImages,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(context)
                               .colorScheme
@@ -167,7 +162,7 @@ class RecordDetailSheet extends ConsumerWidget {
                       context,
                       RecordDetailAction.copy,
                     ),
-                    child: const Text('复制'),
+                    child: Text(context.l10n.detailCopy),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -177,7 +172,7 @@ class RecordDetailSheet extends ConsumerWidget {
                       context,
                       RecordDetailAction.edit,
                     ),
-                    child: const Text('编辑'),
+                    child: Text(context.l10n.edit),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -187,7 +182,7 @@ class RecordDetailSheet extends ConsumerWidget {
                       context,
                       RecordDetailAction.delete,
                     ),
-                    child: const Text('删除'),
+                    child: Text(context.l10n.delete),
                   ),
                 ),
               ],
@@ -352,7 +347,7 @@ Future<void> openRecordTileActions({
       if (!context.mounted) return;
       _invalidateAfterChange(ref);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已删除')),
+        SnackBar(content: Text(context.l10n.deleted)),
       );
       break;
   }
@@ -387,8 +382,8 @@ Future<bool> _confirmDelete(BuildContext context) async {
   final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('删除这条记录？'),
-          content: const Text('删除后可在后续垃圾桶中恢复。'),
+          title: Text(context.l10n.recordDeleteConfirm),
+          content: Text(context.l10n.recordDeleteHint),
           actions: [
             TextButton(
               style: TextButton.styleFrom(
@@ -396,7 +391,7 @@ Future<bool> _confirmDelete(BuildContext context) async {
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('取消'),
+              child: Text(context.l10n.cancel),
             ),
             TextButton(
               style: TextButton.styleFrom(
@@ -404,7 +399,7 @@ Future<bool> _confirmDelete(BuildContext context) async {
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('删除'),
+              child: Text(context.l10n.delete),
             ),
           ],
         ),
@@ -457,7 +452,7 @@ Future<void> _openFullscreenViewer({
               top: 12,
               right: 12,
               child: IconButton(
-                tooltip: '关闭',
+                tooltip: context.l10n.close,
                 color: Colors.white,
                 onPressed: () => Navigator.of(dialogContext).pop(),
                 icon: const Icon(Icons.close),

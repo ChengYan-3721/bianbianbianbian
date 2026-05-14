@@ -8,6 +8,7 @@ import 'app/app.dart';
 import 'data/local/providers.dart';
 import 'data/repository/providers.dart'
     show currentLedgerIdProvider, ledgerRepositoryProvider, transactionRepositoryProvider;
+import 'features/compliance/privacy_consent_providers.dart';
 import 'features/lock/app_lock_providers.dart';
 import 'features/settings/settings_providers.dart';
 import 'features/settings/widget_data_service.dart';
@@ -49,6 +50,10 @@ Future<void> main() async {
     // Step 15.3：预热图标包 key——让首帧图标渲染就能拿到正确的 pack，
     // 避免 sticker→flat 的图标闪变。
     await container.read(currentIconPackKeyProvider.future);
+    // Step 17.3：预热隐私同意状态——让 PrivacyConsentGate 第一帧就能
+    // 拿到正确值，避免 loading shim 闪一下；同时即便 SharedPreferences
+    // 极少数情况 stuck，至少 bootstrap 链能感知超时（而不是 UI 静默卡死）。
+    await container.read(privacyConsentProvider.future);
     // Step 14.3：冷启动锁——若用户已启用应用锁则在 BianBianApp 渲染前把
     // [AppLockGuard] 锁上。这样首帧就会被 overlay 遮盖，避免有人冷启动期间瞄
     // 到任何受保护内容。await 两个 future 顺序无关：先读 timeout 让

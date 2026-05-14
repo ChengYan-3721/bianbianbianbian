@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../data/local/app_database.dart';
 import 'settings_providers.dart';
@@ -49,7 +50,7 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
       ref.invalidate(fxRatesProvider);
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text(ok ? '汇率已更新' : '联网失败，使用现有快照')),
+        SnackBar(content: Text(ok ? context.l10n.multiCurrencyRefreshed : context.l10n.multiCurrencyRefreshFailed)),
       );
     } finally {
       if (mounted) setState(() => _refreshing = false);
@@ -63,6 +64,7 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
       builder: (_) => _ManualRateDialog(row: row),
     );
     if (result == null || !mounted) return;
+    final l10n = context.l10n;
     final service = ref.read(fxRateRefreshServiceProvider);
     final messenger = ScaffoldMessenger.of(context);
     if (result.reset) {
@@ -70,7 +72,7 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
       ref.invalidate(fxRateRowsProvider);
       ref.invalidate(fxRatesProvider);
       messenger.showSnackBar(
-        SnackBar(content: Text('${row.code} 已恢复自动刷新')),
+        SnackBar(content: Text(l10n.multiCurrencyAutoRestored(row.code))),
       );
       return;
     }
@@ -80,7 +82,7 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
       ref.invalidate(fxRateRowsProvider);
       ref.invalidate(fxRatesProvider);
       messenger.showSnackBar(
-        SnackBar(content: Text('${row.code} 汇率已手动设为 $newRate')),
+        SnackBar(content: Text(l10n.multiCurrencyManualSet(row.code, newRate.toString()))),
       );
     }
   }
@@ -92,11 +94,11 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('多币种'),
+        title: Text(context.l10n.multiCurrencyTitle),
         actions: [
           IconButton(
             key: const Key('fx_refresh_now'),
-            tooltip: '立即刷新汇率',
+            tooltip: context.l10n.multiCurrencyRefreshNow,
             onPressed: _refreshing ? null : _refreshNow,
             icon: _refreshing
                 ? const SizedBox(
@@ -111,50 +113,50 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
       body: ListView(
         children: [
           asyncEnabled.when(
-            loading: () => const ListTile(
-              leading: SizedBox(
+            loading: () => ListTile(
+              leading: const SizedBox(
                 width: 24,
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              title: Text('多币种'),
+              title: Text(context.l10n.multiCurrencyTitle),
             ),
             error: (e, _) => ListTile(
               leading: const Icon(Icons.error_outline),
-              title: const Text('多币种'),
-              subtitle: Text('读取失败：$e'),
+              title: Text(context.l10n.multiCurrencyTitle),
+              subtitle: Text(context.l10n.readFailedWithError(e.toString())),
             ),
             data: (enabled) => SwitchListTile(
               key: const Key('multi_currency_switch'),
               value: enabled,
               onChanged: (v) =>
                   ref.read(multiCurrencyEnabledProvider.notifier).set(v),
-              title: const Text('开启多币种'),
-              subtitle: const Text('开启后，记账页可选择币种；统计按账本默认币种换算展示。'),
+              title: Text(context.l10n.multiCurrencyEnable),
+              subtitle: Text(context.l10n.multiCurrencyEnableHint),
               secondary: const Icon(Icons.public),
             ),
           ),
           const Divider(height: 1),
           ListTile(
-            title: const Text('内置币种'),
+            title: Text(context.l10n.multiCurrencyBuiltIn),
             subtitle: Text(
               kBuiltInCurrencies.map((c) => c.code).join(' · '),
             ),
             leading: const Icon(Icons.list_alt_outlined),
           ),
           const Divider(height: 1),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(
-              '汇率管理',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              context.l10n.multiCurrencyRateManagement,
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '点击行可手动设置汇率；标记为"手动"的行不会被自动刷新覆盖。',
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              context.l10n.multiCurrencyRateHint,
+              style: const TextStyle(fontSize: 12, color: Colors.black54),
             ),
           ),
           asyncRows.when(
@@ -164,7 +166,7 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
             ),
             error: (e, _) => Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('加载失败：$e'),
+              child: Text(context.l10n.loadFailedWithError(e.toString())),
             ),
             data: (rows) => Column(
               children: [
@@ -224,8 +226,8 @@ class _FxRateTile extends StatelessWidget {
         DateFormat('yyyy-MM-dd HH:mm').format(updated.toLocal());
     final isCny = row.code == 'CNY';
     final badge = isCny
-        ? '基准'
-        : (row.isManual ? '手动' : '自动');
+        ? context.l10n.multiCurrencyBase
+        : (row.isManual ? context.l10n.multiCurrencyManual : context.l10n.multiCurrencyAuto);
     final badgeColor = isCny
         ? Colors.grey
         : (row.isManual ? Colors.orange : Colors.green);
@@ -243,7 +245,7 @@ class _FxRateTile extends StatelessWidget {
       ),
       title: Row(
         children: [
-          Expanded(child: Text(currency.name)),
+          Expanded(child: Text(currency.localizedName(context.l10n))),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
@@ -262,7 +264,7 @@ class _FxRateTile extends StatelessWidget {
         ],
       ),
       subtitle: Text(
-        '1 ${row.code} = ${row.rateToCny.toStringAsFixed(4)} CNY · 更新于 $updatedText',
+        '1 ${row.code} = ${row.rateToCny.toStringAsFixed(4)} CNY · ${context.l10n.multiCurrencyUpdatedAt(updatedText)}',
         style: const TextStyle(fontSize: 12),
       ),
     );
@@ -304,7 +306,7 @@ class _ManualRateDialogState extends State<_ManualRateDialog> {
     final text = _controller.text.trim();
     final value = double.tryParse(text);
     if (value == null || value <= 0 || !value.isFinite) {
-      setState(() => _error = '请输入正数（例如 7.20）');
+      setState(() => _error = context.l10n.multiCurrencyInputPositive);
       return;
     }
     Navigator.of(context).pop(_ManualResult(rate: value));
@@ -313,19 +315,19 @@ class _ManualRateDialogState extends State<_ManualRateDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('设置 ${widget.row.code} 汇率'),
+      title: Text(context.l10n.multiCurrencySetRate(widget.row.code)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('1 ${widget.row.code} 等于多少 CNY？'),
+          Text(context.l10n.multiCurrencyRateQuestion(widget.row.code)),
           const SizedBox(height: 12),
           TextField(
             key: const Key('manual_rate_field'),
             controller: _controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              hintText: '例如 7.20',
+              hintText: context.l10n.multiCurrencyRateExample,
               errorText: _error,
               suffixText: 'CNY',
             ),
@@ -335,7 +337,7 @@ class _ManualRateDialogState extends State<_ManualRateDialog> {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '当前为手动覆盖，自动刷新不会修改它。',
+                context.l10n.multiCurrencyManualOverrideHint,
                 style: TextStyle(fontSize: 12, color: Colors.orange[800]),
               ),
             ),
@@ -347,16 +349,16 @@ class _ManualRateDialogState extends State<_ManualRateDialog> {
             key: const Key('manual_rate_reset'),
             onPressed: () =>
                 Navigator.of(context).pop(const _ManualResult(reset: true)),
-            child: const Text('重置为自动'),
+            child: Text(context.l10n.multiCurrencyResetToAuto),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           key: const Key('manual_rate_submit'),
           onPressed: _submit,
-          child: const Text('保存'),
+          child: Text(context.l10n.save),
         ),
       ],
     );

@@ -46,6 +46,7 @@ class DefaultSeeder {
   static String _defaultUuid() => const Uuid().v4();
 
   /// design-document §10.2 奶油兔 6 色板。分类索引 `i % 6` 循环取色。
+  // i18n-exempt: seed data (color names are comments only, not UI text).
   static const List<String> palette = [
     '#FFE9B0', // 奶油黄
     '#FFB7C5', // 樱花粉
@@ -58,6 +59,7 @@ class DefaultSeeder {
   /// 固定一级分类键（不落库）下的默认二级分类（name + emoji）。
     ///
     /// 键集必须与 [CategoryTable.parentKey] 的 CHECK 约束保持一致。
+    // i18n-exempt: seed data — names are DB values, not UI literals.
     static const Map<String, List<(String name, String emoji)>> categoriesByParent = {
       'income': [
         ('工资', '💰'),
@@ -144,6 +146,7 @@ class DefaultSeeder {
     };
 
   /// 5 个默认账户（名称 + 类型 + emoji）。
+  // i18n-exempt: seed data — names are DB values, not UI literals.
   static const List<(String name, String type, String emoji)>
       defaultAccounts = [
     ('现金', 'cash', '💵'),
@@ -193,6 +196,7 @@ class DefaultSeeder {
     await _db.into(_db.ledgerTable).insert(
           LedgerTableCompanion.insert(
             id: id,
+            // i18n-exempt: seed data — name is DB value, not UI literal.
             name: '生活',
             coverEmoji: const Value('📒'),
             createdAt: nowMs,

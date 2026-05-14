@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
@@ -19,19 +20,37 @@ class CategoryManagePage extends ConsumerStatefulWidget {
 
   final String? parentKey;
 
-  static const List<(String label, String key)> parentTabs = [
-    ('收入', 'income'),
-    ('饮食', 'food'),
-    ('购物', 'shopping'),
-    ('出行', 'transport'),
-    ('教育', 'education'),
-    ('娱乐', 'entertainment'),
-    ('人情', 'social'),
-    ('住房', 'housing'),
-    ('医药', 'medical'),
-    ('投资', 'investment'),
-    ('其他', 'other'),
+  static const List<String> parentKeys = [
+    'income',
+    'food',
+    'shopping',
+    'transport',
+    'education',
+    'entertainment',
+    'social',
+    'housing',
+    'medical',
+    'investment',
+    'other',
   ];
+
+  /// 一级分类 key → l10n 标签。在 build 时从 context.l10n 取值。
+  static String parentLabelFor(BuildContext context, String key) {
+    final l = context.l10n;
+    return switch (key) {
+      'income' => l.parentKeyIncome,
+      'food' => l.parentKeyFood,
+      'shopping' => l.parentKeyShopping,
+      'transport' => l.parentKeyTransport,
+      'education' => l.parentKeyEducation,
+      'entertainment' => l.parentKeyEntertainment,
+      'social' => l.parentKeySocial,
+      'housing' => l.parentKeyHousing,
+      'medical' => l.parentKeyMedical,
+      'investment' => l.parentKeyInvestment,
+      _ => l.parentKeyOther,
+    };
+  }
 
   @override
   ConsumerState<CategoryManagePage> createState() => _CategoryManagePageState();
@@ -39,7 +58,7 @@ class CategoryManagePage extends ConsumerStatefulWidget {
 
 class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
   List<Category>? _categories;
-  String _selectedParentKey = CategoryManagePage.parentTabs.first.$2;
+  String _selectedParentKey = CategoryManagePage.parentKeys.first;
 
   Future<void> _openAddCategory(String parentKey) async {
     final saved = await context.push<bool>(
@@ -81,7 +100,7 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.parentKey == null ? '分类管理' : parentLabelByKey(widget.parentKey!),
+          widget.parentKey == null ? context.l10n.categoryManageTitle : CategoryManagePage.parentLabelFor(context, widget.parentKey!),
         ),
         actions: [
           TextButton(
@@ -92,7 +111,7 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
               ),
             ),
             onPressed: _openReorderOrEdit,
-            child: Text(widget.parentKey == null ? '排序' : '编辑'),
+            child: Text(widget.parentKey == null ? context.l10n.categoryReorderTitle : context.l10n.edit),
           ),
         ],
       ),
@@ -111,7 +130,7 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
           final all = _categories!;
 
           final grouped = <String, List<Category>>{
-            for (final (_, key) in CategoryManagePage.parentTabs) key: <Category>[],
+            for (final key in CategoryManagePage.parentKeys) key: <Category>[],
           };
           for (final c in all) {
             final list = grouped[c.parentKey];
@@ -167,7 +186,7 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
                   height: 48,
                   child: FilledButton(
                     onPressed: () => _openAddCategory(widget.parentKey!),
-                    child: const Text('添加新的分类'),
+                    child: Text(context.l10n.categoryAddNew),
                   ),
                 ),
               ),
@@ -176,12 +195,6 @@ class _CategoryManagePageState extends ConsumerState<CategoryManagePage> {
     );
   }
 
-  String parentLabelByKey(String parentKey) {
-    for (final (label, key) in CategoryManagePage.parentTabs) {
-      if (key == parentKey) return label;
-    }
-    return '分类';
-  }
 }
 
 class _GlobalCategoryManageLayout extends StatelessWidget {
@@ -203,13 +216,9 @@ class _GlobalCategoryManageLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tabs = CategoryManagePage.parentTabs;
+    final tabs = CategoryManagePage.parentKeys;
     final categories = grouped[selectedParentKey] ?? const <Category>[];
-    final parentLabel = tabs
-            .where((e) => e.$2 == selectedParentKey)
-            .map((e) => e.$1)
-            .firstOrNull ??
-        '分类';
+    final parentLabel = CategoryManagePage.parentLabelFor(context, selectedParentKey);
 
     return Row(
       children: [
@@ -223,7 +232,8 @@ class _GlobalCategoryManageLayout extends StatelessWidget {
           child: ListView.builder(
             itemCount: tabs.length,
             itemBuilder: (context, index) {
-              final (label, key) = tabs[index];
+              final key = tabs[index];
+              final label = CategoryManagePage.parentLabelFor(context, key);
               final selected = key == selectedParentKey;
               return InkWell(
                 onTap: () => onSelectedParentKeyChanged(key),
@@ -313,7 +323,7 @@ class _ParentSection extends StatelessWidget {
                     ),
                     onPressed: onHeaderTap,
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('添加'),
+                    label: Text(context.l10n.add),
                   ),
               ],
             ),
@@ -360,7 +370,7 @@ class _CategoryRow extends ConsumerWidget {
       leading: Text(icon, style: const TextStyle(fontSize: 20)),
       title: Text(category.name),
       trailing: IconButton(
-        tooltip: category.isFavorite ? '取消收藏' : '收藏',
+        tooltip: category.isFavorite ? context.l10n.categoryUncollect : context.l10n.categoryCollect,
         icon: Icon(
           category.isFavorite ? Icons.star : Icons.star_border,
           color: category.isFavorite

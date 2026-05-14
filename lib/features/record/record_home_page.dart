@@ -12,6 +12,7 @@ import 'record_new_providers.dart';
 import 'record_providers.dart';
 import 'record_tile_actions.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/ledger_repository.dart';
@@ -82,10 +83,6 @@ String formatTxAmountForDetail(TransactionEntry tx, String ledgerCurrency) {
 class RecordHomePage extends ConsumerWidget {
   const RecordHomePage({super.key});
 
-  static const List<String> _weekdays = [
-    '周一', '周二', '周三', '周四', '周五', '周六', '周日',
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summary = ref.watch(recordMonthSummaryProvider);
@@ -107,6 +104,7 @@ class RecordHomePage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'record_home_fab',
+        tooltip: context.l10n.a11yRecordHomeNewFab,
         onPressed: () {
           ref.read(recordFormProvider.notifier).reset();
           showModalBottomSheet<void>(
@@ -158,13 +156,13 @@ class _TopBar extends ConsumerWidget {
       builder: (context, snapshot) {
         final ledger = snapshot.data;
         final emoji = ledger?.coverEmoji ?? '📒';
-        final name = ledger?.name ?? '账本';
+        final name = ledger?.name ?? context.l10n.ledgerDefaultName;
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
             children: [
               PopupMenuButton<Ledger>(
-                tooltip: '切换账本',
+                tooltip: context.l10n.recordSwitchLedger,
                 position: PopupMenuPosition.under,
                 offset: const Offset(0, 6),
                 onSelected: (selected) async {
@@ -216,6 +214,7 @@ class _TopBar extends ConsumerWidget {
               const Spacer(),
               const _SyncStatusBadge(),
               IconButton(
+                tooltip: context.l10n.a11yRecordHomeSwapCurrency,
                 icon: const Icon(Icons.swap_horiz, size: 22),
                 onPressed: () {
                   ref.read(recordFormProvider.notifier).reset();
@@ -238,14 +237,17 @@ class _TopBar extends ConsumerWidget {
                   );
                 },
                 visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
               IconButton(
+                tooltip: context.l10n.a11yRecordHomeSearch,
                 icon: const Icon(Icons.search, size: 22),
                 onPressed: () {
                   // Step 3.6：跳转搜索页 `/record/search`。
                   context.push('/record/search');
                 },
                 visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
             ],
           ),
@@ -267,6 +269,7 @@ class _SyncStatusBadge extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final state = ref.watch(syncTriggerProvider);
     if (!state.isConfigured) return const SizedBox.shrink();
 
@@ -284,59 +287,63 @@ class _SyncStatusBadge extends ConsumerWidget {
         ),
       );
       tint = colors.tertiary;
-      tooltip = '同步中…';
+      tooltip = l10n.recordSyncing;
     } else if (state.lastError != null) {
       icon = Icon(Icons.cloud_off_outlined, size: 18, color: colors.error);
       tint = colors.error;
-      tooltip = '同步失败：${state.lastError}';
+      tooltip = l10n.recordSyncFailed(state.lastError!);
     } else if (state.lastSyncedAt != null) {
       icon = Icon(Icons.cloud_done_outlined, size: 18, color: colors.tertiary);
       tint = colors.tertiary;
-      tooltip = '上次同步：${_formatRelative(state.lastSyncedAt!)}';
+      tooltip = l10n.recordLastSyncedAt(_formatRelative(context, state.lastSyncedAt!));
     } else {
       icon = Icon(Icons.cloud_outlined,
           size: 18, color: colors.onSurface.withAlpha(140));
       tint = colors.onSurface.withAlpha(140);
-      tooltip = '尚未同步';
+      tooltip = l10n.recordNeverSynced;
     }
 
     final ts = state.lastSyncedAt;
-    final tsLabel = ts == null ? null : _formatRelative(ts);
+    final tsLabel = ts == null ? null : _formatRelative(context, ts);
 
     return Tooltip(
       message: tooltip,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => context.push('/sync'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              icon,
-              if (tsLabel != null && !state.isRunning) ...[
-                const SizedBox(width: 4),
-                Text(
-                  tsLabel,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: tint,
-                      ),
-                ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                icon,
+                if (tsLabel != null && !state.isRunning) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    tsLabel,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tint,
+                        ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  String _formatRelative(DateTime t) {
+  String _formatRelative(BuildContext context, DateTime t) {
     final now = DateTime.now();
     final diff = now.difference(t);
-    if (diff.inSeconds < 60) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
-    if (diff.inHours < 24) return '${diff.inHours}小时前';
-    if (diff.inDays < 7) return '${diff.inDays}天前';
+    final l10n = context.l10n;
+    if (diff.inSeconds < 60) return l10n.recordJustNow;
+    if (diff.inMinutes < 60) return l10n.recordMinutesAgo(diff.inMinutes);
+    if (diff.inHours < 24) return l10n.recordHoursAgo(diff.inHours);
+    if (diff.inDays < 7) return l10n.recordDaysAgo(diff.inDays);
     return DateFormat('MM-dd HH:mm').format(t);
   }
 }
@@ -351,7 +358,7 @@ class _MonthBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final month = ref.watch(recordMonthProvider);
-    final monthLabel = '${month.year}年${month.month}月';
+    final monthLabel = context.l10n.recordYearMonth(month.year, month.month);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -359,10 +366,12 @@ class _MonthBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           IconButton(
+            tooltip: context.l10n.a11yRecordHomePrevMonth,
             icon: const Icon(Icons.chevron_left, size: 24),
             onPressed: () =>
                 ref.read(recordMonthProvider.notifier).previous(),
             visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
           // Step 3.7：点击月份文字弹出年-月选择器，可快速跳转到任意年月。
           InkWell(
@@ -377,21 +386,28 @@ class _MonthBar extends StatelessWidget {
                 ref.read(recordMonthProvider.notifier).jumpTo(picked);
               }
             },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Text(
-                monthLabel,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Center(
+                  child: Text(
+                    monthLabel,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                  ),
+                ),
               ),
             ),
           ),
           IconButton(
+            tooltip: context.l10n.a11yRecordHomeNextMonth,
             icon: const Icon(Icons.chevron_right, size: 24),
             onPressed: () =>
                 ref.read(recordMonthProvider.notifier).next(),
             visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
         ],
       ),
@@ -414,26 +430,27 @@ class _DataCards extends ConsumerWidget {
     final ledgerCurrency =
         ref.watch(currentLedgerDefaultCurrencyProvider).valueOrNull ?? 'CNY';
     final symbol = _symbolFor(ledgerCurrency);
+    final l10n = context.l10n;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
           _CardChip(
-            label: '收入',
+            label: l10n.txTypeIncome,
             amount: data?.income,
             colorKey: 'income',
             symbol: symbol,
           ),
           const SizedBox(height: 6),
           _CardChip(
-            label: '支出',
+            label: l10n.txTypeExpense,
             amount: data?.expense,
             colorKey: 'expense',
             symbol: symbol,
           ),
           const SizedBox(height: 6),
           _CardChip(
-            label: '结余',
+            label: l10n.recordBalance,
             amount: data?.balance,
             colorKey: 'balance',
             symbol: symbol,
@@ -550,7 +567,7 @@ class _QuickInputBarState extends ConsumerState<_QuickInputBar> {
     final text = _controller.text.trim();
     if (text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先输入一段话再点识别')),
+        SnackBar(content: Text(context.l10n.recordPleaseInputFirst)),
       );
       return;
     }
@@ -612,8 +629,8 @@ class _QuickInputBarState extends ConsumerState<_QuickInputBar> {
                       // 显式把所有 *Border 全部置 none，避免 M3 默认 focused 态
                       // 在内层叠加一个比外框小的圆角矩形（用户报告的"高亮比
                       // 外框小"现象）。
-                      decoration: const InputDecoration(
-                        hintText: '写点什么，我来帮你记 🐰',
+                      decoration: InputDecoration(
+                        hintText: context.l10n.recordQuickHint,
                         border: InputBorder.none,
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
@@ -638,7 +655,7 @@ class _QuickInputBarState extends ConsumerState<_QuickInputBar> {
             key: const Key('quick_input_recognize_button'),
             onPressed: _busy ? null : _handleSubmit,
             icon: const Text('✨', style: TextStyle(fontSize: 14)),
-            label: const Text('识别'),
+            label: Text(context.l10n.recordRecognize),
             style: TextButton.styleFrom(
               foregroundColor: colors.tertiary,
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -696,9 +713,12 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
   }
 
   String _dayLabel(DateTime date) {
-    final weekdays = RecordHomePage._weekdays;
+    final weekdays = [
+      context.l10n.weekdayMon, context.l10n.weekdayTue, context.l10n.weekdayWed,
+      context.l10n.weekdayThu, context.l10n.weekdayFri, context.l10n.weekdaySat, context.l10n.weekdaySun,
+    ];
     final wd = weekdays[date.weekday - 1];
-    return '${date.month}月${date.day}日 $wd';
+    return context.l10n.dateMonthDayWeekday(date.month, date.day, wd);
   }
 
   @override
@@ -750,7 +770,7 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
     return summary.when(
       skipLoadingOnReload: true,
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('加载失败：$e')),
+      error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
       data: (data) {
         // 1) 收集当前 data 里的 active id，把已经从 data 中消失的 id
         //    （= 后端刷新落地）从 `_locallyDeleted` 里清掉。这样
@@ -803,7 +823,7 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
                                 .withAlpha(128)),
                         const SizedBox(height: 12),
                         Text(
-                          '开始记第一笔吧 🐰',
+                          context.l10n.recordStartFirst,
                           style:
                               Theme.of(context).textTheme.bodyLarge?.copyWith(
                                     color: Theme.of(context)
@@ -893,18 +913,19 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
   Future<void> _onPullToRefresh(BuildContext context) async {
     final result = await ref.read(syncTriggerProvider.notifier).trigger();
     if (!context.mounted) return;
+    final l10n = context.l10n;
     switch (result.outcome) {
       case SyncTriggerOutcome.success:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已同步')),
+          SnackBar(content: Text(l10n.recordSynced)),
         );
       case SyncTriggerOutcome.networkUnavailable:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('网络不可用')),
+          SnackBar(content: Text(l10n.recordNetworkUnavailable)),
         );
       case SyncTriggerOutcome.failure:
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('同步失败：${result.message ?? ''}')),
+          SnackBar(content: Text(l10n.recordSyncFailedMsg(result.message ?? ''))),
         );
       case SyncTriggerOutcome.skipped:
         // 前一次还在跑——静默
@@ -988,18 +1009,18 @@ class _TxTileState extends ConsumerState<_TxTile> {
             ? resolveCategoryIcon(
                 matched.icon, matched.parentKey, matched.name, iconPack)
             : (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
-    final nameText = isTransfer ? '转账' : (matched?.name ?? '未分类');
+    final nameText = isTransfer ? context.l10n.txTypeTransfer : (matched?.name ?? context.l10n.txTypeUncategorized);
     final parentKey = _inferParentKey(matched, tx);
 
     String accountName(String? id) {
-      if (id == null || id.isEmpty) return '账户';
+      if (id == null || id.isEmpty) return context.l10n.recordNewWallet;
       for (final a in accounts) {
         if (a.id == id) return a.name;
       }
       // Step 7.2：账户已被软删（不在 listActive 结果里），但流水的
       // accountId 仍指向它——展示"（已删账户）"占位，避免 UI 误把
       // 缺失账户当作"未填写"。
-      return '（已删账户）';
+      return context.l10n.deletedAccount;
     }
 
     final transferSubTitle = isTransfer
@@ -1050,7 +1071,7 @@ class _TxTileState extends ConsumerState<_TxTile> {
             ref.invalidate(statsHeatmapCellsProvider);
             ref.invalidate(budgetProgressForProvider);
             messenger.showSnackBar(
-              const SnackBar(content: Text('已删除')),
+              SnackBar(content: Text(context.l10n.deleted)),
             );
           },
           background: Container(
@@ -1130,11 +1151,12 @@ class _TxTileState extends ConsumerState<_TxTile> {
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
+    final l10n = context.l10n;
     final ok = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('删除这条记录？'),
-            content: const Text('删除后可在后续垃圾桶中恢复。'),
+            title: Text(l10n.recordDeleteConfirm),
+            content: Text(l10n.recordDeleteHint),
             actions: [
               TextButton(
                 style: TextButton.styleFrom(
@@ -1142,7 +1164,7 @@ class _TxTileState extends ConsumerState<_TxTile> {
                   textStyle: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('取消'),
+                child: Text(l10n.cancel),
               ),
               TextButton(
                 style: TextButton.styleFrom(
@@ -1150,7 +1172,7 @@ class _TxTileState extends ConsumerState<_TxTile> {
                   textStyle: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('删除'),
+                child: Text(l10n.delete),
               ),
             ],
           ),
@@ -1234,18 +1256,19 @@ class _IdleReminderCardState extends ConsumerState<_IdleReminderCard> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '已经 $days 天没记账了，快来记一笔吧 🐻',
+                context.l10n.recordIdleReminder(days),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colors.onSurface.withAlpha(200),
                     ),
               ),
             ),
             IconButton(
+              tooltip: context.l10n.a11yRecordHomeDismissReminder,
               icon: Icon(Icons.close, size: 18, color: colors.onSurface.withAlpha(120)),
               onPressed: () => setState(() => _dismissed = true),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
             ),
           ],
         ),

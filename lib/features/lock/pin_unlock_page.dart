@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import 'app_lock_providers.dart';
 import 'biometric_authenticator.dart';
 import 'pin_credential.dart';
@@ -28,13 +29,13 @@ import 'pin_credential.dart';
 class PinUnlockPage extends ConsumerStatefulWidget {
   const PinUnlockPage({
     super.key,
-    this.subtitle = '请输入应用锁 PIN',
+    this.subtitle,
     this.allowBiometric = true,
     this.onUnlocked,
     this.showAppBar = true,
   });
 
-  final String subtitle;
+  final String? subtitle;
 
   /// 是否允许走生物识别。"修改 PIN" / "关闭应用锁" 这种"持有人确认"路径建议传
   /// false——避免随手扫脸/按指纹绕过验证；纯锁屏场景传 true。
@@ -135,7 +136,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
     });
 
     final auth = ref.read(biometricAuthenticatorProvider);
-    final result = await auth.authenticate(reason: '验证身份以解锁边边记账');
+    final result = await auth.authenticate(reason: context.l10n.pinUnlockBiometricVerify);
     if (!mounted) return;
 
     switch (result) {
@@ -153,19 +154,19 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
       case BiometricResult.lockedOut:
         setState(() {
           _biometricBusy = false;
-          _errorText = '生物识别已被系统临时锁定，请改用 PIN';
+          _errorText = context.l10n.pinUnlockBiometricLockedOut;
         });
         return;
       case BiometricResult.notAvailable:
         setState(() {
           _biometricBusy = false;
-          _errorText = '生物识别暂不可用，请改用 PIN';
+          _errorText = context.l10n.pinUnlockBiometricUnavailable;
         });
         return;
       case BiometricResult.failed:
         setState(() {
           _biometricBusy = false;
-          _errorText = '生物识别未通过，请改用 PIN';
+          _errorText = context.l10n.pinUnlockBiometricFailed;
         });
         return;
     }
@@ -211,11 +212,11 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
       _busy = false;
       _ctrl.clear();
       if (state.cooldownUntil != null) {
-        _errorText = '错误次数过多，已进入冷却';
+        _errorText = context.l10n.pinUnlockTooManyErrors;
         _maybeStartTicker();
       } else {
         final left = kPinFailureLimit - state.failures;
-        _errorText = 'PIN 错误，剩余尝试次数 $left';
+        _errorText = context.l10n.pinUnlockAttemptsLeft(left);
       }
     });
   }
@@ -250,7 +251,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
         );
 
     return Scaffold(
-      appBar: widget.showAppBar ? AppBar(title: const Text('解锁')) : null,
+      appBar: widget.showAppBar ? AppBar(title: Text(context.l10n.lockTitle)) : null,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -258,7 +259,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.subtitle,
+                widget.subtitle ?? context.l10n.pinUnlockSubtitle,
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 24),
@@ -283,7 +284,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: inputDisabled ? null : _onSubmit,
-                child: Text(coolingDown ? '冷却中（$cooldownLeft 秒）' : '验证'),
+                child: Text(coolingDown ? context.l10n.pinUnlockCooldown(cooldownLeft) : context.l10n.confirm),
               ),
               if (biometricAvailable) ...[
                 const SizedBox(height: 12),
@@ -291,7 +292,7 @@ class _PinUnlockPageState extends ConsumerState<PinUnlockPage> {
                   onPressed: inputDisabled ? null : _runBiometric,
                   icon: const Icon(Icons.fingerprint),
                   label: Text(
-                    _biometricBusy ? '请按提示完成生物识别…' : '使用指纹 / 面容解锁',
+                    _biometricBusy ? context.l10n.pinUnlockBiometricHint : context.l10n.pinUnlockBiometricButton,
                   ),
                 ),
               ],

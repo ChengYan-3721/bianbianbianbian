@@ -7,19 +7,8 @@ import '../local/dao/ledger_dao.dart';
 import '../local/dao/sync_op_dao.dart';
 import '../local/dao/transaction_entry_dao.dart';
 import 'entity_mappers.dart';
+import 'exceptions.dart';
 import 'repo_clock.dart';
-
-/// 账本名称重复——同一个名字在未软删的账本中只能出现一次。
-///
-/// Why: 删除账本后即使云端有备份也找不回来（V1 同步是按 ledgerId 寻址的，
-/// 普通用户也只能感知名字），允许重名会让用户在切换/恢复时分不清是谁。
-/// 已软删的账本不视为冲突——名字可以被新账本立即复用。
-class LedgerNameConflictException implements Exception {
-  const LedgerNameConflictException(this.name);
-  final String name;
-  @override
-  String toString() => 'LedgerNameConflictException: 已存在同名账本「$name」';
-}
 
 /// 账本仓库——对 UI 层以 [Ledger] 领域实体为契约。
 ///

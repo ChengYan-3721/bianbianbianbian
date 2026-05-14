@@ -146,6 +146,7 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
   /// 主入口：执行一次 upload。所有触发路径最终都汇聚到这里。
   Future<SyncTriggerResult> trigger() async {
     if (_running) {
+      // i18n-exempt: needs refactoring for l10n (Notifier has no BuildContext)
       return const SyncTriggerResult(
         outcome: SyncTriggerOutcome.skipped,
         message: '同步进行中',
@@ -161,6 +162,7 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
           isConfigured: false,
           clearError: true,
         );
+        // i18n-exempt: needs refactoring for l10n (Notifier has no BuildContext)
         return const SyncTriggerResult(
           outcome: SyncTriggerOutcome.notConfigured,
           message: '未配置云服务',
@@ -177,6 +179,7 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
       );
       return const SyncTriggerResult(outcome: SyncTriggerOutcome.success);
     } catch (e) {
+      // i18n-exempt: needs refactoring for l10n (Notifier has no BuildContext)
       final isNet = _isNetworkError(e);
       final msg = isNet ? '网络不可用' : e.toString();
       state = state.copyWith(

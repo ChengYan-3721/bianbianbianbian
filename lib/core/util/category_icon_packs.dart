@@ -10,6 +10,8 @@
 // "pack 默认"，返回当前激活 pack 的对应值；否则 → 视为用户自定义，原样返回。
 // 这使得切换 pack 后所有非自定义图标即时更新，无需批量写 DB / 产生 sync_op。
 
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
+
 /// 两套内置分类图标包。
 enum BianBianIconPack {
   sticker('sticker', '✏️ 手绘贴纸'),
@@ -21,7 +23,16 @@ enum BianBianIconPack {
   final String key;
 
   /// 展示用标签（emoji + 中文名）。
+  // i18n-exempt: legacy fallback; UI should use localizedLabel()
   final String label;
+
+  /// 返回当前 locale 下的本地化名称（UI 展示用）。
+  String localizedLabel(AppLocalizations l10n) {
+    return switch (this) {
+      BianBianIconPack.sticker => l10n.iconPackSticker,
+      BianBianIconPack.flat => l10n.iconPackFlat,
+    };
+  }
 
   /// 从持久化 key 解析枚举；未知值 / null 回退 [sticker]。
   static BianBianIconPack fromKey(String? key) {
@@ -35,6 +46,7 @@ enum BianBianIconPack {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 手绘贴纸 pack——与 DefaultSeeder.categoriesByParent 完全一致的 emoji。
+// i18n-exempt: category names are DB lookup keys matching seeded data.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const Map<String, Map<String, String>> _stickerIcons = {
@@ -124,6 +136,7 @@ const Map<String, Map<String, String>> _stickerIcons = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 扁平简约 pack——更简洁、符号化的 emoji 替代方案。
+// i18n-exempt: category names are DB lookup keys matching seeded data.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const Map<String, Map<String, String>> _flatIcons = {

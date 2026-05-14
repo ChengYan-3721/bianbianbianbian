@@ -1,3 +1,4 @@
+// i18n-exempt: third-party CSV format detection keyword
 import 'package:flutter/foundation.dart' show immutable, visibleForTesting;
 import 'package:intl/intl.dart';
 

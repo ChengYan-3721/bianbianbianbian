@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../app/app_theme.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/budget.dart';
@@ -23,21 +24,21 @@ class BudgetListPage extends ConsumerWidget {
     final categoriesAsync = ref.watch(budgetableCategoriesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('预算')),
+      appBar: AppBar(title: Text(context.l10n.budgetTitle)),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final saved = await context.push<bool>('/budget/edit');
           if (saved == true) ref.invalidate(activeBudgetsProvider);
         },
         icon: const Icon(Icons.add),
-        label: const Text('新建预算'),
+        label: Text(context.l10n.budgetNew),
       ),
       body: budgetsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('加载失败：$e')),
+        error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
         data: (budgets) => categoriesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('加载失败：$e')),
+          error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
           data: (categories) {
             if (budgets.isEmpty) {
               return const _EmptyState();
@@ -75,16 +76,16 @@ class BudgetListPage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除预算'),
-        content: const Text('删除后将无法恢复，确定继续？'),
+        title: Text(context.l10n.budgetDeleteConfirm),
+        content: Text(context.l10n.budgetDeleteHint),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('删除'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -95,7 +96,7 @@ class BudgetListPage extends ConsumerWidget {
     ref.invalidate(activeBudgetsProvider);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('已删除')));
+        .showSnackBar(SnackBar(content: Text(context.l10n.deleted)));
   }
 }
 
@@ -111,7 +112,7 @@ class _EmptyState extends StatelessWidget {
           const Icon(Icons.savings_outlined, size: 64, color: Colors.black26),
           const SizedBox(height: 12),
           Text(
-            '还没有预算\n点右下角加一个吧 🐰',
+            context.l10n.budgetEmptyHint,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -140,10 +141,10 @@ class _BudgetCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final semantic = theme.extension<BianBianSemanticColors>()!;
-    final periodLabel = budget.period == 'monthly' ? '月预算' : '年预算';
+    final periodLabel = budget.period == 'monthly' ? context.l10n.periodMonthBudget : context.l10n.periodYearBudget;
     final title = budget.categoryId == null
-        ? '总预算'
-        : (category?.name ?? '（已删除分类）');
+        ? context.l10n.budgetTotal
+        : (category?.name ?? context.l10n.budgetDeletedCategory);
 
     final progressAsync = ref.watch(budgetProgressForProvider(budget));
 
@@ -158,7 +159,7 @@ class _BudgetCard extends ConsumerWidget {
 
     final subtitle = StringBuffer(periodLabel);
     if (budget.carryOver) {
-      subtitle.write(' · 结转');
+      subtitle.write(context.l10n.budgetCarryOverLabel);
       if (liveCarry > 0) {
         subtitle.write(' ¥${_fmt.format(liveCarry)}');
       }
@@ -210,7 +211,7 @@ class _BudgetCard extends ConsumerWidget {
                       ),
                       if (showAvailable)
                         Text(
-                          '可用 ¥${_fmt.format(available)}',
+                          context.l10n.budgetAvailable(_fmt.format(available)),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: semantic.success,
                             fontWeight: FontWeight.w600,
@@ -221,7 +222,7 @@ class _BudgetCard extends ConsumerWidget {
                   IconButton(
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline),
-                    tooltip: '删除',
+                    tooltip: context.l10n.delete,
                   ),
                 ],
               ),
@@ -257,7 +258,7 @@ class _ProgressSection extends ConsumerWidget {
     return progressAsync.when(
       loading: () => const _ProgressPlaceholder(),
       error: (e, _) => Text(
-        '进度计算失败：$e',
+        context.l10n.budgetProgressFailed(e.toString()),
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: semantic.danger,
             ),
@@ -305,7 +306,7 @@ class _ProgressSection extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '已花 ¥${_fmt.format(progress.spent)} / ¥${_fmt.format(progress.limit)}',
+                  context.l10n.budgetSpentOverLimit(_fmt.format(progress.spent), _fmt.format(progress.limit)),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 Text(
@@ -344,7 +345,7 @@ class _ProgressPlaceholder extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          '进度计算中…',
+          context.l10n.budgetProgressCalculating,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],

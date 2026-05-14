@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+// i18n-exempt: Chinese text parsing keywords - algorithm logic, not UI text.
+
 /// 中文快速记账文本的本地解析结果。
 ///
 /// 字段语义详见 [QuickTextParser.parse] 的注释；任一字段为 null 表示该维度未识别，

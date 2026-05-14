@@ -6,6 +6,10 @@ import 'package:http/http.dart' as http;
 
 import '../settings/ai_input_settings_providers.dart';
 
+// i18n-exempt: service error message (no BuildContext available)
+// All Chinese strings in this file are thrown as AiEnhanceException and
+// caught in the UI layer where they are localized via ARB keys.
+
 /// Step 9.3：AI 增强返回的解析结果。
 ///
 /// 与 [QuickParseResult] 的字段集刻意保持子集语义——LLM 的角色是"补救本地

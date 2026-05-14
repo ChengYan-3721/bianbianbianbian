@@ -25,13 +25,16 @@ class ReminderService {
 
   /// 通知 channel ID / name（Android O+ 必需）。
   static const _channelId = 'daily_reminder';
+  // i18n-exempt: notification content (no BuildContext available)
   static const _channelName = '每日记账提醒';
+  // i18n-exempt: notification content (no BuildContext available)
   static const _channelDesc = '每天定时提醒你记一笔';
 
   /// 调度通知的固定 ID——每天只用一个，新调度覆盖旧调度。
   static const _notificationId = 0;
 
   /// 可爱风提醒文案池——每天随机选一条，避免千篇一律。
+  // i18n-exempt: notification content (no BuildContext available)
   static const _messages = [
     '今天还没记一笔呢 🐻',
     '记账时间到啦 🐰',
@@ -147,6 +150,7 @@ class ReminderService {
 
     await _plugin.zonedSchedule(
       id: _notificationId,
+      // i18n-exempt: notification content (no BuildContext available)
       title: '边边记账',
       body: message,
       scheduledDate: scheduled,
@@ -167,6 +171,7 @@ class ReminderService {
   /// 立即展示一条测试通知——供设置页"测试提醒"按钮使用。
   Future<void> showTestNotification() async {
     if (!_initialized) await initialize();
+    // i18n-exempt: notification content (no BuildContext available)
     const message = '这是一条测试提醒 🐻 记账时间到啦！';
     const androidDetails = AndroidNotificationDetails(
       _channelId,
@@ -184,6 +189,7 @@ class ReminderService {
     );
     await _plugin.show(
       id: _notificationId + 1,
+      // i18n-exempt: notification content (no BuildContext available)
       title: '边边记账',
       body: message,
       notificationDetails: details,

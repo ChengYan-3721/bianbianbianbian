@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/crypto/bianbian_crypto.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart';
@@ -65,7 +66,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('导入')),
+      appBar: AppBar(title: Text(context.l10n.importTitle)),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -86,13 +87,13 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       case _Stage.preview:
         return _buildPreview(context);
       case _Stage.applying:
-        return const Center(
+        return Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 12),
-              Text('正在写入数据库…'),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 12),
+              Text(context.l10n.importWritingDb),
             ],
           ),
         );
@@ -116,17 +117,15 @@ class _ImportPageState extends ConsumerState<ImportPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('支持的文件格式', style: theme.textTheme.titleMedium),
+                Text(context.l10n.importSupportedFormats, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
-                const _BulletLine(text: 'JSON：本 App 导出的结构化备份（推荐）'),
-                const _BulletLine(text: '.bbbak：本 App 导出的加密备份（需要密码）'),
-                const _BulletLine(text: 'CSV：本 App 导出的表格（按账本名匹配）'),
-                const _BulletLine(text: '第三方账单：钱迹 / 微信 / 支付宝 CSV（自动识别）'),
+                _BulletLine(text: context.l10n.importJsonDesc),
+                _BulletLine(text: context.l10n.importBbbakDesc),
+                _BulletLine(text: context.l10n.importCsvDesc),
+                _BulletLine(text: context.l10n.importThirdPartyDesc),
                 const SizedBox(height: 12),
                 Text(
-                  '提示：第三方账单会被识别为单一账本，自动归入当前账本；分类按关键词推测，'
-                  '不能命中的归到「其他」。',
-                  style: theme.textTheme.bodySmall,
+                  context.l10n.importThirdPartyTip,
                 ),
               ],
             ),
@@ -136,13 +135,14 @@ class _ImportPageState extends ConsumerState<ImportPage> {
         FilledButton.icon(
           onPressed: _pickFile,
           icon: const Icon(Icons.folder_open),
-          label: const Text('选择备份文件'),
+          label: Text(context.l10n.importSelectFile),
         ),
       ],
     );
   }
 
   Future<void> _pickFile() async {
+    final l10n = context.l10n;
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -155,7 +155,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       final file = result.files.single;
       final path = file.path;
       if (path == null) {
-        _showError('文件路径不可读');
+        _showError(l10n.importFilePathError);
         return;
       }
       final BackupImportFileType detected;
@@ -180,7 +180,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       }
       await _runPreview(password: null);
     } catch (e) {
-      _showError('选择文件失败：$e');
+      _showError(l10n.importSelectFileFailed(e.toString()));
     }
   }
 
@@ -191,7 +191,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('已选择：${_pickedFile?.name ?? ""}',
+        Text(context.l10n.importSelectedFile(_pickedFile?.name ?? ''),
             style: theme.textTheme.bodyMedium),
         const SizedBox(height: 12),
         Card(
@@ -206,7 +206,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '此文件已加密。请输入导出时设置的密码。',
+                    context.l10n.importEncryptedFileHint,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onErrorContainer,
                     ),
@@ -221,7 +221,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
           controller: _passwordCtrl,
           obscureText: _passwordObscured,
           decoration: InputDecoration(
-            labelText: '密码',
+            labelText: context.l10n.importPassword,
             border: const OutlineInputBorder(),
             suffixIcon: IconButton(
               icon: Icon(_passwordObscured
@@ -229,7 +229,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                   : Icons.visibility_off_outlined),
               onPressed: () =>
                   setState(() => _passwordObscured = !_passwordObscured),
-              tooltip: _passwordObscured ? '显示密码' : '隐藏密码',
+              tooltip: _passwordObscured ? context.l10n.exportShowPassword : context.l10n.exportHidePassword,
             ),
           ),
           onSubmitted: (_) => _onPasswordSubmit(),
@@ -240,14 +240,14 @@ class _ImportPageState extends ConsumerState<ImportPage> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _resetToIdle,
-                child: const Text('取消'),
+                child: Text(context.l10n.cancel),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
                 onPressed: _passwordCtrl.text.isEmpty ? null : _onPasswordSubmit,
-                child: const Text('解密并预览'),
+                child: Text(context.l10n.importDecryptAndPreview),
               ),
             ),
           ],
@@ -263,10 +263,11 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   }
 
   Future<void> _runPreview({required String? password}) async {
+    final l10n = context.l10n;
     final bytes = _bytes;
     final type = _pickedType;
     if (bytes == null || type == null) {
-      _showError('内部状态错误：缺少文件字节或类型');
+    _showError(l10n.importInternalError);
       return;
     }
     setState(() => _stage = _Stage.parsing);
@@ -282,13 +283,13 @@ class _ImportPageState extends ConsumerState<ImportPage> {
         _stage = _Stage.preview;
       });
     } on DecryptionFailure {
-      _showError('密码错误。请检查密码是否正确，或文件是否被损坏。');
+      _showError(l10n.importPasswordWrong);
     } on BbbakFormatException catch (e) {
-      _showError('文件格式不识别（${e.message}）。请检查是否选错文件。');
+      _showError(l10n.importFormatUnrecognized(e.message));
     } on BackupImportException catch (e) {
       _showError(e.message);
     } catch (e) {
-      _showError('解析失败：$e');
+      _showError(l10n.importParseFailed(e.toString()));
     }
   }
 
@@ -310,32 +311,31 @@ class _ImportPageState extends ConsumerState<ImportPage> {
               children: [
                 _SummaryRow(
                   icon: Icons.description_outlined,
-                  label: '文件',
+                  label: context.l10n.importFileLabel,
                   value: '${_pickedFile?.name ?? ""}'
                       ' · ${_typeLabel(preview.fileType)}',
                 ),
                 if (isThirdParty)
                   _SummaryRow(
                     icon: Icons.auto_awesome,
-                    label: '识别为',
+                    label: context.l10n.importRecognizedAs,
                     value: preview.thirdPartyTemplateName!,
                   ),
                 _SummaryRow(
                   icon: Icons.menu_book_outlined,
-                  label: '账本数',
+                  label: context.l10n.importLedgerCount,
                   value: '${preview.ledgerCount}',
                 ),
                 _SummaryRow(
                   icon: Icons.list_alt,
-                  label: '流水数',
+                  label: context.l10n.importTxCount,
                   value: '${preview.transactionCount}',
                 ),
                 if (isThirdParty && preview.unmappedCategoryCount > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      '其中 ${preview.unmappedCategoryCount} 条按关键词未匹配到本地分类，'
-                      '已归入「其他」。',
+                      context.l10n.importUnmappedCategoryTip(preview.unmappedCategoryCount),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.tertiary,
                       ),
@@ -344,13 +344,13 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                 if (preview.exportedAt != null)
                   _SummaryRow(
                     icon: Icons.schedule,
-                    label: '导出时间',
+                    label: context.l10n.importExportTime,
                     value: preview.exportedAt!.toLocal().toString(),
                   ),
                 if (preview.sourceDeviceId != null)
                   _SummaryRow(
                     icon: Icons.devices_other,
-                    label: '来源设备',
+                    label: context.l10n.importSourceDevice,
                     value: preview.sourceDeviceId!,
                   ),
               ],
@@ -358,12 +358,12 @@ class _ImportPageState extends ConsumerState<ImportPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Text('前 ${preview.sampleRows.length} 行预览', style: theme.textTheme.titleSmall),
+        Text(context.l10n.importSampleRows(preview.sampleRows.length), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         Expanded(
           child: Card(
             child: preview.sampleRows.isEmpty
-                ? const Center(child: Text('备份内不含流水'))
+                ? Center(child: Text(context.l10n.importNoTxInBackup))
                 : ListView.separated(
                     padding: const EdgeInsets.all(8),
                     itemCount: preview.sampleRows.length,
@@ -375,15 +375,13 @@ class _ImportPageState extends ConsumerState<ImportPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Text('去重策略', style: theme.textTheme.titleSmall),
+        Text(context.l10n.importDedupStrategy, style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
         if (isCsv)
           Text(
             isThirdParty
-                ? '第三方账单不含本 App 的 ID，会作为「全部新记录」导入；账本归入当前账本，'
-                    '账户列若与现有账户同名会被关联，否则置空。'
-                : 'CSV 文件不含 ID，只能作为「全部新记录」导入；账本/分类/账户按名称匹配，'
-                    '匹配不到时归到当前账本，分类/账户列空。',
+                ? context.l10n.importCsvThirdPartyDesc
+                : context.l10n.importCsvNoIdDesc,
             style: theme.textTheme.bodySmall,
           )
         else
@@ -392,22 +390,22 @@ class _ImportPageState extends ConsumerState<ImportPage> {
               _StrategyTile(
                 value: BackupDedupeStrategy.skip,
                 groupValue: _strategy,
-                title: '跳过已存在',
-                subtitle: '已经存在相同 ID 的流水会被忽略——适合多次导入同一份备份',
+                title: context.l10n.importDedupSkip,
+                subtitle: context.l10n.importDedupSkipDesc,
                 onChanged: (v) => setState(() => _strategy = v!),
               ),
               _StrategyTile(
                 value: BackupDedupeStrategy.overwrite,
                 groupValue: _strategy,
-                title: '覆盖',
-                subtitle: '已存在的 ID 会被备份内容覆盖——适合用备份恢复部分流水',
+                title: context.l10n.importDedupOverwrite,
+                subtitle: context.l10n.importDedupOverwriteDesc,
                 onChanged: (v) => setState(() => _strategy = v!),
               ),
               _StrategyTile(
                 value: BackupDedupeStrategy.asNew,
                 groupValue: _strategy,
-                title: '全部作为新记录',
-                subtitle: '每条都生成新 ID，可能产生重复——适合合并别人的备份',
+                title: context.l10n.importDedupAllNew,
+                subtitle: context.l10n.importDedupAllNewDesc,
                 onChanged: (v) => setState(() => _strategy = v!),
               ),
             ],
@@ -418,14 +416,14 @@ class _ImportPageState extends ConsumerState<ImportPage> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _resetToIdle,
-                child: const Text('取消'),
+                child: Text(context.l10n.cancel),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
                 onPressed: _applyImport,
-                child: const Text('确认导入'),
+                child: Text(context.l10n.importConfirmImport),
               ),
             ),
           ],
@@ -435,6 +433,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   }
 
   Future<void> _applyImport() async {
+    final l10n = context.l10n;
     final preview = _preview;
     if (preview == null) return;
     setState(() => _stage = _Stage.applying);
@@ -462,7 +461,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       });
       _invalidateAffectedProviders();
     } catch (e) {
-      _showError('写入失败：$e');
+      _showError(l10n.importWriteFailed(e.toString()));
     }
   }
 
@@ -493,7 +492,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '导入完成',
+                    context.l10n.importComplete,
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
@@ -512,36 +511,34 @@ class _ImportPageState extends ConsumerState<ImportPage> {
               children: [
                 _SummaryRow(
                   icon: Icons.menu_book_outlined,
-                  label: '账本',
-                  value: '${r.ledgersWritten} 条 upsert',
+                  label: context.l10n.importLedgerUpsert(r.ledgersWritten),
+                  value: '',
                 ),
                 _SummaryRow(
                   icon: Icons.category_outlined,
-                  label: '分类',
-                  value: '${r.categoriesWritten} 条 upsert',
+                  label: context.l10n.importCategoryUpsert(r.categoriesWritten),
+                  value: '',
                 ),
                 _SummaryRow(
                   icon: Icons.account_balance_wallet_outlined,
-                  label: '账户',
-                  value: '${r.accountsWritten} 条 upsert',
+                  label: context.l10n.importAccountUpsert(r.accountsWritten),
+                  value: '',
                 ),
                 _SummaryRow(
                   icon: Icons.list_alt,
-                  label: '流水',
-                  value:
-                      '${r.transactionsWritten} 条写入 / ${r.transactionsSkipped} 条跳过',
+                  label: context.l10n.importTxWrite(r.transactionsWritten, r.transactionsSkipped),
+                  value: '',
                 ),
                 _SummaryRow(
                   icon: Icons.savings_outlined,
-                  label: '预算',
-                  value: '${r.budgetsWritten} 条 upsert',
+                  label: context.l10n.importBudgetUpsert(r.budgetsWritten),
+                  value: '',
                 ),
                 if (r.unresolvedLedgerLabels.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '提示：账本「${r.unresolvedLedgerLabels.join("、")}」未匹配到，'
-                      '已归入当前账本。',
+                      context.l10n.importLedgerNotMatched(r.unresolvedLedgerLabels.join('、')),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.tertiary,
                       ),
@@ -557,14 +554,14 @@ class _ImportPageState extends ConsumerState<ImportPage> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _resetToIdle,
-                child: const Text('继续导入其他文件'),
+                child: Text(context.l10n.importContinueOther),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('完成'),
+                child: Text(context.l10n.done),
               ),
             ),
           ],
@@ -592,7 +589,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _errorText ?? '未知错误',
+                    _errorText ?? context.l10n.importUnknownError,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onErrorContainer,
                     ),
@@ -605,7 +602,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
         const SizedBox(height: 16),
         FilledButton(
           onPressed: _resetToIdle,
-          child: const Text('重新选择'),
+          child: Text(context.l10n.importReselect),
         ),
       ],
     );
@@ -637,7 +634,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       case BackupImportFileType.json:
         return 'JSON';
       case BackupImportFileType.bbbak:
-        return '加密备份 (.bbbak)';
+        return context.l10n.importBbbakLabel;
       case BackupImportFileType.csv:
         return 'CSV';
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/l10n/l10n_ext.dart';
+
 /// Step 3.7：自定义"年-月"快速选择器。
 ///
 /// 接入 `record_home_page.dart` 顶部月份显示区域：点击显示文字弹出本对话框，
@@ -92,17 +94,18 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
         children: [
           IconButton(
             key: const Key('month_picker_prev_year'),
-            tooltip: '上一年',
+            tooltip: context.l10n.recordMonthPrevYear,
             onPressed: _canPrevYear()
                 ? () => setState(() => _displayYear--)
                 : null,
             icon: const Icon(Icons.chevron_left),
             visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
           Expanded(
             child: Center(
               child: Text(
-                '$_displayYear 年',
+                context.l10n.recordMonthYear(_displayYear),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -111,12 +114,13 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           ),
           IconButton(
             key: const Key('month_picker_next_year'),
-            tooltip: '下一年',
+            tooltip: context.l10n.recordMonthNextYear,
             onPressed: _canNextYear()
                 ? () => setState(() => _displayYear++)
                 : null,
             icon: const Icon(Icons.chevron_right),
             visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
         ],
       ),
@@ -127,7 +131,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           crossAxisCount: 4,
           mainAxisSpacing: 6,
           crossAxisSpacing: 6,
-          childAspectRatio: 1.6,
+          childAspectRatio: 1.45,
           physics: const NeverScrollableScrollPhysics(),
           children: [
             for (int month = 1; month <= 12; month++)
@@ -147,12 +151,12 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           style: TextButton.styleFrom(
             foregroundColor: colors.onSurface,
           ),
-          child: const Text('取消'),
+          child: Text(context.l10n.cancel),
         ),
         FilledButton(
           key: const Key('month_picker_confirm'),
           onPressed: _confirm,
-          child: const Text('确定'),
+          child: Text(context.l10n.confirmOk),
         ),
       ],
     );
@@ -194,7 +198,7 @@ class _MonthCell extends StatelessWidget {
         onTap: enabled ? onTap : null,
         child: Center(
           child: Text(
-            '$month 月',
+            context.l10n.recordMonthMonth(month),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: fg,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,

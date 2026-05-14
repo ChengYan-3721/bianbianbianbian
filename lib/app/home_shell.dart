@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/l10n/l10n_ext.dart';
 import '../features/budget/budget_providers.dart';
 import '../features/ledger/ledger_list_page.dart';
 import '../features/ledger/ledger_providers.dart';
@@ -38,13 +39,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     const _MeTab(),
   ];
 
-  static const List<_HomeTab> _tabs = [
-    _HomeTab(label: '记账', icon: Icons.edit_note),
-    _HomeTab(label: '统计', icon: Icons.pie_chart_outline),
-    _HomeTab(label: '账本', icon: Icons.menu_book_outlined),
-    _HomeTab(label: '我的', icon: Icons.person_outline),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -76,11 +70,22 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         currentIndex: _currentIndex,
         onTap: _onTabTap,
         items: [
-          for (final tab in _tabs)
-            BottomNavigationBarItem(
-              icon: Icon(tab.icon),
-              label: tab.label,
-            ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.edit_note),
+            label: context.l10n.tabRecord,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.pie_chart_outline),
+            label: context.l10n.tabStats,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.menu_book_outlined),
+            label: context.l10n.tabLedger,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.person_outline),
+            label: context.l10n.tabMe,
+          ),
         ],
       ),
     );
@@ -117,83 +122,83 @@ class _MeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('我的')),
+      appBar: AppBar(title: Text(context.l10n.tabMe)),
       body: ListView(
         children: [
           ListTile(
             leading: const Icon(Icons.palette_outlined),
-            title: const Text('外观'),
+            title: Text(context.l10n.meAppearance),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/theme'),
           ),
           ListTile(
             leading: const Icon(Icons.notifications_outlined),
-            title: const Text('提醒'),
+            title: Text(context.l10n.meReminder),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/reminder'),
           ),
           ListTile(
             leading: const Icon(Icons.savings_outlined),
-            title: const Text('预算'),
+            title: Text(context.l10n.meBudget),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/budget'),
           ),
           ListTile(
             leading: const Icon(Icons.account_balance_wallet_outlined),
-            title: const Text('资产'),
+            title: Text(context.l10n.meAssets),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/accounts'),
           ),
           ListTile(
             leading: const Icon(Icons.public),
-            title: const Text('多币种'),
+            title: Text(context.l10n.meMultiCurrency),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/multi-currency'),
           ),
           ListTile(
             leading: const Icon(Icons.auto_awesome),
-            title: const Text('快速输入 · AI 增强'),
+            title: Text(context.l10n.meAiInput),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/ai-input'),
           ),
           ListTile(
             leading: const Icon(Icons.cloud_sync_outlined),
-            title: const Text('云服务'),
+            title: Text(context.l10n.meCloudService),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/sync'),
           ),
           ListTile(
             leading: const Icon(Icons.image_outlined),
-            title: const Text('附件缓存'),
+            title: Text(context.l10n.meAttachmentCache),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/attachment-cache'),
           ),
           ListTile(
             leading: const Icon(Icons.import_export),
-            title: const Text('导入 / 导出'),
+            title: Text(context.l10n.meImportExport),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/import-export'),
           ),
           ListTile(
             leading: const Icon(Icons.lock_outline),
-            title: const Text('应用锁'),
+            title: Text(context.l10n.meAppLock),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/app-lock'),
           ),
           ListTile(
             leading: const Icon(Icons.delete_outline),
-            title: const Text('垃圾桶'),
+            title: Text(context.l10n.meTrash),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/trash'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: Text(context.l10n.meAbout),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/about'),
           ),
         ],
       ),
     );
   }
-}
-
-class _HomeTab {
-  const _HomeTab({required this.label, required this.icon});
-  final String label;
-  final IconData icon;
 }

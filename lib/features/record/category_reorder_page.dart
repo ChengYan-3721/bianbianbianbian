@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
 import 'category_manage_page.dart';
@@ -42,22 +43,19 @@ class _CategoryReorderPageState extends ConsumerState<CategoryReorderPage> {
     return sorted;
   }
 
-  String get _parentLabel {
-    for (final (label, key) in CategoryManagePage.parentTabs) {
-      if (key == widget.parentKey) return label;
-    }
-    return '分类';
+  String _parentLabel(BuildContext context) {
+    return CategoryManagePage.parentLabelFor(context, widget.parentKey);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_parentLabel),
+        title: Text(_parentLabel(context)),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('保存'),
+            child: Text(context.l10n.save),
           ),
         ],
       ),
@@ -68,12 +66,12 @@ class _CategoryReorderPageState extends ConsumerState<CategoryReorderPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('加载失败：${snapshot.error}'));
+            return Center(child: Text(context.l10n.loadFailedWithError(snapshot.error.toString())));
           }
           _items ??= [...?snapshot.data];
           final items = _items!;
           if (items.isEmpty) {
-            return const Center(child: Text('暂无分类'));
+            return Center(child: Text(context.l10n.categoryNoCategory));
           }
           return ReorderableListView.builder(
             buildDefaultDragHandles: false,
@@ -91,7 +89,7 @@ class _CategoryReorderPageState extends ConsumerState<CategoryReorderPage> {
               return ListTile(
                 key: ValueKey(c.id),
                 leading: IconButton(
-                  tooltip: marked ? '取消删除' : '删除',
+                  tooltip: marked ? context.l10n.categoryUndoDelete : context.l10n.delete,
                   icon: Icon(
                     Icons.delete_outline,
                     color: marked
@@ -163,7 +161,7 @@ class _CategoryReorderPageState extends ConsumerState<CategoryReorderPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
+        SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

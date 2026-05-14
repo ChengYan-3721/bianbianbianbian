@@ -79,9 +79,11 @@ class FxRateRefreshService {
 
   Future<void> setManualRate(String code, double rateToCny) async {
     if (code == 'CNY') {
+      // i18n-exempt: validation error in non-UI service
       throw ArgumentError.value(code, 'code', 'CNY 是基准币种，不可手动覆盖');
     }
     if (!rateToCny.isFinite || rateToCny <= 0) {
+      // i18n-exempt: validation error in non-UI service
       throw ArgumentError.value(rateToCny, 'rateToCny', '汇率必须为正数');
     }
     await _db.fxRateDao.setManualRate(

@@ -6,16 +6,8 @@ import '../local/app_database.dart';
 import '../local/dao/budget_dao.dart';
 import '../local/dao/sync_op_dao.dart';
 import 'entity_mappers.dart';
+import 'exceptions.dart';
 import 'repo_clock.dart';
-
-/// 预算唯一性冲突——同一账本、同一周期、同一分类（含 `categoryId == null` 总
-/// 预算）下只能存在一个未软删的预算（Step 6.1 验收）。
-class BudgetConflictException implements Exception {
-  const BudgetConflictException(this.message);
-  final String message;
-  @override
-  String toString() => 'BudgetConflictException: $message';
-}
 
 /// 预算仓库——语义与职责同 [LedgerRepository]；类型换成 [Budget]。
 abstract class BudgetRepository {
@@ -96,9 +88,8 @@ class LocalBudgetRepository implements BudgetRepository {
       );
       if (dup != null) {
         throw BudgetConflictException(
-          stamped.categoryId == null
-              ? '该账本的${_periodLabel(stamped.period)}总预算已存在'
-              : '该分类的${_periodLabel(stamped.period)}预算已存在',
+          period: stamped.period,
+          isTotal: stamped.categoryId == null,
         );
       }
       await _dao.upsert(budgetToCompanion(stamped));
@@ -241,14 +232,4 @@ class LocalBudgetRepository implements BudgetRepository {
     return query.getSingleOrNull();
   }
 
-  static String _periodLabel(String period) {
-    switch (period) {
-      case 'monthly':
-        return '月';
-      case 'yearly':
-        return '年';
-      default:
-        return period;
-    }
-  }
 }

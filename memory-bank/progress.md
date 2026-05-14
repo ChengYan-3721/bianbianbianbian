@@ -3807,3 +3807,242 @@ Android 原生小组件：
 - **深链路径 `bianbian://app/record/new`**——host 设为 `app` 是为了与 go_router 的 path 匹配：URI 的 path 部分 `/record/new` 直接命中 go_router 的 `GoRoute(path: '/record/new')`。不要省掉 host（`bianbian:///record/new`），部分 Android 版本解析空 host 会出错。
 - **记账后小组件刷新是 fire-and-forget**——`_updateWidgetData()` 不阻塞 `save()` 的返回。失败静默——不影响记账主流程。
 - **结余为负时 Android Provider 变色**——`parseAmount` 从格式化字符串中提取数值，负值时 `setTextColor` 为苹果红 `#E76F51`，与 App 内 `DataCards` 的结余逻辑一致。
+
+---
+
+### ✅ Step 17.1 i18n 骨架（2026-05-12）
+
+**改动**
+
+核心基建：
+- `l10n.yaml`（新建）：Flutter gen-l10n 配置（`arb-dir: lib/l10n`、`template-arb-file: app_zh.arb`、`nullable-getter: false`）。
+- `pubspec.yaml`：添加 `flutter: generate: true`。
+- `lib/l10n/app_zh.arb`（新建，~570 keys）：完整简中 ARB 文件，覆盖所有 UI 字符串。含参数化 key 的 `@key` 占位符元数据。
+- `lib/core/l10n/l10n_ext.dart`（新建）：`BuildContextL10n` extension，提供 `context.l10n` 快捷访问 `AppLocalizations.of(this)`。
+
+应用根与路由：
+- `lib/app/app.dart`：替换手工 `GlobalMaterialLocalizations.delegate` 为 `AppLocalizations.localizationsDelegates`；替换硬编码 `supportedLocales` 为 `AppLocalizations.supportedLocales`；设置 `locale: const Locale('zh')`。`title: '边边记账'` 标注 `// i18n-exempt: app title used before localization is available`。
+- `lib/app/home_shell.dart`：移除 `_HomeTab` 类和 `_tabs` 静态常量，底部导航标签改为 build 时从 `context.l10n` 取值。`_MeTab` 全部中文替换为 l10n。
+- `lib/app/app_theme.dart`：`BianBianTheme` 和 `FontSize` 枚举的 `label` 字段移除，改为 extension 方法 `label(BuildContext context)` 从 l10n 取值。调用处从 `theme.label` 改为 `theme.label(context)`。
+
+数据/工具层：
+- `lib/core/util/currencies.dart`：添加 `localizedName(AppLocalizations l10n)` 方法。`name` 字段标注 i18n-exempt。
+- `lib/core/util/category_icon_packs.dart`：添加 `localizedLabel(AppLocalizations l10n)` 方法。分类名标注 i18n-exempt（DB 种子数据）。
+- `lib/core/util/quick_text_parser.dart`：文件顶部添加 i18n-exempt 注释（算法关键词，非 UI）。
+- `lib/data/local/seeder.dart`：所有中文字符串标注 i18n-exempt（种子数据）。
+- `lib/data/repository/exceptions.dart`（新建）：`BudgetConflictException`、`LedgerNameConflictException` 类型化异常，替代仓库层中文字符串。
+- `lib/data/repository/budget_repository.dart`：改抛 `BudgetConflictException`。
+- `lib/data/repository/ledger_repository.dart`：改抛 `LedgerNameConflictException`。
+
+Feature 页面（50+ 文件修改）：
+- 所有 `features/` 下的页面文件：`Text('中文')` → `Text(context.l10n.xxx)` 或等价 l10n 调用。
+- `CategoryManagePage.parentLabelFor(context, key)` 集中化一级分类标签解析，替代 4+ 处重复的硬编码 Map。
+- `Currency.localizedName(l10n)` 替代 `currencies.name` 用于 UI 显示。
+- 枚举 extension 方法（`BianBianThemeL10n`、`BianBianFontSizeL10n`）替代枚举 `label` 字段。
+- 无 BuildContext 的服务层文件添加 `// i18n-exempt:` 注释：`reminder_service.dart`（通知内容）、`ai_input_enhance_service.dart`（AI 错误）、`import_service.dart`（导入错误）、`export_service.dart`（CSV 列头）、`sync_trigger.dart`（同步状态）、`pin_credential.dart`（PIN 校验）、`fx_rate_refresh_service.dart`（汇率校验）、`third_party_template.dart`（三方模板匹配关键词）。
+- `import_page.dart`：CSV/三方描述文本替换为 `context.l10n.importCsvThirdPartyDesc` / `importCsvNoIdDesc`。
+- `export_page.dart`：`.bbbak` 标签替换为 `context.l10n.exportBbbakLabel`。
+- `import_page.dart`：`.bbbak` 标签替换为 `context.l10n.importBbbakLabel`。
+- `stats_page.dart`：日期格式 `M月d日` 替换为 `context.l10n.statsTooltipDateFormat`；'未分类' 比较标注 i18n-exempt（匹配 DB 种子名）。
+- `pin_unlock_page.dart`：`subtitle` 参数改为 nullable，默认值从硬编码中文改为 `context.l10n.pinUnlockSubtitle` fallback。
+- `budget_edit_page.dart`：`_loadBudget` 中 `context.l10n` 提前缓存避免跨 async gap 使用。
+- `record_home_page.dart`：`ledger?.name ?? '账本'` → `ledger?.name ?? context.l10n.ledgerDefaultName`。
+- `record_new_page.dart`：`selectedCategoryName: '转账'` → `context.l10n.txTypeTransfer`。
+- `ledger_list_page.dart`：`'加载失败：$e'` → `context.l10n.loadFailedWithError(e.toString())`；`'删除'` → `context.l10n.delete`。
+- `category_edit_page.dart`：10 个中文字符串替换为 l10n 调用；assertion 消息标注 i18n-exempt。
+- `cloud_service_page.dart`：约 50 个中文字符串替换为 l10n 调用；`_typeLabel`/`_cardSubtitle`/`_label` 方法签名增加 `BuildContext` 参数。
+
+`const` 清理：
+- 含 l10n 调用的 `const Text(...)` / `const SnackBar(...)` / `const InputDecoration(...)` 等处移除 `const`。
+
+测试文件（11 文件）：
+- 所有创建 `MaterialApp` 的 widget 测试添加 `localizationsDelegates: AppLocalizations.localizationsDelegates`、`supportedLocales: AppLocalizations.supportedLocales`、`locale: const Locale('zh')`，避免 `AppLocalizations.of(context)` 返回 null。
+
+新增 ARB key（部分）：
+- `pinUnlockSubtitle`、`ledgerDefaultName`、`statsTooltipDateFormat`、`exportBbbakLabel`、`importBbbakLabel`、`importCsvThirdPartyDesc`、`importCsvNoIdDesc`、`syncError`，以及所有 feature 页面所需的 UI key（总计 ~570 个）。
+
+**验证**
+- `flutter gen-l10n` 成功生成 `lib/l10n/app_localizations.dart` 及 `app_localizations_zh.dart`。
+- `flutter analyze` → 0 error，18 info（均为既存 `use_build_context_synchronously` + `_container` 命名，与本步无关）。
+- `flutter test` → 756/756 通过。
+- 扫描验证：不含 `i18n-exempt` 注释的 .dart 文件中，字符串字面量无中文字符残留。含 `i18n-exempt` 的文件（seed data / parser / service error）中文为数据或算法内容，已正确标注。
+
+**给后续开发者的备忘**
+- **i18n-exempt 规范**：无 BuildContext 的服务/仓库/工具层文件，用 `// i18n-exempt: <reason>` 标注保留中文的原因。常见原因：种子数据（seeder）、解析关键词（quick_text_parser）、CSV 列头（export_service）、通知内容（reminder_service）、仓库异常（已改用类型化异常）。
+- **类型化异常优先**：仓库层抛异常时不带中文消息，改用 `BudgetConflictException` / `LedgerNameConflictException` 等类型化异常，UI 层 catch 后通过 l10n 生成展示文本。
+- **枚举 extension 模式**：需要 BuildContext 的枚举标签用 extension method `label(BuildContext context)` 替代 `label` 字段，避免在 enum 定义中引入 l10n 依赖。
+- **集中化标签解析**：`CategoryManagePage.parentLabelFor(context, key)` 统一一级分类 key → l10n 标签的映射，避免多处重复硬编码。
+- **context.l10n 跨 async gap**：在 `async` 方法中先 `final l10n = context.l10n` 缓存再使用，避免 lint 警告。
+- **测试 MaterialApp 配置**：所有 widget 测试的 `MaterialApp` 必须配置 l10n delegates + locale，否则 `AppLocalizations.of(context)` 返回 null 导致测试失败。
+- **目前仅简中**：`app_zh.arb` 是唯一 ARB 文件；将来添加其他语言只需新增 `app_en.arb` 等，`flutter gen-l10n` 自动生成对应类。
+
+### ✅ Step 17.2 可访问性（2026-05-13）
+
+**改动**
+
+ARB / l10n（新增 9 个 a11y 专用 key）：
+- `lib/l10n/app_zh.arb`：追加 `a11yRecordHomeNewFab`（"记一笔"）/`a11yRecordHomeSearch`（"搜索流水"）/`a11yRecordHomeSwapCurrency`（"切换主副币种"）/`a11yRecordHomePrevMonth`（"上一月"）/`a11yRecordHomeNextMonth`（"下一月"）/`a11yRecordHomeDismissReminder`（"关闭提示"）/`a11yRecordNewBack`（"返回"）/`a11yQuickConfirmClose`（"关闭"）/`a11yCloudServiceConfigure`（"配置"）/`a11yAttachmentImage`（"已添加图片"）。命名前缀 `a11y` 标明用途为可访问性 label / tooltip。
+- `flutter gen-l10n` 重新生成 `lib/l10n/app_localizations*.dart`。
+
+补 Tooltip（IconButton 默认从 tooltip 派生 Semantics label）：
+- `lib/features/record/record_home_page.dart`：
+  - FAB（"记一笔"）追加 `tooltip: context.l10n.a11yRecordHomeNewFab`。
+  - 顶栏切换转账按钮（`Icons.swap_horiz`）补 tooltip。
+  - 顶栏搜索按钮（`Icons.search`）补 tooltip。
+  - 月份切换条 `Icons.chevron_left` / `Icons.chevron_right` 补 tooltip。
+  - 长期未记账提醒横幅的关闭 X（`Icons.close size 18`）补 tooltip。
+- `lib/features/record/record_new_page.dart`：AppBar leading `Icons.keyboard_arrow_down` 补 tooltip。
+- `lib/features/record/quick_confirm_sheet.dart`：快速确认弹窗顶栏关闭 X 补 tooltip。
+- `lib/features/sync/cloud_service_page.dart`：服务卡片 trailing `Icons.settings` 补 tooltip。
+
+触达尺寸 ≥ 44×44pt：
+- `lib/features/record/record_home_page.dart`：
+  - 顶栏切换转账 / 搜索两个 `visualDensity: VisualDensity.compact` 的 IconButton 增加 `constraints: BoxConstraints(minWidth: 44, minHeight: 44)`——`VisualDensity.compact` 单独使用会把 IconButton 缩到 40pt，叠加 `constraints` 后保底 44pt（视觉密度仍是紧凑，仅扩大命中盒）。
+  - 月份切换条左右箭头同样补 constraints。
+  - 月份标签 InkWell 用 `ConstrainedBox(minHeight: 44, minWidth: 44)` 包裹原 `Padding(horizontal: 6, vertical: 4)`，文字自身只占 ~20pt 高，外加 Center 居中。
+  - 提醒横幅关闭 X 的 `BoxConstraints(minWidth: 28, minHeight: 28)` → `minWidth: 44, minHeight: 44`（视觉图标仍 18pt）。
+  - 同步状态徽章 `_SyncStatusBadge`：InkWell 内部新增 `ConstrainedBox(minHeight: 44)` 包裹原 Padding，保证只显示图标无文字时仍有 44pt 高的可点击区域。
+- `lib/features/record/record_new_page.dart`：附件缩略图的删除 X（`Positioned + IconButton(visualDensity.compact, padding.zero)`）补 `constraints: BoxConstraints(minWidth: 44, minHeight: 44)`。视觉图标仍 18pt，命中盒扩到 44pt。
+- `lib/features/record/month_picker_dialog.dart`：
+  - 年份切换 IconButton 同步补 `constraints: BoxConstraints(minWidth: 44, minHeight: 44)`。
+  - 月份网格 `GridView.count` 的 `childAspectRatio: 1.6 → 1.45`——网格宽 280pt / 4 列 - gap = ~64pt 宽，比例 1.6 时高 40pt（低于 44），改 1.45 后高 ~44pt。
+
+Semantics label（图像类）：
+- `lib/features/record/widgets/attachment_thumbnail.dart`：`Image.file(...)` 新增 `semanticLabel: context.l10n.a11yAttachmentImage`，让屏幕阅读器播报"已添加图片"而不是路径或空。
+
+字号缩放 130%（无需新增代码——Step 15.2 已就绪）：
+- `lib/app/app.dart` 的 `BianBianApp.builder` 已通过 `systemScaler.scale(1.0) * scaleFactor` 把系统字号缩放（130%）与 App 字号档位（小/标准/大 = 0.85/1.0/1.15）相乘后写入 `MediaQuery.textScaler`，全 app 文字、对话框、底部表均生效。
+
+**验证**
+- `flutter gen-l10n` 成功，`app_localizations_zh.dart` 增加 10 个 getter。
+- `flutter analyze` → 0 error（仅既存 1 条 `_container` 命名 info）。
+- `flutter test` → 756/756 通过（与 17.1 持平，无回归）。
+- 代码层验证 130% 字号路径：`systemScaler.scale(1.0) * 1.0 = 1.30`、`* 1.15 = 1.495`；textScaler 由 builder 写回 MediaQuery，子树全局生效。
+- 用户本机 `flutter run` 待手工验证：
+  1. iOS 设置 → 显示与文字大小 → 调到最大档（或 130%），关键页面（记账首页 / 新建记账 / 统计 / 我的）文字应放大，不被裁切。
+  2. Android 设置 → 显示 → 字体大小 → 拉到 130%，同样测试。
+  3. 开启系统屏幕阅读器（VoiceOver / TalkBack），逐个聚焦记账首页 FAB / 顶栏图标按钮 / 月份切换箭头 / 同步徽章 / 横幅关闭 X，应分别播报"记一笔"/"搜索流水"/"切换主副币种"/"上一月"/"下一月"等中文标签。
+  4. 附件缩略图聚焦应播报"已添加图片，按钮"。
+  5. 用模拟器的"Show touch hits"或手工估测：所有可点击控件触达盒 ≥ 44×44pt。
+
+**给后续开发者的备忘**
+- **a11y key 命名**：可访问性专用 label / tooltip 用 `a11y` 前缀（区别于普通 UI 文案 key），便于将来批量找到与改动。
+- **`VisualDensity.compact` + `BoxConstraints(minWidth: 44, minHeight: 44)` 是兼容 a11y 的紧凑 IconButton 模式**——单独 `visualDensity.compact` 会把命中盒从 48pt 缩到 40pt（未达 Apple HIG / Material 44pt 要求）；叠加 `constraints` 后保底 44pt，视觉密度仍紧凑。
+- **`tooltip` 即可满足 a11y label 要求**——Flutter 的 `IconButton.tooltip` 自动生成 `Semantics(label: ...)`，无需手工 `Semantics(...)` 包裹。**仅在没有 IconButton 包装时**（自定义 InkWell / 装饰图标）才需要显式 `Semantics`。
+- **`Image.file(semanticLabel: ...)` 给图像加屏幕阅读器标签**——比外层 `Semantics(image: true, label: ...)` 更直接，且不会和父级 InkWell 的 `button` 语义冲突。
+- **月份网格 `childAspectRatio` 与触达盒**：280pt 宽 / 4 列布局下，1.6 比例 → 40pt 高（不达标），1.45 比例 → 44pt 高（达标）。后续如改列数 / 宽度，需重新算比例。
+- **故意不做**：
+  - **热力图 22×22 单元格不扩到 44pt**：`StatsPage._HeatmapCellTile`（22pt 边长）是"年度全览"的密集信息可视化，扩到 44pt 后单年要 ~3500pt 宽，破坏视觉。每格已套 Tooltip + onTap 替代触达盒；用户可放大屏幕（系统缩放）或长按表头切换日期段。
+  - **`InkWell` 列表内嵌的 radio-like 选项（`import_page.dart:811`）不补 ConstrainedBox(44)**：自然高度因 title+subtitle 双行已 ≥ 48pt，无需额外约束。
+  - **不加全局 `MediaQuery.textScaleFactorOf` clamp**：用户主动设置 130% 字号是 a11y 需求，clamp 到 1.0 反而违背初衷。Step 15.2 已让 App 字号档位与系统字号相乘，不会出现"系统 130% 但 App 显示 100%"的剪枝行为。
+  - **不为 ListTile leading / 卡片大装饰 Icon（size 34-40）单独加 Semantics**：ListTile 自动把 title + subtitle 串到 Semantics 节点；空状态大 Icon 旁边都有描述文字，屏幕阅读器读 Text 已足够，独立加 Icon label 反而冗余。
+- **本步完成了 Step 17.2；按用户约束：在用户验证测试前不开始 Step 17.3。**
+
+### ✅ Step 17.3 合规文案（2026-05-14）
+
+**改动**
+
+依赖：
+- `pubspec.yaml`：`dependencies` 新增 `package_info_plus: ^8.1.2`——读取应用版本号 / 构建号 / 包名，用于"我的 → 关于"页 ListTile 与 `showLicensePage` 的 `applicationVersion` 参数。
+
+数据层 / Provider：
+- `lib/features/compliance/privacy_consent_providers.dart`（新建）：
+  - 常量 `kCurrentPrivacyPolicyVersion = '1.0'`——当前应用要求生效的隐私政策版本，未来政策有重大变更时上调即可触发"持有旧版本号的老用户被再次征求同意"。
+  - 常量 `kPrivacyPolicyAcceptedVersionPrefKey = 'privacy_policy_accepted_version'`——SharedPreferences key。
+  - `PrivacyConsent` AsyncNotifier（`@Riverpod(keepAlive: true)`）：`build()` 读 prefs；`accept()` 写当前版本号 + 刷 state；`revoke()` 删 key + 刷 state（撤回同意后调用方负责 `SystemNavigator.pop`）。
+
+启动门控：
+- `lib/features/compliance/privacy_consent_gate.dart`（新建）：`PrivacyConsentGate` ConsumerWidget。watch `privacyConsentProvider`，按 AsyncValue 三态：
+  - `data == kCurrentPrivacyPolicyVersion` → 透传 child。
+  - `data` 为 null 或其他版本 → 渲染 `PrivacyConsentDialog`。
+  - `loading` → 显示 `_LoadingShim`（背景 surface 色 + 圆圈）。main.dart 已预热，理论上不会出现。
+  - `error` → 按"未同意"处理（兜底安全），仍渲染 `PrivacyConsentDialog`。
+- `lib/app/app.dart`：
+  - `BianBianApp` 新增 `enablePrivacyConsentGate` bool 字段（默认 true；测试可关）。
+  - `builder` 嵌套链改为：`MediaQuery(textScaler)` → `_AppLockGate`（条件）→ `PrivacyConsentGate`（条件，最外层）→ child。**故意嵌套在锁屏 gate 之外**：新装用户尚未配置 PIN，若同意门挡在锁屏内层，首次启动会出现"无 PIN 但被锁屏挡住，又看不到隐私政策"的死锁。
+- `lib/main.dart`：bootstrap 链末尾追加 `await container.read(privacyConsentProvider.future)`——保持与 theme/fontSize/iconPack 等"首帧依赖"预热一致，避免 gate 首帧短暂 loading shim 闪烁。
+
+首次启动 UI：
+- `lib/features/compliance/privacy_consent_dialog.dart`（新建）：全屏 Scaffold（不用 showDialog——内容较长 + 主界面必须被完全遮挡）。结构：
+  - 顶部 Padding 区：`privacyConsentTitle` 大标题。
+  - 中部 `Expanded` + `SingleChildScrollView`：先渲染 `PrivacyPolicyBody`（含 7 段隐私政策），再渲染 1pt Divider，再渲染 `TermsOfServiceTitle` + `TermsOfServiceBody`（含 4 段用户协议）。首次启动一次性展示两份文本，避免用户漏看协议部分。
+  - 底部 Padding 区：`OutlinedButton`"不同意"（flex 1）+ `FilledButton`"同意并继续"（flex 2）。两个按钮 minimumSize.fromHeight(48) 保证触达。
+  - "不同意"流程：`_confirmReject` 弹 `AlertDialog`（"再次阅读"/"退出"）→ 用户选"退出" → `SystemNavigator.pop()`。Android 真正关闭 Activity；iOS Apple HIG 不允许主动退出，系统忽略——但 gate 仍挡在最外层，用户只能继续点"同意"或杀进程。
+- `lib/features/compliance/policy_body.dart`（新建）：`PrivacyPolicyBody` 与 `TermsOfServiceBody` 共享渲染组件 + 私有 `_Section`（titleMedium 加粗标题 + bodyMedium 1.6 行高正文）。同时被首次启动弹窗与"我的 → 关于"详情页消费，**保证两处文本永不漂移**。故意不引入 `flutter_markdown` 依赖——原生 Text + Column 已能呈现段落式条款。
+
+"我的 → 关于"链路：
+- `lib/features/compliance/about_page.dart`（新建）：`AboutPage` ConsumerWidget。
+  - 顶部 `_AppHeader`：72pt 圆形容器（primaryContainer 色）+ 兔团子 emoji 🐰 + 应用名 + tagline。
+  - ListView 项：
+    1. 版本号——`FutureBuilder<PackageInfo>` + `PackageInfo.fromPlatform()`；测试环境 plugin 未 bind 时取 null，UI 兜底 "—"。Trailing 文字按 ARB 模板 `aboutAppVersionValue` 渲染（如 "1.0.0（构建 1）"）。
+    2. 隐私政策 → `context.push('/about/privacy')`。
+    3. 用户协议 → `context.push('/about/terms')`。
+    4. 开源许可 → `showLicensePage(context, applicationName, applicationVersion, applicationLegalese)`。版本号同样取 `PackageInfo.fromPlatform()` + catchError 兜底。
+    5. 撤回同意（红色文字 + subtitle "撤回后退出应用…"）→ `_confirmRevoke` 弹 AlertDialog（"取消"/"撤回并退出"）→ 用户选"撤回并退出" → `revoke()` + `SystemNavigator.pop()`。下次冷启动 gate 检测 prefs 为 null → 再次弹出同意页，闭环。
+- `lib/features/compliance/privacy_policy_page.dart`（新建）：`PrivacyPolicyPage` 简单 Scaffold + AppBar + `PrivacyPolicyBody`。
+- `lib/features/compliance/terms_of_service_page.dart`（新建）：`TermsOfServicePage` 同样模式。
+
+路由 / 入口：
+- `lib/app/app_router.dart`：新增 3 个 GoRoute（`/about` / `/about/privacy` / `/about/terms`）。开源许可走 Flutter 原生 `showLicensePage`，不需要独立 GoRoute。
+- `lib/app/home_shell.dart` `_MeTab`：在"垃圾桶"下方追加 ListTile "关于"（`Icons.info_outline` + chevron_right → `context.push('/about')`）。
+
+i18n（新增约 30 个 ARB key）：
+- `lib/l10n/app_zh.arb`：追加 `meAbout` / `about` / `aboutAppName` / `aboutAppTagline` / `aboutAppVersion` / 参数化 `aboutAppVersionValue({version},{build})` / `aboutPrivacyPolicy` / `aboutTermsOfService` / `aboutLicenses` / `aboutLicensesLegalese` / `aboutRevokeConsent` / `aboutRevokeConsentSubtitle` / `aboutRevokeConsentConfirmTitle` / `aboutRevokeConsentConfirmMessage` / `aboutRevokeConsentConfirm`；`privacyConsentTitle` / `privacyConsentIntro` / 6 段 `privacyConsent*Section{Title,Body}`（数据项 / 用途 / 存储位置 / 共享方 / 用户权利 / 联系方式）/ `privacyConsentVersionLabel` / `privacyConsentVersionValue` / `privacyConsentAccept` / `privacyConsentReject` / `privacyConsentRejectAlert{Title,Message,Exit,Reread}`；`termsOfServiceTitle` / `termsOfServiceIntro` / 3 段 `termsOfService*Section{Title,Body}`（使用许可 / 用户责任 / 免责声明）/ `termsOfServiceVersionLabel` / `termsOfServiceVersionValue`。
+- 政策文案覆盖 PIPL（个人信息保护法）+ GDPR 通用要点，落地基于本项目实际数据流：本地 SQLCipher 加密、密钥保存在 Keystore/Keychain、可选云同步走用户自有空间、无广告/画像/三方分享、可通过"导入/导出"完整导出或清除。
+
+测试（新增 16 用例）：
+- `test/features/compliance/privacy_consent_providers_test.dart`（5 用例）：首次为 null / accept 写入版本号 + prefs / revoke 清除 + prefs / 跨 container 持久化 / 持有旧版本号识别为非当前。
+- `test/features/compliance/privacy_consent_gate_test.dart`（6 用例）：未同意挡主界面 + child 不渲染 / 点同意后透传 + prefs 写入 / 点不同意显示二次确认 + 再次阅读回弹窗 / 已同意预置 prefs 直接透传 / 旧版本号按未同意处理 / 段落标题渲染（数据项 / 用途 / 存储位置 / 共享方 / 您的权利 / 联系方式 + 使用许可 / 用户责任 / 免责声明）。
+- `test/features/compliance/about_page_test.dart`（5 用例）：5 个入口渲染 / mock package_info_plus method channel → 版本号 ListTile 显示 `1.0.0（构建 1）` / 点击隐私政策导航 / 点击用户协议导航 / 点击撤回同意显示二次确认 + 取消保留同意状态。
+
+现有测试适配：
+- `test/widget_test.dart`、`test/features/record/quick_input_bar_test.dart`：所有 `BianBianApp(enableSyncLifecycle: false)` 调用追加 `enablePrivacyConsentGate: false`。共 7 + 1 = 8 处。两手段二选一：测试 widget 或者预置 prefs，本步选 flag——与既有 `enableSyncLifecycle` 模式一致，零外部状态。
+
+**验证**
+- `flutter pub get` → `package_info_plus 8.1.2` 解析成功。
+- `flutter gen-l10n` → `app_localizations_zh.dart` 增加约 30 个 getter。
+- `dart run build_runner build --delete-conflicting-outputs` → 271 outputs，0 error。
+- `flutter analyze` → 0 error（仅余 1 条既存 INFO：`_container` 命名，与本步无关）。
+- `flutter test` → 772/772 通过（756 前 + 16 本步新增；test count 比 17.2 的 756 净增 16）。
+- 用户本机 `flutter run` 待手工验证：
+  1. 首次启动 / 卸载重装 → 不进入主界面，直接展示"隐私政策与用户协议"同意页；可上下滚动阅读，主界面被完全遮挡。
+  2. 点"不同意" → 二次确认 dialog → "退出" → Android 退出；"再次阅读"→ 回到弹窗，主界面仍不可见。
+  3. 点"同意并继续" → 进入主界面（记账首页 + 4 Tab）；杀进程重启 → 不再展示同意页。
+  4. 我的 → 关于 → 应用版本 ListTile 显示 `1.0.0（构建 1）`（或当前 pubspec 版本）；隐私政策 / 用户协议 / 开源许可可逐项点开查看。
+  5. 我的 → 关于 → 撤回同意 → 二次确认 → 撤回并退出。下次启动 → 隐私同意页重新出现。
+  6. iOS：拒绝按钮被点后系统忽略 `SystemNavigator.pop`，但 gate 仍挡住主界面，用户可继续点"同意"恢复流程。
+
+**给后续开发者的备忘**
+- **同意状态用 SharedPreferences 而非 user_pref 表**——理由 4 条：① 与 `idle_reminder_last_date` 同走轻量 prefs；② 免一次 schema 迁移；③ 同步恢复 DB 到新设备时 prefs 不参与同步，新设备会再弹一次同意——符合"每台设备独立同意"的 PIPL/GDPR 预期；④ 这是 App 启动门状态，与业务数据正交。
+- **版本号比对而非 bool**——`build()` 返回原始字符串，消费方（gate）显式比对 `kCurrentPrivacyPolicyVersion` 决定"是否已同意当前版本"。简单 `!= null` 会让政策升版后无法触发再次征求。
+- **gate 嵌套位置**——必须套在 `_AppLockGate` 之外（更靠 root）。如果首次启动用户被锁屏挡住却看不到政策（PIN 还没设置）会死锁。`BianBianApp.builder` 链路：MediaQuery → AppLockGate（条件）→ PrivacyConsentGate（条件） → child。
+- **不用 showDialog，用全屏 Scaffold**——三条理由：① 政策正文较长（7 段隐私 + 4 段协议），AlertDialog 高度受限；② Scaffold + IndexedStack 配合 gate 透传/挡板模式更简洁；③ 路由器初始化阶段调 showDialog 容易触发 GlobalKey 重复 / `_debugLocked` 断言。
+- **共享 PolicyBody 组件**——首次启动弹窗与"关于"详情页都消费 `PrivacyPolicyBody` / `TermsOfServiceBody`。**改文案只改一处**，避免两份漂移。
+- **iOS SystemNavigator.pop 不会真退出**——Apple HIG 不允许 App 主动退出，调用被系统忽略。这是设计妥协：gate 仍挡在最外层，用户只能继续阅读、同意，或手动杀进程。"不同意"按钮在 iOS 上事实上等价于"再次阅读"，但保留按钮是为了：① 与 Android 行为统一；② 满足 PIPL 文字要求"用户可拒绝"。
+- **`PackageInfo.fromPlatform()` 在 test 环境抛 MissingPluginException**——`AboutPage` 用 `FutureBuilder + catchError` 兜底显示 "—"；测试用例需要 `setMockMethodCallHandler` 注入回包。channel name 是 `dev.fluttercommunity.plus/package_info`。
+- **`enablePrivacyConsentGate` 测试 flag**——所有走 `BianBianApp` 启动主界面的 widget 测试都需要传 `enablePrivacyConsentGate: false`。另一种手段是 `SharedPreferences.setMockInitialValues({key: kCurrentPrivacyPolicyVersion})` 预置同意态，二选一。flag 更轻量。
+- **政策版本字符串硬编码**——`kCurrentPrivacyPolicyVersion = '1.0'` 在 `privacy_consent_providers.dart` 顶部。将来政策内容变更：改 ARB 文本 → 把版本号字符串往上调（如 '2.0'）→ 所有用户冷启动会被再次征求同意。**记得同时改 ARB 的 `privacyConsentVersionValue` 展示文本**（如 '2.0（2026-XX-XX 生效）'），保持版本号与日期一致。
+- **撤回同意 → 立即退出**是有意的——撤回后理论上"未同意 + 仍在主界面"是不一致态。一定要立即退出，下次启动重新走 gate 流程。iOS 上 SystemNavigator.pop 被忽略，但同意已被清除，下次进入时 gate 会拦截。
+- **开源许可页**：`showLicensePage` 是 Flutter 内置功能，自动列出所有引入的 package 的 LICENSE 文件，**无需手工维护**。pubspec 增删依赖时自动同步。`applicationLegalese` 是底部那行小字"本应用使用了若干开源组件…"。
+- **本步完成了 Step 17.3；按用户约束：在用户验证测试前不开始 Step 18.1。**
+
+**修复（2026-05-14）：点"不同意"无反应 + Navigator 异常**
+
+用户手工验证发现"不同意"按钮点击后无反应，调试台报：
+```
+Navigator operation requested with a context that does not include a Navigator.
+... at PrivacyConsentDialog._confirmReject (privacy_consent_dialog.dart:111)
+... at showDialog (dialog.dart:1504)
+```
+
+根因：`PrivacyConsentDialog` 处于 `MaterialApp.router.builder` 链中、router 内部 Navigator 之外，`showDialog` 沿 widget tree 向上找不到 Navigator。`builder` 的 child 才是 router 的 widget tree（含 Navigator），gate 与 dialog 在 child 之外。
+
+修复：把 `PrivacyConsentDialog` 改为 ConsumerStatefulWidget；二次确认遮罩用 `Stack` overlay + `setState(_showRejectConfirm)` 本地控制，**不再依赖 showDialog**。具体改动：
+- `_PrivacyConsentDialogState._showRejectConfirm` bool 状态。
+- `build()` 返回 `Stack`：底层主页面 + 条件叠加 `_buildRejectConfirmOverlay`（`Positioned.fill` + `Colors.black54` 半透明背景 + 居中 360pt 卡片）。
+- 卡片内 `TextButton("再次阅读")` setState 关 overlay；`FilledButton("退出")` 调 `SystemNavigator.pop()`。
+- 不影响测试用例——`find.text('未同意将无法使用')` 等断言对 Stack overlay 同样命中。
+
+**`AboutPage._confirmRevoke` 不受影响**——`AboutPage` 通过 GoRoute 进入，处于 router Navigator 内，`showDialog` 正常工作。两处保持不同实现是有意为之：dialog（gate 之外）vs about（gate 之内 + router 之内）。
+
+验证：`flutter analyze` → No issues found；`flutter test` → 772/772 通过；手工 `flutter run` 后用户验证"不同意 → 二次确认 → 退出/再次阅读"路径正常。

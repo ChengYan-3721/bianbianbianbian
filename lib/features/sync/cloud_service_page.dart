@@ -6,6 +6,7 @@ import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 import 'package:flutter_cloud_sync_icloud/flutter_cloud_sync_icloud.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart' show currentLedgerIdProvider;
 import '../account/account_providers.dart';
@@ -34,11 +35,11 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('云服务'),
+        title: Text(context.l10n.syncTitle),
       ),
       body: activeAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('错误: $e')),
+        error: (e, _) => Center(child: Text(context.l10n.syncError(e.toString()))),
         data: (active) {
           final cloudEnabled = active.type != CloudBackendType.local;
           // failed 集合在加载未完成时取空，对应"暂时全 ready"的乐观渲染——
@@ -77,10 +78,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
                 child: SwitchListTile(
-                  title: const Text('启用云同步'),
+                  title: Text(context.l10n.syncEnable),
                   subtitle: Text(cloudEnabled
-                      ? '当前后端：${active.name}'
-                      : '关闭中——数据仅保存在本机'),
+                      ? context.l10n.syncCurrentBackend(active.name)
+                      : context.l10n.syncDisabled),
                   value: cloudEnabled,
                   onChanged: (on) => _toggleCloudSync(on),
                 ),
@@ -104,7 +105,8 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
                 icon: Icons.folder_shared,
                 title: 'WebDAV',
                 subtitle: _cardSubtitle(
-                  defaultText: '自托管 WebDAV 服务',
+                  context: context,
+                  defaultText: context.l10n.syncSelfHostedWebdav,
                   cfgAsync: webdavAsync,
                   isFailed: failed.contains(CloudBackendType.webdav),
                 ),
@@ -119,9 +121,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
               _buildServiceCard(
                 context: context,
                 icon: Icons.storage,
-                title: 'S3 兼容存储',
+                title: context.l10n.syncS3Compatible,
                 subtitle: _cardSubtitle(
-                  defaultText: 'Cloudflare R2, AWS S3, MinIO 等',
+                  context: context,
+                  defaultText: context.l10n.syncS3Desc,
                   cfgAsync: s3Async,
                   isFailed: failed.contains(CloudBackendType.s3),
                 ),
@@ -138,7 +141,8 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
                 icon: Icons.cloud,
                 title: 'Supabase',
                 subtitle: _cardSubtitle(
-                  defaultText: '使用 Supabase 后端',
+                  context: context,
+                  defaultText: context.l10n.syncUseSupabase,
                   cfgAsync: supabaseAsync,
                   isFailed: failed.contains(CloudBackendType.supabase),
                 ),
@@ -157,14 +161,15 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
   /// 卡片副标题：未配置 → 默认介绍；测试失败 → 红字提示重试；
   /// 已配置且未失败 → 默认介绍（不重复打印 URL，状态卡里已有）。
   String _cardSubtitle({
+    required BuildContext context,
     required String defaultText,
     required AsyncValue<CloudServiceConfig?> cfgAsync,
     required bool isFailed,
   }) {
-    if (isFailed) return '上次连接测试失败，点击右侧设置重新配置';
+    if (isFailed) return context.l10n.syncLastTestFailed;
     return cfgAsync.maybeWhen(
       data: (cfg) =>
-          cfg == null || !cfg.valid ? '$defaultText（未配置）' : defaultText,
+          cfg == null || !cfg.valid ? context.l10n.syncNotConfiguredFormat(defaultText) : defaultText,
       orElse: () => defaultText,
     );
   }
@@ -196,6 +201,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           onTap: isDisabled ? null : onTap,
           trailing: onConfigure != null
               ? IconButton(
+                  tooltip: context.l10n.a11yCloudServiceConfigure,
                   icon: const Icon(Icons.settings),
                   onPressed: onConfigure,
                 )
@@ -211,7 +217,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       context: context,
       icon: Icons.cloud,
       title: 'iCloud',
-      subtitle: '使用 iCloud Drive 同步',
+      subtitle: context.l10n.syncUseIcloud,
       isSelected: isSelected,
       isDisabled: isDisabled,
       onTap: () => _switchService(CloudBackendType.icloud),
@@ -230,7 +236,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       if (!isAvailable) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('iCloud 不可用，请检查系统设置')),
+            SnackBar(content: Text(context.l10n.syncIcloudUnavailable)),
           );
         }
         return;
@@ -241,16 +247,16 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('切换云服务?'),
-        content: const Text('切换服务后，需要重新进行首次同步。'),
+        title: Text(context.l10n.syncSwitchConfirm),
+        content: Text(context.l10n.syncSwitchHint),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认'),
+            child: Text(context.l10n.confirm),
           ),
         ],
       ),
@@ -271,22 +277,18 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       final choice = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('迁移附件到新后端？'),
+          title: Text(context.l10n.syncMigrateAttachments),
           content: Text(
-            '当前后端已上传 $remoteAttachments 张附件。\n\n'
-            '切换后新附件会上传到 ${_typeLabel(type)}，但已在旧后端的附件不会跨设备访问。\n\n'
-            '选择"迁移"会在下次同步时把这些附件重新上传到新后端（耗时较长，'
-            '取决于网络与图片数量）；选择"暂不迁移"则旧附件保留在旧后端，'
-            '可稍后切回去再用。',
+            context.l10n.syncMigrateAttachmentsDetail(remoteAttachments, _typeLabel(context, type)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('暂不迁移'),
+              child: Text(context.l10n.syncSkipMigration),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('迁移'),
+              child: Text(context.l10n.syncMigrate),
             ),
           ],
         ),
@@ -303,7 +305,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
                 content: Text(
-                    '切换失败：${_typeLabel(type)} 尚未配置，请先点击右侧设置图标完成配置')),
+                    context.l10n.syncSwitchNotConfigured(_typeLabel(context, type)))),
           );
         }
         return;
@@ -325,8 +327,8 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       ref.invalidate(syncServiceProvider);
       if (mounted) {
         final msg = migratedRows > 0
-            ? '已切换到 ${_typeLabel(type)}（已标记 $migratedRows 条流水的附件待重传）'
-            : '已切换到 ${_typeLabel(type)}';
+            ? context.l10n.syncSwitchedWithMigration(_typeLabel(context, type), migratedRows)
+            : context.l10n.syncSwitched(_typeLabel(context, type));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg)),
         );
@@ -334,7 +336,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('切换失败: $e')),
+          SnackBar(content: Text(context.l10n.syncSwitchFailed(e.toString()))),
         );
       }
     }
@@ -351,16 +353,16 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('关闭云同步?'),
-          content: const Text('关闭后将仅使用本机数据，已上传到云端的备份不受影响。'),
+          title: Text(context.l10n.syncDisableConfirm),
+          content: Text(context.l10n.syncDisableHint),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
+              child: Text(context.l10n.cancel),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('关闭'),
+              child: Text(context.l10n.close),
             ),
           ],
         ),
@@ -372,7 +374,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       ref.invalidate(syncServiceProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('云同步已关闭')),
+          SnackBar(content: Text(context.l10n.syncCloudDisabled)),
         );
       }
       return;
@@ -382,7 +384,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     if (restored == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先在下方任选一个云服务并完成配置')),
+          SnackBar(content: Text(context.l10n.syncPleaseConfigureFirst)),
         );
       }
       return;
@@ -392,15 +394,15 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     ref.invalidate(syncServiceProvider);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已启用云同步：${_typeLabel(restored)}')),
+        SnackBar(content: Text(context.l10n.syncEnabledWith(_typeLabel(context, restored)))),
       );
     }
   }
 
-  String _typeLabel(CloudBackendType type) {
+  String _typeLabel(BuildContext context, CloudBackendType type) {
     switch (type) {
       case CloudBackendType.local:
-        return '本地存储';
+        return context.l10n.syncLocalStorage;
       case CloudBackendType.beecountCloud:
         return 'BeeCount Cloud';
       case CloudBackendType.supabase:
@@ -544,8 +546,8 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(testError == null
-                  ? '配置已保存并通过连接测试'
-                  : '配置已保存，但连接测试失败：$testError'),
+                  ? context.l10n.syncConfigSavedAndTested
+                  : context.l10n.syncConfigSavedTestFailed(testError)),
               duration: testError == null
                   ? const Duration(seconds: 3)
                   : const Duration(seconds: 6),
@@ -553,12 +555,12 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           );
         }
       } else {
-        throw Exception('配置无效');
+        throw Exception(context.l10n.syncConfigInvalid);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败: $e')),
+          SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
         );
       }
     }
@@ -567,12 +569,13 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
   /// 真实跑一次 provider 初始化，验证配置可用。务必 dispose 释放底层连接。
   /// 返回正常即视为通过；任何异常（含 timeout）由调用方捕获并写入 failed 集。
   Future<void> _testConnection(CloudServiceConfig cfg) async {
+    final providerNullMsg = context.l10n.syncProviderInitNull;
     CloudProvider? provider;
     try {
       final services = await createCloudServices(cfg);
       provider = services.provider;
       if (provider == null) {
-        throw Exception('Provider 初始化返回空');
+        throw Exception(providerNullMsg);
       }
     } finally {
       try {
@@ -617,15 +620,15 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('配置 Supabase'),
+      title: Text(context.l10n.syncConfigSupabase),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _customNameController,
-            decoration: const InputDecoration(
-              labelText: '自定义名称',
-              hintText: '用作卡片标题（可选）',
+            decoration: InputDecoration(
+              labelText: context.l10n.syncCustomName,
+              hintText: context.l10n.syncCustomNameHint,
             ),
           ),
           TextField(controller: _urlController, decoration: const InputDecoration(labelText: 'URL')),
@@ -633,7 +636,7 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
@@ -642,7 +645,7 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
               'customName': _customNameController.text,
             });
           },
-          child: const Text('保存'),
+          child: Text(context.l10n.save),
         ),
       ],
     );
@@ -688,25 +691,25 @@ class _WebdavConfigDialogState extends State<_WebdavConfigDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('配置 WebDAV'),
+      title: Text(context.l10n.syncConfigWebdav),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
             controller: _customNameController,
-            decoration: const InputDecoration(
-              labelText: '自定义名称',
-              hintText: '用作卡片标题（可选）',
+            decoration: InputDecoration(
+              labelText: context.l10n.syncCustomName,
+              hintText: context.l10n.syncCustomNameHint,
             ),
           ),
           TextField(controller: _urlController, decoration: const InputDecoration(labelText: 'URL')),
-          TextField(controller: _usernameController, decoration: const InputDecoration(labelText: '用户名')),
-          TextField(controller: _passwordController, decoration: const InputDecoration(labelText: '密码'), obscureText: true),
-          TextField(controller: _pathController, decoration: const InputDecoration(labelText: '远程路径')),
+          TextField(controller: _usernameController, decoration: InputDecoration(labelText: context.l10n.syncWebdavUsername)),
+          TextField(controller: _passwordController, decoration: InputDecoration(labelText: context.l10n.syncWebdavPassword), obscureText: true),
+          TextField(controller: _pathController, decoration: InputDecoration(labelText: context.l10n.syncWebdavRemotePath)),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
@@ -717,7 +720,7 @@ class _WebdavConfigDialogState extends State<_WebdavConfigDialog> {
               'customName': _customNameController.text,
             });
           },
-          child: const Text('保存'),
+          child: Text(context.l10n.save),
         ),
       ],
     );
@@ -775,16 +778,16 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('配置 S3'),
+      title: Text(context.l10n.syncConfigS3),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _customNameController,
-              decoration: const InputDecoration(
-                labelText: '自定义名称',
-                hintText: '用作卡片标题与云端文件夹名（可选）',
+              decoration: InputDecoration(
+                labelText: context.l10n.syncCustomName,
+                hintText: context.l10n.syncS3CustomNameHint,
               ),
             ),
             TextField(controller: _endpointController, decoration: const InputDecoration(labelText: 'Endpoint')),
@@ -792,7 +795,7 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
             TextField(controller: _accessKeyController, decoration: const InputDecoration(labelText: 'Access Key')),
             TextField(controller: _secretKeyController, decoration: const InputDecoration(labelText: 'Secret Key'), obscureText: true),
             TextField(controller: _bucketController, decoration: const InputDecoration(labelText: 'Bucket')),
-            TextField(controller: _portController, decoration: const InputDecoration(labelText: 'Port (可选)'), keyboardType: TextInputType.number),
+            TextField(controller: _portController, decoration: InputDecoration(labelText: 'Port (${context.l10n.optional})'), keyboardType: TextInputType.number),
             SwitchListTile(
               title: const Text('Use SSL'),
               value: _useSSL,
@@ -802,7 +805,7 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
@@ -816,7 +819,7 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
               'customName': _customNameController.text,
             });
           },
-          child: const Text('保存'),
+          child: Text(context.l10n.save),
         ),
       ],
     );
@@ -842,10 +845,10 @@ class _SyncStatusCard extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: ledgerAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Text('账本加载失败：$e'),
+          error: (e, _) => Text(context.l10n.syncLedgerLoadFailed(e.toString())),
           data: (ledgerId) => syncAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('同步服务初始化失败：$e'),
+            error: (e, _) => Text(context.l10n.syncInitFailed(e.toString())),
             data: (service) => _SyncStatusBody(
               service: service,
               ledgerId: ledgerId,
@@ -910,7 +913,7 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败：$e')),
+        SnackBar(content: Text(context.l10n.operationFailedWithError(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -919,23 +922,23 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
 
   Future<void> _upload() => _runWithBusy(
         () => widget.service.upload(ledgerId: widget.ledgerId),
-        successMessage: '已上传到云端',
+        successMessage: context.l10n.syncUploaded,
       );
 
   Future<void> _download() async {
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('从云端恢复'),
-        content: const Text(
-            '当前账本的本地流水与预算将被云端备份覆盖（categories/accounts 仅 upsert）。继续？'),
+        title: Text(l10n.syncRestoreFromCloud),
+        content: Text(l10n.syncRestoreConfirmMsg),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('取消')),
+              child: Text(l10n.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('恢复')),
+              child: Text(l10n.syncRestore)),
         ],
       ),
     );
@@ -951,33 +954,34 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
         _invalidateDataProviders();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已恢复 $inserted 条流水')),
+          SnackBar(content: Text(l10n.syncRestoredCount(inserted))),
         );
       },
-      successMessage: '已从云端恢复',
+      successMessage: l10n.syncRestored,
     );
   }
 
   Future<void> _deleteRemote() async {
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除云端备份'),
-        content: const Text('云端的此账本备份将被删除。本地数据不受影响。继续？'),
+        title: Text(l10n.syncDeleteCloudBackup),
+        content: Text(l10n.syncDeleteCloudConfirm),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('取消')),
+              child: Text(l10n.cancel)),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('删除')),
+              child: Text(l10n.delete)),
         ],
       ),
     );
     if (confirmed != true) return;
     return _runWithBusy(
       () => widget.service.deleteRemote(ledgerId: widget.ledgerId),
-      successMessage: '云端备份已删除',
+      successMessage: l10n.syncCloudDeleted,
     );
   }
 
@@ -1028,7 +1032,7 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.refresh),
-              tooltip: '刷新状态',
+              tooltip: context.l10n.syncRefreshStatus,
               onPressed: _busy ? null : () => _refresh(force: true),
             ),
           ],
@@ -1038,15 +1042,15 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
           future: _statusFuture,
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('正在获取云端状态…'),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(context.l10n.syncFetchingStatus),
               );
             }
             if (snap.hasError) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text('状态获取失败：${snap.error}'),
+                child: Text(context.l10n.syncStatusFetchFailed(snap.error.toString())),
               );
             }
             final status = snap.data!;
@@ -1059,7 +1063,7 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
             Expanded(
               child: FilledButton.icon(
                 icon: const Icon(Icons.cloud_upload_outlined),
-                label: const Text('上传'),
+                label: Text(context.l10n.syncUpload),
                 onPressed: _busy ? null : _upload,
               ),
             ),
@@ -1067,14 +1071,14 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
             Expanded(
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.cloud_download_outlined),
-                label: const Text('下载'),
+                label: Text(context.l10n.syncDownload),
                 onPressed: _busy ? null : _download,
               ),
             ),
             const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.delete_outline),
-              tooltip: '删除云端备份',
+              tooltip: context.l10n.syncDeleteCloudBackupShort,
               onPressed: _busy ? null : _deleteRemote,
             ),
           ],
@@ -1089,28 +1093,28 @@ class _StatusLine extends StatelessWidget {
 
   final SyncStatus status;
 
-  String _label() {
+  String _label(BuildContext context) {
     switch (status.state) {
       case SyncState.notConfigured:
-        return '未配置';
+        return context.l10n.syncStatusNotConfigured;
       case SyncState.notAuthenticated:
-        return '未登录';
+        return context.l10n.syncStatusNotLoggedIn;
       case SyncState.localOnly:
-        return '云端无备份';
+        return context.l10n.syncStatusNoBackup;
       case SyncState.synced:
-        return '已同步';
+        return context.l10n.syncStatusSynced;
       case SyncState.outOfSync:
-        if (status.isLocalNewer) return '本地较新（建议上传）';
-        if (status.isCloudNewer) return '云端较新（建议下载）';
-        return '本地与云端不一致';
+        if (status.isLocalNewer) return context.l10n.syncStatusLocalNewer;
+        if (status.isCloudNewer) return context.l10n.syncStatusCloudNewer;
+        return context.l10n.syncStatusDiverged;
       case SyncState.uploading:
-        return '上传中…';
+        return context.l10n.syncStatusUploading;
       case SyncState.downloading:
-        return '下载中…';
+        return context.l10n.syncStatusDownloading;
       case SyncState.error:
-        return '错误';
+        return context.l10n.error;
       case SyncState.unknown:
-        return '未知';
+        return context.l10n.unknown;
     }
   }
 
@@ -1141,17 +1145,17 @@ class _StatusLine extends StatelessWidget {
           children: [
             Icon(Icons.circle, size: 10, color: _color(context)),
             const SizedBox(width: 6),
-            Text(_label(), style: Theme.of(context).textTheme.bodyMedium),
+            Text(_label(context), style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
         if (tsLabel != null) ...[
           const SizedBox(height: 4),
-          Text('上次同步：$tsLabel',
+          Text(context.l10n.syncLastSyncAt(tsLabel),
               style: Theme.of(context).textTheme.bodySmall),
         ],
         if (status.localCount != null && status.cloudCount != null) ...[
           const SizedBox(height: 4),
-          Text('本地 ${status.localCount} · 云端 ${status.cloudCount}',
+          Text(context.l10n.syncLocalCloudCount(status.localCount!, status.cloudCount!),
               style: Theme.of(context).textTheme.bodySmall),
         ],
         if (status.message != null && status.state == SyncState.error) ...[

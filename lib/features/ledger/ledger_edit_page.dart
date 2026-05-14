@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../data/repository/ledger_repository.dart';
+import '../../core/l10n/l10n_ext.dart';
+import '../../data/repository/exceptions.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/ledger.dart';
 
@@ -52,11 +53,11 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? '编辑账本' : '新建账本'),
+        title: Text(isEdit ? context.l10n.ledgerEditTitle : context.l10n.ledgerNewTitle),
         actions: [
           TextButton(
             onPressed: _save,
-            child: const Text('保存'),
+            child: Text(context.l10n.save),
           ),
         ],
       ),
@@ -67,11 +68,11 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('加载失败: ${snapshot.error}'));
+            return Center(child: Text(context.l10n.loadFailedWithError(snapshot.error.toString())));
           }
           final ledger = snapshot.data;
           if (isEdit && ledger == null) {
-            return const Center(child: Text('账本不存在'));
+            return Center(child: Text(context.l10n.ledgerNotExist));
           }
 
           // 初始化表单数据
@@ -91,13 +92,13 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
                 children: [
                   TextFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: '账本名称',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.ledgerName,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return '请输入账本名称';
+                        return context.l10n.ledgerNameRequired;
                       }
                       return null;
                     },
@@ -105,27 +106,27 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _emojiController,
-                    decoration: const InputDecoration(
-                      labelText: '封面 Emoji',
-                      hintText: '例如 📒、💼、✈️',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.ledgerCoverEmoji,
+                      hintText: context.l10n.ledgerCoverEmojiHint,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: _defaultCurrency,
-                    decoration: const InputDecoration(
-                      labelText: '默认币种',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.ledgerDefaultCurrency,
+                      border: const OutlineInputBorder(),
                     ),
-                    items: const [
-                      DropdownMenuItem(value: 'CNY', child: Text('人民币 (CNY)')),
-                      DropdownMenuItem(value: 'USD', child: Text('美元 (USD)')),
-                      DropdownMenuItem(value: 'EUR', child: Text('欧元 (EUR)')),
-                      DropdownMenuItem(value: 'JPY', child: Text('日元 (JPY)')),
-                      DropdownMenuItem(value: 'KRW', child: Text('韩元 (KRW)')),
-                      DropdownMenuItem(value: 'GBP', child: Text('英镑 (GBP)')),
-                      DropdownMenuItem(value: 'HKD', child: Text('港币 (HKD)')),
+                    items: [
+                      DropdownMenuItem(value: 'CNY', child: Text(context.l10n.currencyCnyFull)),
+                      DropdownMenuItem(value: 'USD', child: Text(context.l10n.currencyUsdFull)),
+                      DropdownMenuItem(value: 'EUR', child: Text(context.l10n.currencyEurFull)),
+                      DropdownMenuItem(value: 'JPY', child: Text(context.l10n.currencyJpyFull)),
+                      DropdownMenuItem(value: 'KRW', child: Text(context.l10n.currencyKrwFull)),
+                      DropdownMenuItem(value: 'GBP', child: Text(context.l10n.currencyGbpFull)),
+                      DropdownMenuItem(value: 'HKD', child: Text(context.l10n.currencyHkdFull)),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -136,8 +137,8 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
                   if (isEdit) ...[
                     const SizedBox(height: 16),
                     SwitchListTile(
-                      title: const Text('归档'),
-                      subtitle: const Text('归档后账本将移至归档区，不再显示在切换器中'),
+                      title: Text(context.l10n.ledgerArchived),
+                      subtitle: Text(context.l10n.ledgerArchiveHint),
                       value: _archived,
                       onChanged: (value) => setState(() => _archived = value),
                       activeTrackColor: theme.colorScheme.primary,
@@ -165,7 +166,7 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
       if (existing == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('账本不存在，无法保存')),
+          SnackBar(content: Text(context.l10n.ledgerCannotSave)),
         );
         return;
       }
@@ -207,12 +208,12 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
     } on LedgerNameConflictException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已存在同名账本「${e.name}」，请换一个')),
+        SnackBar(content: Text(context.l10n.ledgerNameConflictMsg(e.name))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败: $e')),
+        SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
       );
     }
   }

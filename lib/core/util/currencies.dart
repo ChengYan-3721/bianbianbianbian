@@ -8,6 +8,8 @@
 /// 写死的"合理快照"，Step 8.3 引入联网刷新时由实际 API 覆盖。
 library;
 
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
+
 class Currency {
   const Currency({
     required this.code,
@@ -22,10 +24,30 @@ class Currency {
   final String symbol;
 
   /// 中文名称，例如 `人民币` / `美元`。
+  // i18n-exempt: default display name for V1 Chinese locale; UI should use localizedName()
   final String name;
+
+  /// 返回当前 locale 下的本地化名称（UI 展示用）。
+  String localizedName(AppLocalizations l10n) {
+    return switch (code) {
+      'CNY' => l10n.currencyCny,
+      'USD' => l10n.currencyUsd,
+      'EUR' => l10n.currencyEur,
+      'JPY' => l10n.currencyJpy,
+      'KRW' => l10n.currencyKrw,
+      'HKD' => l10n.currencyHkd,
+      'TWD' => l10n.currencyTwd,
+      'GBP' => l10n.currencyGbp,
+      'SGD' => l10n.currencySgd,
+      'CAD' => l10n.currencyCad,
+      'AUD' => l10n.currencyAud,
+      _ => name, // fallback to Chinese name for unknown codes
+    };
+  }
 }
 
 /// V1 内置币种列表（顺序即"我的 → 多币种"页与记账页下拉的展示顺序）。
+// i18n-exempt: name field is DB seed data; UI uses Currency.localizedName()
 const List<Currency> kBuiltInCurrencies = [
   Currency(code: 'CNY', symbol: '¥', name: '人民币'),
   Currency(code: 'USD', symbol: r'$', name: '美元'),

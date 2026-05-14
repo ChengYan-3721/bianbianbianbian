@@ -8,25 +8,32 @@
 
 ---
 
-## 当前文件一览（Phase 16.3 · Home Screen Widget 完成后）
+## 当前文件一览（Phase 17.2 · 可访问性完成后）
 
 ```
 bianbianbianbian/
+├─ l10n.yaml                    Flutter gen-l10n 配置（arb-dir / template-arb-file / nullable-getter: false）
 ├─ lib/
 │  ├─ main.dart                 应用入口：Riverpod bootstrap（预热 defaultSeedProvider + Step 15.1 currentThemeKeyProvider + Step 15.2 currentFontSizeKeyProvider + Step 15.3 currentIconPackKeyProvider + Step 16.1 _scheduleReminderIfEnabled 冷启动恢复通知调度 + Step 16.3 _updateWidgetData 冷启动刷新小组件数据）+ Step 14.3 await backgroundLockTimeoutProvider + appLockEnabled → 已开启则 guard.lock() 冷启动锁 + Step 16.1 tz_data.initializeTimeZones() 时区初始化 + 错误兜底
+│  ├─ l10n/                     Step 17.1 Flutter gen-l10n 国际化
+│  │  ├─ app_zh.arb              简中 ARB 模板文件（~570 keys，含 @key 占位符元数据）
+│  │  ├─ app_localizations.dart  gen-l10n 生成：AppLocalizations 抽象类 + delegate + supportedLocales
+│  │  └─ app_localizations_zh.dart gen-l10n 生成：AppLocalizationsZh 实现
 │  ├─ app/
 │  │  ├─ app.dart               BianBianApp 根组件（ConsumerStatefulWidget · Step 15.1 watch currentThemeProvider 驱动 theme · Step 15.2 builder 覆盖 MediaQuery.textScaler（fontSizeScaleFactorProvider × 系统 TextScaler）+ 条件 _AppLockGate · Step 10.7 enableSyncLifecycle WidgetsBindingObserver 联动 syncTrigger · Step 14.3 enableAppLockGuard 同生命周期回调 guard.onPaused/onResumed · Step 16.3 _updateWidgetData 前台恢复刷新小组件 + _handleWidgetDeepLink 冷启动深链导航 + _listenWidgetClicks 运行中小组件点击 stream）
 │  │  ├─ app_router.dart        顶层 goRouter（/ → HomeShell, /record/new → RecordNewPage, /record/search → RecordSearchPage, …, /sync → CloudServicePage, /settings/reminder → ReminderPage）
-│  │  ├─ app_theme.dart         BianBianTheme 枚举（cream_bunny/thick_brown_bear/moonlight_dark/mint_green）+ BianBianFontSize 枚举（small/standard/large + scaleFactor）+ buildAppTheme(theme) 统一构建 + BianBianSemanticColors ThemeExtension + 向后兼容 appTheme
-│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口；Step 16.1：我的 Tab "提醒"入口）
+│  │  ├─ app_theme.dart         BianBianTheme 枚举（cream_bunny/thick_brown_bear/moonlight_dark/mint_green）+ BianBianThemeL10n extension（label(BuildContext) 从 l10n 取值）+ BianBianFontSize 枚举（small/standard/large + scaleFactor）+ BianBianFontSizeL10n extension + buildAppTheme(theme) 统一构建 + BianBianSemanticColors ThemeExtension + 向后兼容 appTheme
+│  │  └─ home_shell.dart        底部 4 Tab 壳页（Step 17.1：Tab 标签从 context.l10n 取值，不再硬编码中文；Step 10.1：我的 Tab 加"云服务"入口；Step 15.2：我的 Tab "外观"入口；Step 16.1：我的 Tab "提醒"入口）
 │  ├─ core/
 │  │  ├─ crypto/
 │  │  │  └─ bianbian_crypto.dart  BianbianCrypto（PBKDF2 + AES-256-GCM）+ DecryptionFailure
+│  │  ├─ l10n/
+│  │  │  └─ l10n_ext.dart        Step 17.1 BuildContextL10n extension（context.l10n 快捷访问 AppLocalizations）
 │  │  ├─ network/               [空]
 │  │  └─ util/
-│  │     ├─ currencies.dart     Currency 数据类 + kBuiltInCurrencies (11 种) + kFxRateSnapshot 写死快照（Step 8.1）
-│  │     ├─ category_icon_packs.dart  BianBianIconPack 枚举（sticker/flat）+ 两套 emoji 映射 + resolveCategoryIcon 运行时解析 + samplePackIcons 预览（Step 15.3）
-│  │     └─ quick_text_parser.dart  QuickTextParser + QuickParseResult（Step 9.1，本地中文快速记账文本解析器）
+│  │     ├─ currencies.dart     Currency 数据类 + kBuiltInCurrencies (11 种) + kFxRateSnapshot 写死快照（Step 8.1）+ localizedName(AppLocalizations) 方法（Step 17.1）+ name 字段 i18n-exempt（DB 种子数据）
+│  │     ├─ category_icon_packs.dart  BianBianIconPack 枚举（sticker/flat）+ 两套 emoji 映射 + resolveCategoryIcon 运行时解析 + samplePackIcons 预览（Step 15.3）+ localizedLabel(AppLocalizations) 方法（Step 17.1）+ 分类名 i18n-exempt
+│  │     └─ quick_text_parser.dart  QuickTextParser + QuickParseResult（Step 9.1，本地中文快速记账文本解析器；i18n-exempt: 算法关键词，非 UI 文本）
 │  ├─ data/
 │  │  ├─ local/
 │  │  │  ├─ app_database.dart         drift AppDatabase（schemaVersion=12；Step 16.1 v11→v12 user_pref 追加 reminder_enabled + reminder_time 列；Step 15.3 v10→v11 user_pref 追加 icon_pack 列；Step 15.2 v9→v10 user_pref 追加 font_size 列；Step 11.2 v8→v9 附件 BLOB shape 升级）
@@ -55,8 +62,9 @@ bianbianbianbian/
 │  │  │     ├─ sync_op_table.dart           §7.1 sync_op 队列表（AUTOINCREMENT id）
 │  │  │     └─ fx_rate_table.dart           Step 8.1 工具表（code PK / rate_to_cny REAL / updated_at INTEGER）
 │  │  ├─ remote/                [空]
-│  │  └─ repository/             Step 2.2 已填充：entity_mappers + repo_clock + 5 个仓库
+│  │  └─ repository/             Step 2.2 已填充：entity_mappers + repo_clock + exceptions + 5 个仓库
 │  │     ├─ repo_clock.dart             RepoClock typedef（仓库层时间注入点）
+│  │     ├─ exceptions.dart             Step 17.1 类型化异常（BudgetConflictException / LedgerNameConflictException），替代仓库层中文异常字符串
 │  │     ├─ entity_mappers.dart         drift row ↔ domain entity 映射桥接层
 │  │     ├─ ledger_repository.dart      LedgerRepository 接口 + LocalLedgerRepository
 │  │     ├─ category_repository.dart    CategoryRepository 接口 + LocalCategoryRepository
@@ -164,6 +172,15 @@ bianbianbianbian/
 │        ├─ reminder_page.dart           Step 16.1 ReminderPage（每日记账提醒开关 + 时间选择 + 测试提醒 + 说明文案）
 │        ├─ widget_data_service.dart     Step 16.3 WidgetData 数据类 + computeWidgetData 纯函数（今日支出/本月结余计算）+ WidgetDataService（initialize / saveAndRefresh / computeAndRefresh）+ 常量 kWidgetAppGroupId / kAndroidWidgetQualifiedName
 │        └─ attachment_cache_page.dart   Step 11.3 AttachmentCachePage（FutureBuilder 显示当前占用 + 上限 + 刷新按钮 + 红色"清除缓存"二次确认对话框 → pruner.clear()）
+│     └─ compliance/            Step 17.3 隐私政策与用户协议同意流程；"我的 → 关于"页 + 启动门控 + 撤回同意
+│        ├─ privacy_consent_providers.dart   PrivacyConsent AsyncNotifier（@Riverpod keepAlive · SharedPreferences key='privacy_policy_accepted_version' · build/accept/revoke）+ 常量 kCurrentPrivacyPolicyVersion='1.0' / kPrivacyPolicyAcceptedVersionPrefKey
+│        ├─ privacy_consent_providers.g.dart  riverpod_generator 产物
+│        ├─ privacy_consent_gate.dart        PrivacyConsentGate ConsumerWidget（套在 BianBianApp.builder 最外层 · AsyncValue 三态：data==kCurrentPrivacyPolicyVersion 透传 child / 其他 → PrivacyConsentDialog / loading → 空底色圆圈 / error → 按未同意处理）
+│        ├─ privacy_consent_dialog.dart      首次启动全屏同意页（Scaffold + ListView 渲染隐私政策 + 用户协议 + 底部"不同意"/"同意并继续"按钮 + "不同意"二次确认 dialog → SystemNavigator.pop()）
+│        ├─ policy_body.dart                 PrivacyPolicyBody / TermsOfServiceBody 共享渲染组件（_Section 内部小组件 · 同时被 dialog 与详情页消费保证文本不漂移）
+│        ├─ privacy_policy_page.dart         "我的 → 关于 → 隐私政策"详情页（AppBar + PrivacyPolicyBody）
+│        ├─ terms_of_service_page.dart       "我的 → 关于 → 用户协议"详情页（AppBar + TermsOfServiceBody）
+│        └─ about_page.dart                  "我的 → 关于"页（_AppHeader 兔团子 emoji + 应用名/Tagline + 版本 ListTile via package_info_plus + 隐私政策/用户协议/开源许可（showLicensePage）入口 + 红色"撤回同意"二次确认 → revoke + SystemNavigator.pop）
 ├─ android/app/build.gradle.kts Android 构建脚本（core library desugaring + minSdk 23）
 │  android/app/src/main/AndroidManifest.xml  Step 16.1 通知权限+receiver；Step 16.3 小组件 Provider receiver + bianbian 深链 intent-filter
 │  android/app/src/main/res/layout/bianbian_widget.xml  Step 16.3 桌面小组件布局（奶油兔风格）
@@ -245,7 +262,11 @@ bianbianbianbian/
 │  │  ├─ app_lock_providers_test.dart        PinAttemptSession.tryVerify 冷却语义 + AppLockController setupPin/changePin/disable/forgetPinAndDisable + appLockEnabledProvider invalidate + Step 14.2 biometricCapabilityProvider 三态 + biometricEnabledProvider invalidate + setBiometricEnabled + disable/forgetPinAndDisable 同步清生物识别开关 + Step 14.3 backgroundLockTimeoutProvider default/setX/拒负值 + AppLockGuard 状态机（lock/unlock/onPaused/onResumed elapsed</>=timeout/timeout=0 立即/null 不动/setTimeoutSeconds 即时生效/拒负值/appLockEnabled 联动 forceUnlock/timeoutProvider 联动 sync）+ AppLockGuardState ==/copyWith + Step 14.4 privacyModeProvider 默认 + setPrivacyMode store+native 双写 + invalidate 同步（共 44 用例）
 │  │  ├─ app_lock_overlay_test.dart          Step 14.3 AppLockOverlay widget 测试（3 用例：isLocked=true 显示 PinUnlockPage 无 AppBar / 输入正确 PIN → guard.unlock / PopScope canPop=false 验证）
 │  │  └─ app_lock_settings_page_test.dart    PinSetupPage 两步一致 / 不一致回退 / 长度过短 + PinUnlockPage 正确 + 3 次错误冷却文案 + AppLockSettingsPage 默认 OFF / 拨开开关 push setup → ON / 忘记 PIN 二次确认 + Step 14.2 _BiometricToggle 三态（不支持/未录入/可用）+ 拨开 success → persist + cancelled SnackBar + 拨关不弹面板 + PinUnlockPage 5 路径（success/cancelled/lockedOut/disabled/不支持/allowBiometric=false）+ Step 14.3 _BackgroundTimeoutTile 显示 / 未启用不挂载 / BottomSheet 4 选项 + 立即锁定 persist / 选当前值不写入 + Step 14.4 _PrivacyModeToggle 关锁状态可见 / 拨开 store+native 双写 / 拨关同步关闭（24 用例）
-│  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例；Step 10.7 起所有 BianBianApp 实例均传 enableSyncLifecycle: false）
+│  ├─ features/compliance/                   Step 17.3 隐私政策同意 + 关于页（16 用例）
+│  │  ├─ privacy_consent_providers_test.dart PrivacyConsent provider（5 用例：首次为 null / accept 写入版本号 + prefs / revoke 清除 + prefs / 跨 container 持久化 / 持有旧版本号识别为非当前）
+│  │  ├─ privacy_consent_gate_test.dart      PrivacyConsentGate widget（6 用例：未同意挡主界面 / 点同意后透传 + prefs 写入 / 点不同意显示二次确认 + 再次阅读回弹窗 / 已同意预置 prefs 直接透传 / 旧版本号按未同意处理 / 段落标题渲染）
+│  │  └─ about_page_test.dart                AboutPage widget（5 用例：5 个入口渲染 / mock package_info_plus method channel → 版本号显示 / 点击隐私政策导航 / 点击用户协议导航 / 点击撤回同意显示二次确认 + 取消保留同意状态）
+│  └─ widget_test.dart          Widget 测试（HomeShell + 首页流水列表 + 已删账户回退 6 用例；Step 10.7 起所有 BianBianApp 实例均传 enableSyncLifecycle: false；Step 17.3 起均加传 enablePrivacyConsentGate: false）
 ├─ memory-bank/
 │  ├─ design-document.md        产品设计（权威来源）
 │  ├─ implementation-plan.md    分阶段实施计划
@@ -271,14 +292,15 @@ bianbianbianbian/
 ### `lib/app/`
 应用装配层。Step 0.4 已填充四个文件：
 
-- **`app.dart`**：`BianBianApp`（ConsumerStatefulWidget，Step 10.7 升级 + Step 15.1 主题动态化）。返回 `MaterialApp.router`，注入 `theme: ref.watch(currentThemeProvider)`（Step 15.1：由 provider 驱动，切换后即时变色）、`routerConfig: goRouter`、`title: '边边记账'`、`debugShowCheckedModeBanner: false`。Step 10.7 `enableSyncLifecycle` WidgetsBindingObserver 联动 syncTrigger；Step 14.3 `enableAppLockGuard` + builder 套 `_AppLockGate` Stack 在 router child 之上挂 `AppLockOverlay`。
+- **`app.dart`**：`BianBianApp`（ConsumerStatefulWidget，Step 10.7 升级 + Step 15.1 主题动态化）。返回 `MaterialApp.router`，注入 `theme: ref.watch(currentThemeProvider)`（Step 15.1：由 provider 驱动，切换后即时变色）、`routerConfig: goRouter`、`title: '边边记账'`（i18n-exempt: app title used before localization is available）、`localizationsDelegates: AppLocalizations.localizationsDelegates`、`supportedLocales: AppLocalizations.supportedLocales`、`locale: const Locale('zh')`（Step 17.1）、`debugShowCheckedModeBanner: false`。Step 10.7 `enableSyncLifecycle` WidgetsBindingObserver 联动 syncTrigger；Step 14.3 `enableAppLockGuard` + builder 套 `_AppLockGate` Stack 在 router child 之上挂 `AppLockOverlay`。
 - **`app_router.dart`**：顶层 `final GoRouter goRouter`。当前只有一条 `GoRoute('/')` → `HomeShell`；后续各 Phase 在此数组追加路由（`/record/new`、`/ledger`、`/settings/sync` …）。若 Phase 10 同步启动后需要监听登录态重定向，应改为 `@riverpod GoRouter goRouter(Ref ref)`。
-- **`app_theme.dart`**（Step 15.1 重构）：
-  - `BianBianTheme` 枚举：`creamBunny` / `thickBrownBear` / `moonlightDark` / `mintGreen`，与 `user_pref.theme` 列值一一对应。`fromKey(key)` 解析 + 回退默认；`isDark` / `label` 属性。
+- **`app_theme.dart`**（Step 15.1 重构 + Step 17.1 l10n 化）：
+  - `BianBianTheme` 枚举：`creamBunny` / `thickBrownBear` / `moonlightDark` / `mintGreen`，与 `user_pref.theme` 列值一一对应。`fromKey(key)` 解析 + 回退默认；`isDark` 属性。Step 17.1 移除 `label` 字段，改用 `BianBianThemeL10n` extension method `label(BuildContext context)` 从 l10n 取值。
   - `buildAppTheme(BianBianTheme)`：统一构建入口——按枚举选出 `ColorScheme` + `BianBianSemanticColors` + 阴影色 + scaffold 背景，产出完整 `ThemeData`。四套色板：奶油兔（design-document §10.2 奶油黄/樱花粉/可可棕）、厚棕熊（暖棕/米）、月见黑（深色模式）、薄荷绿（清新）。
   - `BianBianSemanticColors`：`ThemeExtension`（不变），承载 success / warning / danger 三语义色，每套主题各自配色。
+  - `BianBianFontSize` 枚举：`small` / `standard` / `large`，与 `user_pref.font_size` 一一对应。Step 17.1 移除 `label` 字段，改用 `BianBianFontSizeL10n` extension method `label(BuildContext context)` 从 l10n 取值。
   - `final ThemeData appTheme = buildAppTheme(BianBianTheme.creamBunny)`：向后兼容，供 widget_test 等不依赖 provider 的场景。
-- **`home_shell.dart`**：`HomeShell`（StatefulWidget）。`BottomNavigationBar` 4 Tab：记账 / 统计 / 账本 / 我的。使用**本地 index**（`setState`）管理当前 Tab。各 Tab body：
+- **`home_shell.dart`**：`HomeShell`（StatefulWidget）。`BottomNavigationBar` 4 Tab：记账 / 统计 / 账本 / 我的。使用**本地 index**（`setState`）管理当前 Tab。Step 17.1 Tab 标签从 `context.l10n` 取值（不再硬编码中文）。各 Tab body：
   - 记账（index=0）：`RecordHomePage`（Step 3.1 接入，ConsumerWidget，独立 Scaffold + FAB）。
   - 统计（index=1）：`StatsPage`（Step 5.1 接入，时间区间选择器 + 区间展示）。
   - 账本（index=2）：`LedgerListPage`（Step 4.1 接入，ConsumerWidget，正式卡片列表 + 点击切换）。
@@ -286,10 +308,12 @@ bianbianbianbian/
   - 若未来某 Tab 要求"深链 + 各自独立历史栈"，迁移到 `StatefulShellRoute.indexedStack`。
 
 ### `lib/core/`
-横切关注点，三个子目录按职责拆分：
+横切关注点，四个子目录按职责拆分：
 - **`crypto/`**（Step 1.6 已填充）：
   - **`bianbian_crypto.dart`**：`BianbianCrypto` 工具类（私有构造，只暴露 static 方法）+ `DecryptionFailure` 异常。三个公开 API：`deriveKey(password, salt, {iterations=100000})` 走 PBKDF2-HMAC-SHA256；`encrypt(plaintext, key)` 走 AES-256-GCM 并返回 `nonce(12) ‖ ciphertext(N) ‖ tag(16)` 连续打包的 `Uint8List`；`decrypt(packed, key)` 反向解包，任何失败（长度不足 / tag 校验失败 / 错误 key）统一抛 `DecryptionFailure`。nonce 由 `AesGcm.newNonce()` 生成（`Random.secure()` 内核）每次都独立，避免同一 key 下重用导致 GCM 泄密。`@visibleForTesting` 的 `encryptWithFixedNonce` 让 KAT 能对照固定 `(K, N, P) → (C, T)` 向量。key 长度严格校验 32 字节，nonce 严格 12 字节，非法输入抛 `ArgumentError`。
   - 消费者：当前实际消费方仅 `user_pref.ai_api_key_encrypted` 存取（Step 9.3 起，落 UTF-8 raw bytes，DB 由 SQLCipher 加密保护）。**Phase 11（附件云同步）不再消费**——附件直接明文上传到用户自有云，无字段级加密；原计划的「note 加密 / 附件密文 / 同步码对称外壳」整段废弃。`bianbian_crypto.dart` 留作未来可选加密层（如 Phase 13 `.bbbak` 备份包密码加密）的工具备件。**与 SQLCipher/`DbCipherKeyStore` 走两条独立路径**——本工具加密的是"出站字段"，SQLCipher 加密的是"本机 DB 文件"。
+- **`l10n/`**（Step 17.1 新建）：
+  - **`l10n_ext.dart`**：`BuildContextL10n` extension，在 `BuildContext` 上暴露 `l10n` getter，等价 `AppLocalizations.of(this)`。全项目 UI 代码统一通过 `context.l10n.xxxKey` 获取本地化字符串，不再直接 import `AppLocalizations`。
 - **`network/`**：`SupabaseClient` 工厂，支持用户自建 Supabase（BYO 单模——Phase 10 已废弃"官方托管 + 自建双模"，所有用户都填自己的 URL + anon key）。Step 10.2 填充。
 - **`util/`**：无分类的纯函数工具；目前承载三个文件——
   - `currencies.dart`（Step 8.1）：`Currency` 数据类 + `kBuiltInCurrencies` (11 种) + `kFxRateSnapshot` 初始汇率快照。
@@ -339,13 +363,14 @@ bianbianbianbian/
 - **`remote/`**：Supabase 的 DataSource（表映射 + 批量 push/pull）。Step 10.x 填充。
 - **`repository/`**（Step 2.2 已填充）：
   - **`repo_clock.dart`**：`typedef RepoClock = DateTime Function()`——仓库层"当前时间"注入点。生产路径默认 `DateTime.now`，测试路径注入固定时间戳。
+  - **`exceptions.dart`**（Step 17.1 新建）：类型化异常——`BudgetConflictException({period, isTotal})` + `LedgerNameConflictException(name)`。替代仓库层原先硬编码的中文异常字符串。UI 层 catch 后通过 l10n 生成展示文本。
   - **`entity_mappers.dart`**：drift 行对象 ↔ 领域实体的唯一映射桥接层。5 组 10 个函数（每组 `rowToXxx` + `xxxToCompanion`），完成 `int epochMs ↔ DateTime`、`int? 0/1 ↔ bool`、nullable 默认值应用。**这是 `lib/data/` 与 `lib/domain/` 之间唯一允许的桥接点**——UI 层只能通过抽象接口 import 仓库。
   - **5 个仓库**（一个抽象接口 + 一个 `LocalXxxRepository` 实现）：
-    - `ledger_repository.dart`：`listActive()` / `getById(id)` / `save(Ledger)` / `softDeleteById(id)` / `setArchived(id, bool)`。**名称唯一性强化**：`save()` 内查 `name` 命中未软删账本（排除自身 id）即抛 `LedgerNameConflictException`（同文件公开类，`Exception` 而非 `Error`）。Why: 删除账本即使云端有备份也找不回（V1 同步按 ledgerId 寻址，普通用户只识别名字），允许重名会导致切换/恢复时无法区分。已软删的账本不视为冲突——名字可被新账本立即复用；UI 在调用前已 trim 名字。
+    - `ledger_repository.dart`：`listActive()` / `getById(id)` / `save(Ledger)` / `softDeleteById(id)` / `setArchived(id, bool)`。**名称唯一性强化**：`save()` 内查 `name` 命中未软删账本（排除自身 id）即抛 `LedgerNameConflictException`（`exceptions.dart`，Step 17.1 抽取为类型化异常）。Why: 删除账本即使云端有备份也找不回（V1 同步按 ledgerId 寻址，普通用户只识别名字），允许重名会导致切换/恢复时无法区分。已软删的账本不视为冲突——名字可被新账本立即复用；UI 在调用前已 trim 名字。
     - `category_repository.dart`：`listActiveByParentKey(parentKey)` / `listFavorites()` / `listActiveAll()` / `save(Category)` / `toggleFavorite(id, isFavorite)` / `softDeleteById(id)`
     - `account_repository.dart`：`listActive()` / `getById(id)` / `save(Account)` / `softDeleteById(id)`。**Step 7.2 新增 `getById`**：**不**过滤 `deleted_at`，软删账户也能查到——这是流水详情显示"（已删账户）"占位的实现路径（参见 `_TxTile.accountName`）。
     - `transaction_repository.dart`：`listActiveByLedger(ledgerId)` / `save(TransactionEntry)` / `softDeleteById(id)`
-    - `budget_repository.dart`：`listActiveByLedger(ledgerId)` / `save(Budget)` / `softDeleteById(id)`。**Step 6.1 强化**：`save()` 内额外查 `(ledgerId, period, categoryId)` 是否有未软删的同键预算（`categoryId == null` 与非空分别走 `isNull` / `equals`）；命中即抛 `BudgetConflictException`（同文件公开类，`Exception` 而非 `Error`）。允许"同 id 视为更新"（excludeId 排除自身）；软删后释放唯一性锁，可重建。
+    - `budget_repository.dart`：`listActiveByLedger(ledgerId)` / `save(Budget)` / `softDeleteById(id)`。**Step 6.1 强化**：`save()` 内额外查 `(ledgerId, period, categoryId)` 是否有未软删的同键预算（`categoryId == null` 与非空分别走 `isNull` / `equals`）；命中即抛 `BudgetConflictException`（`exceptions.dart`，Step 17.1 抽取为类型化异常）。允许"同 id 视为更新"（excludeId 排除自身）；软删后释放唯一性锁，可重建。
   - 所有仓库的 `LocalXxxRepository` 构造参数统一为 `(db, deviceId, {clock})`，内部持有 `AppDatabase` + 对应 DAO + `SyncOpDao`。
   - **共同职责**：
     1. `save`：覆写 `updated_at`（clock）+ `device_id`（构造参数），单事务内 `dao.upsert` + `syncOpDao.enqueue('upsert')`。返回已被 repo 覆写的实体快照。
@@ -2335,3 +2360,138 @@ Android 多任务预览（运行期）：
 - **更多档位（特大 / 超大）**：implementation-plan §15.2 明确"小三档"，设计文档 §5.11 也只写"字体大小"。
 - **跟随系统字号但不额外缩放的选项**：standard 档 `scaleFactor=1.0` 已等效——`system * 1.0 = system`。
 - **自定义字号滑块**：三档互斥足够；滑块增加精确度但用户认知成本高，且 0.85/1.0/1.15 已覆盖设计文档 §10 可访问性"支持系统字号放大"的需求。
+
+---
+
+## Step 17.1 国际化 (i18n) 规范
+
+### 体系结构
+
+- **ARB 模板**：`lib/l10n/app_zh.arb`（~570 keys）为当前唯一 ARB 文件。`l10n.yaml` 配置 `nullable-getter: false`，确保 `context.l10n` 非空。
+- **代码生成**：`flutter gen-l10n` 生成 `lib/l10n/app_localizations.dart`（抽象类 + delegate）和 `app_localizations_zh.dart`（实现）。`pubspec.yaml` 的 `flutter: generate: true` 使 `flutter run/build` 自动触发。
+- **访问方式**：`import '../../core/l10n/l10n_ext.dart'` 后通过 `context.l10n.xxxKey` 取值。禁止直接 import `app_localizations.dart` 或 `flutter_gen/gen_l10n/`。
+- **新增语言**：在 `lib/l10n/` 下新增 `app_en.arb` 等文件，`flutter gen-l10n` 自动生成对应类。`BianBianApp` 的 `locale` 硬编码为 `zh`——将来需要根据系统 locale 或用户设置动态切换。
+
+### i18n-exempt 规范
+
+以下场景的中文字符串**不**走 l10n，必须以 `// i18n-exempt: <reason>` 注释标注：
+
+| 场景 | 典型文件 | 原因 |
+|---|---|---|
+| DB 种子数据名称 | `seeder.dart`, `category_icon_packs.dart`, `currencies.dart` | 写入 DB 的值，UI 层通过 `localizedName(l10n)` 展示本地化名 |
+| 文本解析关键词 | `quick_text_parser.dart` | 算法输入，不是 UI 文本 |
+| CSV 列头/格式标识 | `export_service.dart`, `import_service.dart` | V1 格式兼容，列名与字节内容绑定 |
+| 三方模板匹配 | `third_party_template.dart` | 匹配微信/支付宝/钱迹 CSV 中的中文列头 |
+| 通知内容 | `reminder_service.dart` | flutter_local_notifications 无 BuildContext |
+| 服务层错误消息 | `ai_input_enhance_service.dart`, `sync_trigger.dart`, `fx_rate_refresh_service.dart` | 抛异常在 UI 层 catch 后经 l10n 展示；或 Notifier 无 BuildContext |
+| PIN 校验消息 | `pin_credential.dart` | 纯函数无 BuildContext |
+| assertion 消息 | 各文件 `assert()` | 开发者面向，运行时不展示 |
+
+### 类型化异常模式
+
+仓库层抛异常时不带本地化字符串，改用类型化异常（如 `BudgetConflictException` / `LedgerNameConflictException`），定义在 `lib/data/repository/exceptions.dart`。UI 层 catch 后通过 l10n 生成展示文本：
+```dart
+// repository 层
+throw BudgetConflictException(period: 'monthly', isTotal: true);
+
+// UI 层
+catch (e) {
+  if (e is BudgetConflictException) {
+    snackbar(context.l10n.budgetConflictTotal);
+  }
+}
+```
+
+### 枚举本地化模式
+
+需要 `BuildContext` 的枚举标签用 extension method 替代 `label` 字段：
+```dart
+enum BianBianTheme { creamBunny, ... }
+
+extension BianBianThemeL10n on BianBianTheme {
+  String label(BuildContext context) => switch (this) {
+    BianBianTheme.creamBunny => context.l10n.themeCreamBunny,
+    ...
+  };
+}
+```
+调用处从 `theme.label` 改为 `theme.label(context)`。枚举定义不引入 l10n 依赖。
+
+### 测试配置
+
+所有 widget 测试的 `MaterialApp` 必须配置 l10n，否则 `AppLocalizations.of(context)` 返回 null：
+```dart
+MaterialApp(
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
+  locale: const Locale('zh'),
+  home: ...,
+)
+```
+
+---
+
+## Step 17.2 可访问性 (A11y) 规范
+
+### 触达尺寸 ≥ 44×44pt
+
+- **基线**：Apple HIG + Material a11y guideline 都要求可点击控件最小触达盒 44×44pt（Material 也接受 48pt）。本项目以 **44pt** 为统一基线。
+- **IconButton 默认**：Material 3 的 IconButton 默认命中盒 48×48pt（`materialTapTargetSize: MaterialTapTargetSize.padded`）——免修改。
+- **`VisualDensity.compact` 的陷阱**：单独使用 `visualDensity: VisualDensity.compact` 会把命中盒缩到 40pt（每方向 -4pt）。**必须叠加** `constraints: BoxConstraints(minWidth: 44, minHeight: 44)` 才能保底 44pt。约束只扩大命中盒，不影响 `visualDensity` 控制的视觉密度（图标 + 内边距仍紧凑）。
+
+  ```dart
+  IconButton(
+    tooltip: '...',
+    icon: ...,
+    onPressed: ...,
+    visualDensity: VisualDensity.compact,
+    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),  // 必加
+  )
+  ```
+
+- **自定义 InkWell / GestureDetector**：内层子组件不到 44pt 时，用 `ConstrainedBox(constraints: BoxConstraints(minHeight: 44, minWidth: 44))` 包裹再套 Padding/Center。例：`record_home_page.dart` 的同步徽章、月份标签。
+
+- **网格类布局**：`GridView.count` 的 `childAspectRatio` 决定单元格高度。280pt 宽 / 4 列 / gap 6 → cell 宽 ~64pt。要保 44pt 高需 `childAspectRatio: 1.45`（参考 `month_picker_dialog.dart`）。
+
+- **故意不做 44pt 的位置（决策记录）**：
+  - **统计页热力图单元格**（`stats_page.dart:_HeatmapCellTile`，22×22pt）：年度密集信息可视化，扩到 44pt 会破坏布局；用 Tooltip + 点选替代精确触达。
+  - **import_page radio 行**：自然高度因 title+subtitle 双行已 ≥ 48pt，无需 ConstrainedBox。
+
+### Semantics 标签策略
+
+- **优先用 `tooltip`**：`IconButton.tooltip` 自动生成 `Semantics(label: ...)`，无需手写 `Semantics(...)` 包裹。
+- **没有 tooltip 的可点击图像**：用 `Image.file/network(semanticLabel: ...)` 加屏幕阅读器标签。例：`attachment_thumbnail.dart`。
+- **不加 Semantics 的位置**：
+  - ListTile leading/trailing：ListTile 自动把 title+subtitle 串入 Semantics，单独给 leading Icon 加 label 会重复。
+  - 空状态大装饰 Icon（size 34-40，旁边有描述 Text）：屏幕阅读器读 Text 即足够。
+  - 分类管理页 emoji 文字：emoji 本身被屏幕阅读器读出 Unicode 描述。
+
+### a11y l10n key 命名规范
+
+- **前缀 `a11y`**：纯粹用于 tooltip / Semantics label 的 key 以 `a11y` 开头（如 `a11yRecordHomeNewFab`、`a11yAttachmentImage`），与普通 UI 文案区分，便于批量审计与本地化扩展。
+- **复用普通 key**：如果普通 UI 文案能直接做 tooltip（如 `delete`、`close`、`refresh`），直接复用即可，不必另起 a11y key。
+
+### 字号缩放 130% 支持
+
+- **`BianBianApp.builder` 已自带支持**（Step 15.2）：
+  ```dart
+  final scaleFactor = ref.watch(fontSizeScaleFactorProvider);
+  final systemScaler = MediaQuery.textScalerOf(context);
+  child = MediaQuery(
+    data: MediaQuery.of(context).copyWith(
+      textScaler: TextScaler.linear(
+        systemScaler.scale(1.0) * scaleFactor,
+      ),
+    ),
+    child: child,
+  );
+  ```
+- **生效路径**：系统字号 130% × App 标准档（1.0）= 1.30；× App 大档（1.15）= 1.495。textScaler 写回 MediaQuery 后，全 app 文字、对话框、底部表均生效。
+- **不 clamp**：不强制把放大上限设为 1.0/1.3——用户开 130% 是 a11y 需求，clamp 反而违背初衷。
+- **代码层避坑**：避免给 Text 用固定 `height` 的 Container 包裹（文字放大后会被裁切）。优先用 `IntrinsicHeight` / 不设高度的 Padding。如果必须设高度，用 `ConstrainedBox(minHeight: ...)` 而非 `SizedBox(height: ...)`。
+
+### 验证手段
+
+- **静态**：`flutter analyze`、`flutter test`（756/756）。
+- **代码层 lint**：不存在专门的 a11y lint；靠 review 与 progress.md 决策记录。
+- **运行时**：iOS VoiceOver / Android TalkBack 聚焦关键控件，听播报；模拟器开"Show touch hits"或 a11y inspector 量测触达盒。

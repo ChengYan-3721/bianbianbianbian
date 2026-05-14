@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../data/repository/budget_repository.dart';
+import '../../core/l10n/l10n_ext.dart';
+import '../../data/repository/exceptions.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/budget.dart';
 import '../../domain/entity/category.dart';
@@ -38,12 +39,13 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
 
   Future<Budget?> _loadBudget() async {
     if (widget.budgetId == null) return null;
+    final l10n = context.l10n;
     final ledgerId = await ref.read(currentLedgerIdProvider.future);
     final repo = await ref.read(budgetRepositoryProvider.future);
     final all = await repo.listActiveByLedger(ledgerId);
     return all.firstWhere(
       (b) => b.id == widget.budgetId,
-      orElse: () => throw StateError('预算不存在'),
+      orElse: () => throw StateError(l10n.budgetNotExist),
     );
   }
 
@@ -69,11 +71,11 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? '编辑预算' : '新建预算'),
+        title: Text(isEdit ? '${context.l10n.edit}${context.l10n.budgetTitle}' : context.l10n.budgetNew),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('保存'),
+            child: Text(context.l10n.save),
           ),
         ],
       ),
@@ -84,14 +86,14 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('加载失败：${snapshot.error}'));
+            return Center(child: Text(context.l10n.loadFailedWithError(snapshot.error.toString())));
           }
           _hydrate(snapshot.data);
 
           final categoriesAsync = ref.watch(budgetableCategoriesProvider);
           return categoriesAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('加载失败：$e')),
+            error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
             data: (categories) => _buildForm(context, categories),
           );
         },
@@ -107,12 +109,12 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('周期'),
+            Text(context.l10n.budgetPeriod),
             const SizedBox(height: 8),
             SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'monthly', label: Text('月')),
-                ButtonSegment(value: 'yearly', label: Text('年')),
+              segments: [
+                ButtonSegment(value: 'monthly', label: Text(context.l10n.periodMonthly)),
+                ButtonSegment(value: 'yearly', label: Text(context.l10n.periodYearly)),
               ],
               selected: {_period},
               onSelectionChanged: (s) => setState(() => _period = s.first),
@@ -120,26 +122,26 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
             const SizedBox(height: 20),
             DropdownButtonFormField<String?>(
               initialValue: _categoryId,
-              decoration: const InputDecoration(
-                labelText: '分类',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.budgetCategory,
+                border: const OutlineInputBorder(),
               ),
               items: [
-                const DropdownMenuItem<String?>(
+                DropdownMenuItem<String?>(
                   value: null,
-                  child: Text('总预算（不限分类）'),
+                  child: Text(context.l10n.budgetTotalNoCategory),
                 ),
-                ..._sortedCategoryItems(categories),
+                ..._sortedCategoryItems(context, categories),
               ],
               onChanged: (v) => setState(() => _categoryId = v),
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _amountController,
-              decoration: const InputDecoration(
-                labelText: '预算金额',
+              decoration: InputDecoration(
+                labelText: context.l10n.budgetAmount,
                 prefixText: '¥ ',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
@@ -147,17 +149,17 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
               ],
               validator: (v) {
                 final raw = v?.trim() ?? '';
-                if (raw.isEmpty) return '请输入金额';
+                if (raw.isEmpty) return context.l10n.budgetAmountRequired;
                 final n = double.tryParse(raw);
-                if (n == null || n <= 0) return '金额必须大于 0';
+                if (n == null || n <= 0) return context.l10n.budgetAmountPositive;
                 return null;
               },
             ),
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('开启结转'),
-              subtitle: const Text('未花完金额累加到下个周期'),
+              title: Text(context.l10n.budgetCarryOver),
+              subtitle: Text(context.l10n.budgetCarryOverHint),
               value: _carryOver,
               onChanged: (v) => setState(() => _carryOver = v),
             ),
@@ -181,11 +183,13 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
   }
 
   List<DropdownMenuItem<String?>> _sortedCategoryItems(
+    BuildContext context,
     List<Category> categories,
   ) {
+    final labels = parentKeyLabels(context);
     final sorted = [...categories]..sort((a, b) {
-        final pa = kParentKeyLabels[a.parentKey] ?? a.parentKey;
-        final pb = kParentKeyLabels[b.parentKey] ?? b.parentKey;
+        final pa = labels[a.parentKey] ?? a.parentKey;
+        final pb = labels[b.parentKey] ?? b.parentKey;
         final c = pa.compareTo(pb);
         if (c != 0) return c;
         return a.sortOrder.compareTo(b.sortOrder);
@@ -195,7 +199,7 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
         DropdownMenuItem<String?>(
           value: c.id,
           child: Text(
-            '${kParentKeyLabels[c.parentKey] ?? c.parentKey} · ${c.name}',
+            '${labels[c.parentKey] ?? c.parentKey} · ${c.name}',
           ),
         ),
     ];
@@ -254,12 +258,19 @@ class _BudgetEditPageState extends ConsumerState<BudgetEditPage> {
       Navigator.of(context).pop(true);
     } on BudgetConflictException catch (e) {
       if (!mounted) return;
+      final l10n = context.l10n;
+      final periodLabel = e.period == 'yearly'
+          ? l10n.periodYearly
+          : l10n.periodMonthly;
+      final msg = e.isTotal
+          ? l10n.budgetConflictTotal(periodLabel)
+          : l10n.budgetConflictCategory(periodLabel);
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('保存失败：$e')));
+          .showSnackBar(SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -286,7 +297,7 @@ class _StartDatePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = period == 'yearly' ? '${value.year} 年起' : '${value.year}-${value.month.toString().padLeft(2, '0')} 起';
+    final fmt = period == 'yearly' ? '${value.year}${context.l10n.budgetYearStartFrom}' : '${value.year}-${value.month.toString().padLeft(2, '0')} 起'; // i18n-exempt: monthly date format suffix
 
     return InkWell(
       borderRadius: BorderRadius.circular(8),
@@ -302,7 +313,7 @@ class _StartDatePicker extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('结转起始', style: theme.textTheme.bodyMedium),
+                  Text(context.l10n.budgetCarryStart, style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 2),
                   Text(
                     fmt,
@@ -313,7 +324,7 @@ class _StartDatePicker extends StatelessWidget {
                   if (!isEdit) ...[
                     const SizedBox(height: 2),
                     Text(
-                      '选择更早的月份可让那时之后的剩余结转到本月',
+                      context.l10n.budgetCarryStartHint,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.black45,
                       ),
@@ -340,7 +351,7 @@ class _StartDatePicker extends StatelessWidget {
       initialDate: value.isAfter(lastDate) ? lastDate : value,
       firstDate: firstDate,
       lastDate: lastDate,
-      helpText: '选择结转起始月份',
+      helpText: context.l10n.budgetSelectCarryStartMonth,
       // 不需要选具体日期；datePicker 会让用户选日，我们规整到该月 1 日。
     );
     if (picked == null) return;

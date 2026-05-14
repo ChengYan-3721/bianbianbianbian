@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/app_theme.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
 import 'settings_providers.dart';
 
@@ -19,14 +20,14 @@ class ThemePage extends ConsumerWidget {
     final iconPackKey = iconPackKeyAsync.valueOrNull ?? 'sticker';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('外观')),
+      appBar: AppBar(title: Text(context.l10n.themeTitle)),
       body: ListView(
         children: [
           // ─── 主题区 ────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(
-              '主题',
+              context.l10n.themeLabel,
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
@@ -42,7 +43,7 @@ class ThemePage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '切换后所有页面即时生效，包括图表与图标底色',
+              context.l10n.themeSwitchHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context)
                         .colorScheme
@@ -57,7 +58,7 @@ class ThemePage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
-              '字号',
+              context.l10n.themeFontSize,
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
@@ -68,7 +69,7 @@ class ThemePage extends ConsumerWidget {
                 for (final fs in BianBianFontSize.values)
                   ButtonSegment(
                     value: fs,
-                    label: Text(fs.label),
+                    label: Text(fs.label(context)),
                   ),
               ],
               selected: {BianBianFontSize.fromKey(fontSizeKey)},
@@ -83,7 +84,7 @@ class ThemePage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '大字号会在系统字号基础上再放大 15%，小字号缩小 15%',
+              context.l10n.themeFontSizeHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context)
                         .colorScheme
@@ -98,7 +99,7 @@ class ThemePage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
-              '分类图标',
+              context.l10n.themeIconPack,
               style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
@@ -114,7 +115,7 @@ class ThemePage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '切换后分类网格与流水列表图标即时更新；自定义图标不受影响',
+              context.l10n.themeIconPackSwitchHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context)
                         .colorScheme
@@ -169,7 +170,7 @@ class _ThemeCard extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    theme.label,
+                    theme.label(context),
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
@@ -185,17 +186,17 @@ class _ThemeCard extends StatelessWidget {
               // 色板预览行
               Row(
                 children: [
-                  _ColorDot(cs.primary, label: '主色'),
+                  _ColorDot(cs.primary, label: context.l10n.themePrimary),
                   const SizedBox(width: 8),
-                  _ColorDot(cs.primaryContainer, label: '容器'),
+                  _ColorDot(cs.primaryContainer, label: context.l10n.themeContainer),
                   const SizedBox(width: 8),
-                  _ColorDot(cs.secondary, label: '辅助'),
+                  _ColorDot(cs.secondary, label: context.l10n.themeTertiary),
                   const SizedBox(width: 8),
-                  _ColorDot(semantics.success, label: '成功'),
+                  _ColorDot(semantics.success, label: context.l10n.themeSuccess),
                   const SizedBox(width: 8),
-                  _ColorDot(semantics.warning, label: '警告'),
+                  _ColorDot(semantics.warning, label: context.l10n.themeWarning),
                   const SizedBox(width: 8),
-                  _ColorDot(semantics.danger, label: '错误'),
+                  _ColorDot(semantics.danger, label: context.l10n.themeError),
                 ],
               ),
               const SizedBox(height: 10),
@@ -319,7 +320,7 @@ class _IconPackCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      pack.label,
+                      pack.localizedLabel(context.l10n),
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,

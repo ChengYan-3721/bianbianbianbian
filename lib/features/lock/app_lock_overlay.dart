@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import 'app_lock_providers.dart';
 import 'pin_unlock_page.dart';
 
@@ -31,7 +32,7 @@ class AppLockOverlay extends ConsumerWidget {
         // 撑满父级 Stack；锁屏要完全遮盖底下的路由器内容。
         type: MaterialType.canvas,
         child: PinUnlockPage(
-          subtitle: '请输入 PIN 解锁边边记账',
+          subtitle: context.l10n.lockEnterPin,
           allowBiometric: true,
           showAppBar: false,
           onUnlocked: () =>

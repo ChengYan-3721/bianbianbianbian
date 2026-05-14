@@ -1,0 +1,1633 @@
+{
+  "@@locale": "zh",
+  "appTitle": "边边记账",
+  "tabRecord": "记账",
+  "tabStats": "统计",
+  "tabLedger": "账本",
+  "tabMe": "我的",
+  "save": "保存",
+  "cancel": "取消",
+  "delete": "删除",
+  "edit": "编辑",
+  "add": "添加",
+  "confirm": "确认",
+  "close": "关闭",
+  "nextStep": "下一步",
+  "reset": "重置",
+  "refresh": "刷新",
+  "done": "完成",
+  "clear": "清空",
+  "modify": "修改",
+  "select": "选择",
+  "know": "知道了",
+  "tip": "提示",
+  "loading": "加载中…",
+  "parsing": "解析中…",
+  "noData": "暂无数据",
+  "deleted": "已删除",
+  "required": "必填",
+  "optional": "可选",
+  "enabled": "已开启",
+  "disabled": "关闭中",
+  "notConfigured": "未配置",
+  "unknown": "未知",
+  "error": "错误",
+  "txTypeIncome": "收入",
+  "txTypeExpense": "支出",
+  "txTypeTransfer": "转账",
+  "txTypeUncategorized": "未分类",
+  "periodMonthly": "月",
+  "periodYearly": "年",
+  "periodMonthBudget": "月预算",
+  "periodYearBudget": "年预算",
+  "parentKeyIncome": "收入",
+  "parentKeyFood": "饮食",
+  "parentKeyShopping": "购物",
+  "parentKeyTransport": "出行",
+  "parentKeyEducation": "教育",
+  "parentKeyEntertainment": "娱乐",
+  "parentKeySocial": "人情",
+  "parentKeyHousing": "住房",
+  "parentKeyMedical": "医药",
+  "parentKeyInvestment": "投资",
+  "parentKeyOther": "其他",
+  "quickCatIncome": "收",
+  "quickCatFood": "食",
+  "quickCatShopping": "购",
+  "quickCatTransport": "行",
+  "quickCatEducation": "育",
+  "quickCatEntertainment": "乐",
+  "quickCatSocial": "情",
+  "quickCatHousing": "住",
+  "quickCatMedical": "医",
+  "quickCatInvestment": "投",
+  "quickCatOther": "其",
+  "accountTypeCash": "现金",
+  "accountTypeDebit": "储蓄卡",
+  "accountTypeCredit": "信用卡",
+  "accountTypeThirdParty": "第三方支付",
+  "accountTypeOther": "其他",
+  "deletedAccount": "（已删账户）",
+  "currencyCny": "人民币",
+  "currencyUsd": "美元",
+  "currencyEur": "欧元",
+  "currencyJpy": "日元",
+  "currencyKrw": "韩元",
+  "currencyHkd": "港币",
+  "currencyTwd": "新台币",
+  "currencyGbp": "英镑",
+  "currencySgd": "新元",
+  "currencyCad": "加元",
+  "currencyAud": "澳元",
+  "currencyCnyFull": "人民币 (CNY)",
+  "currencyUsdFull": "美元 (USD)",
+  "currencyEurFull": "欧元 (EUR)",
+  "currencyJpyFull": "日元 (JPY)",
+  "currencyKrwFull": "韩元 (KRW)",
+  "currencyGbpFull": "英镑 (GBP)",
+  "currencyHkdFull": "港币 (HKD)",
+  "themeCreamBunny": "🐰 奶油兔",
+  "themeThickBrownBear": "🐻 厚棕熊",
+  "themeMoonlightDark": "🌙 月见黑",
+  "themeMintGreen": "🍃 薄荷绿",
+  "fontSizeSmall": "小",
+  "fontSizeStandard": "标准",
+  "fontSizeLarge": "大",
+  "iconPackSticker": "✏️ 手绘贴纸",
+  "iconPackFlat": "📝 扁平简约",
+  "loadFailed": "加载失败",
+  "loadFailedWithError": "加载失败：{error}",
+  "@loadFailedWithError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "saveFailedWithError": "保存失败：{error}",
+  "@saveFailedWithError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteFailedWithError": "删除失败：{error}",
+  "@deleteFailedWithError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "readFailedWithError": "读取失败：{error}",
+  "@readFailedWithError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "operationFailedWithError": "操作失败：{error}",
+  "@operationFailedWithError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetConflictTotal": "该账本的{period}总预算已存在",
+  "@budgetConflictTotal": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetConflictCategory": "该分类的{period}预算已存在",
+  "@budgetConflictCategory": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "ledgerNameConflict": "已存在同名账本「{name}」",
+  "@ledgerNameConflict": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "meAppearance": "外观",
+  "meReminder": "提醒",
+  "meBudget": "预算",
+  "meAssets": "资产",
+  "meMultiCurrency": "多币种",
+  "meAiInput": "快速输入 · AI 增强",
+  "meCloudService": "云服务",
+  "meAttachmentCache": "附件缓存",
+  "meImportExport": "导入 / 导出",
+  "meAppLock": "应用锁",
+  "meTrash": "垃圾桶",
+  "recordTitle": "记账",
+  "recordSwitchLedger": "切换账本",
+  "recordIncome": "收入",
+  "recordExpense": "支出",
+  "recordBalance": "结余",
+  "recordSyncing": "同步中…",
+  "recordSyncFailed": "同步失败：{error}",
+  "@recordSyncFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "recordLastSyncedAt": "上次同步：{time}",
+  "@recordLastSyncedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "recordNeverSynced": "尚未同步",
+  "recordJustNow": "刚刚",
+  "recordMinutesAgo": "{count}分钟前",
+  "@recordMinutesAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordHoursAgo": "{count}小时前",
+  "@recordHoursAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordDaysAgo": "{count}天前",
+  "@recordDaysAgo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "recordYearMonth": "{year}年{month}月",
+  "@recordYearMonth": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      },
+      "month": {
+        "type": "int"
+      }
+    }
+  },
+  "recordQuickHint": "写点什么，我来帮你记 🐰",
+  "recordRecognize": "识别",
+  "recordStartFirst": "开始记第一笔吧 🐰",
+  "recordSynced": "已同步",
+  "recordNetworkUnavailable": "网络不可用",
+  "recordSyncFailedMsg": "同步失败：{message}",
+  "@recordSyncFailedMsg": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "recordDeleteConfirm": "删除这条记录？",
+  "recordDeleteHint": "删除后可在后续垃圾桶中恢复。",
+  "recordIdleReminder": "已经 {days} 天没记账了，快来记一笔吧 🐻",
+  "@recordIdleReminder": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "recordPleaseInputFirst": "请先输入一段话再点识别",
+  "recordNewTitle": "记一笔",
+  "recordNewTransferTitle": "转账",
+  "recordNewCategory": "分类",
+  "recordNewSelectCategory": "选择分类",
+  "recordNewDate": "日期",
+  "recordNewNote": "备注",
+  "recordNewInputNote": "输入备注",
+  "recordNewNoteOptional": "可留空",
+  "recordNewSwitchTo": "切换",
+  "recordNewFromAccount": "转出账户",
+  "recordNewToAccount": "转入账户",
+  "recordNewTransferSameError": "转出账户和转入账户不能相同",
+  "recordNewAdd": "添加",
+  "recordNewEditCategory": "编辑",
+  "recordNewLoadingCategories": "加载分类…",
+  "recordNewInputAmount": "输入金额",
+  "recordNewWallet": "钱包",
+  "recordNewDeleteImage": "删除图片",
+  "recordNewGallery": "相册",
+  "recordNewCamera": "拍照",
+  "recordNewTransferSettings": "转账设置",
+  "recordNewSelectCurrency": "选择币种",
+  "recordNewMaxAttachments": "最多只能选择{max}张图片",
+  "@recordNewMaxAttachments": {
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "recordNewImageTooLarge": "单张图片不能超过 10MB",
+  "recordNewDuplicateImage": "同一张图片不能重复添加",
+  "recordSearchTitle": "搜索流水",
+  "recordSearchHint": "关键词（备注 / 分类 / 账户）",
+  "recordSearchFilter": "筛选",
+  "recordSearchNoDateLimit": "不限日期",
+  "recordSearchDate": "日期",
+  "recordSearchClearDate": "清空日期",
+  "recordSearchType": "类型",
+  "recordSearchAll": "全部",
+  "recordSearchAmount": "金额",
+  "recordSearchAmountMin": "下限",
+  "recordSearchAmountMax": "上限",
+  "recordSearchEmptyHint": "输入关键词或筛选条件后开始搜索",
+  "recordSearchNoResult": "没有找到相关流水",
+  "recordMonthPrevYear": "上一年",
+  "recordMonthNextYear": "下一年",
+  "recordMonthYear": "{year} 年",
+  "@recordMonthYear": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      }
+    }
+  },
+  "recordMonthMonth": "{month} 月",
+  "@recordMonthMonth": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      }
+    }
+  },
+  "quickConfirmTitle": "确认记一笔",
+  "quickConfirmLowConfidence": "识别置信度较低，请核对",
+  "quickConfirmAiUpdated": "AI 已更新",
+  "quickConfirmAiFailed": "AI 解析失败：{message}",
+  "@quickConfirmAiFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "quickConfirmAiFailedUnknown": "AI 解析失败：{error}",
+  "@quickConfirmAiFailedUnknown": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "quickConfirmAmount": "金额",
+  "quickConfirmCategory": "分类",
+  "quickConfirmPleaseSelect": "请选择",
+  "quickConfirmTime": "时间",
+  "quickConfirmAiEnhance": "AI 增强",
+  "categoryManageTitle": "分类管理",
+  "categoryEditTitle": "编辑分类",
+  "categoryAddTitle": "添加分类",
+  "categoryReorderTitle": "排序",
+  "categoryFavoriteReorderTitle": "排序",
+  "categoryName": "名称",
+  "categoryNameHint": "设置分类名称（一级：{parent}）",
+  "@categoryNameHint": {
+    "placeholders": {
+      "parent": {
+        "type": "String"
+      }
+    }
+  },
+  "categoryNameRequired": "请输入分类名称",
+  "categoryIconEmoji": "图标 Emoji（可选）",
+  "categoryIconEmojiHint": "例如 🍔、🚗、🎁",
+  "categoryDuplicateName": "该一级分类下已存在同名分类",
+  "categoryAddNew": "添加新的分类",
+  "categoryNoFavorite": "还没有收藏分类",
+  "categoryNoCategory": "暂无分类",
+  "categoryUncollect": "取消收藏",
+  "categoryCollect": "收藏",
+  "categoryUndoDelete": "取消删除",
+  "statsTitle": "统计分析",
+  "statsExport": "导出",
+  "statsThisMonth": "本月",
+  "statsLastMonth": "上月",
+  "statsThisYear": "本年",
+  "statsCustom": "自定义",
+  "statsSelectRange": "选择统计区间",
+  "statsIncomeExpenseLine": "收支折线（按日）",
+  "statsChartLoadFailed": "图表加载失败：{error}",
+  "@statsChartLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "statsNoIncomeExpenseData": "暂无收支数据",
+  "statsTryAnotherRange": "换个区间试试吧 🐰",
+  "statsExpenseCategoryPie": "支出分类占比",
+  "statsNoExpenseData": "暂无支出数据",
+  "statsAddExpenseHint": "记一笔支出就能看到啦 🐰",
+  "statsViewBudget": "查看预算",
+  "statsRanking": "收支排行榜",
+  "statsRankLoadFailed": "排行榜加载失败：{error}",
+  "@statsRankLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "statsNoRankData": "暂无排行数据",
+  "statsAddMoreHint": "记几笔就能看到排名啦 🐰",
+  "statsHeatmapTitle": "支出日历热力图",
+  "statsHeatmapLegend": "颜色越深表示当日支出越高",
+  "statsHeatmapLoadFailed": "热力图加载失败：{error}",
+  "@statsHeatmapLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "statsNoHeatmapData": "暂无支出热力数据",
+  "statsHeatmapHint": "记一笔支出就能点亮日历啦 🐰",
+  "statsExportPng": "导出 PNG（当前视图截图）",
+  "statsExportCsv": "导出 CSV（当前区间明细）",
+  "statsExportFailed": "导出失败：{error}",
+  "@statsExportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "statsChartNotMounted": "图表区尚未挂载",
+  "statsPngTitle": "边边记账 · 统计图表",
+  "statsPngSubtitle": "统计区间：{range}",
+  "@statsPngSubtitle": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "statsCsvTitle": "边边记账 · 流水明细",
+  "statsCsvSubtitle": "统计区间：{range}",
+  "@statsCsvSubtitle": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "weekdayMon": "周一",
+  "weekdayTue": "周二",
+  "weekdayWed": "周三",
+  "weekdayThu": "周四",
+  "weekdayFri": "周五",
+  "weekdaySat": "周六",
+  "weekdaySun": "周日",
+  "weekdayShortMon": "一",
+  "weekdayShortTue": "二",
+  "weekdayShortWed": "三",
+  "weekdayShortThu": "四",
+  "weekdayShortFri": "五",
+  "weekdayShortSat": "六",
+  "weekdayShortSun": "日",
+  "dateMonthDayWeekday": "{month}月{day}日 {weekday}",
+  "@dateMonthDayWeekday": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      },
+      "day": {
+        "type": "int"
+      },
+      "weekday": {
+        "type": "String"
+      }
+    }
+  },
+  "ledgerEditTitle": "编辑账本",
+  "ledgerNewTitle": "新建账本",
+  "ledgerNotExist": "账本不存在",
+  "ledgerName": "账本名称",
+  "ledgerNameRequired": "请输入账本名称",
+  "ledgerCoverEmoji": "封面 Emoji",
+  "ledgerCoverEmojiHint": "例如 📒、💼、✈️",
+  "ledgerDefaultCurrency": "默认币种",
+  "ledgerArchived": "归档",
+  "ledgerArchiveHint": "归档后账本将移至归档区，不再显示在切换器中",
+  "ledgerCannotSave": "账本不存在，无法保存",
+  "ledgerNameConflictMsg": "已存在同名账本「{name}」，请换一个",
+  "@ledgerNameConflictMsg": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "ledgerNew": "新建账本",
+  "ledgerEmptyHint": "还没有账本，去创建一个吧 🐰",
+  "ledgerUnarchive": "取消归档",
+  "ledgerArchive": "归档",
+  "ledgerConfirmDelete": "确认删除",
+  "ledgerDeleteConfirmMsg": "确定要删除账本「{name}」吗？\n\n该账本下的所有流水和预算也将被删除。\n删除后可在垃圾桶中保留 30 天。",
+  "@ledgerDeleteConfirmMsg": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "ledgerDeleted": "「{name}」已删除",
+  "@ledgerDeleted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "ledgerTxCountCurrency": "{count} 笔流水  ·  {currency}",
+  "@ledgerTxCountCurrency": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "currency": {
+      "type": "String"
+    }
+  },
+  "budgetTitle": "预算",
+  "budgetNew": "新建预算",
+  "budgetNotExist": "预算不存在",
+  "budgetPeriod": "周期",
+  "budgetCategory": "分类",
+  "budgetTotalNoCategory": "总预算（不限分类）",
+  "budgetAmount": "预算金额",
+  "budgetAmountRequired": "请输入金额",
+  "budgetAmountPositive": "金额必须大于 0",
+  "budgetCarryOver": "开启结转",
+  "budgetCarryOverHint": "未花完金额累加到下个周期",
+  "budgetDeleteConfirm": "删除预算",
+  "budgetDeleteHint": "删除后将无法恢复，确定继续？",
+  "budgetEmptyHint": "还没有预算\n点右下角加一个吧 🐰",
+  "budgetTotal": "总预算",
+  "budgetDeletedCategory": "（已删除分类）",
+  "budgetCarryOverLabel": " · 结转",
+  "budgetAvailable": "可用 ¥{amount}",
+  "@budgetAvailable": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetSpentOverLimit": "已花 ¥{spent} / ¥{limit}",
+  "@budgetSpentOverLimit": {
+    "placeholders": {
+      "spent": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetProgressCalculating": "进度计算中…",
+  "budgetProgressFailed": "进度计算失败：{error}",
+  "@budgetProgressFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "budgetYearStartFrom": "年起",
+  "budgetCarryStart": "结转起始",
+  "budgetCarryStartHint": "选择更早的月份可让那时之后的剩余结转到本月",
+  "budgetSelectCarryStartMonth": "选择结转起始月份",
+  "accountEditTitle": "编辑账户",
+  "accountNewTitle": "新建账户",
+  "accountNotExist": "账户不存在",
+  "accountName": "账户名称",
+  "accountNameHint": "例如：现金、工商银行卡",
+  "accountNameRequired": "请输入账户名称",
+  "accountType": "账户类型",
+  "accountIconEmoji": "图标 Emoji（可选）",
+  "accountIconEmojiHint": "例如 💰、💳、🏦",
+  "accountInitialBalance": "初始余额",
+  "accountInitialBalanceHint": "可为负（信用卡欠款填负值）",
+  "accountBalanceInvalid": "请输入合法的数字",
+  "accountDefaultCurrency": "默认币种",
+  "accountBillingDay": "账单日（1-28）",
+  "accountBillingDayHint": "例如 5",
+  "accountRepaymentDay": "还款日（1-28）",
+  "accountRepaymentDayHint": "例如 22",
+  "accountIncludeInTotal": "计入总资产",
+  "accountIncludeInTotalHint": "关闭后该账户余额不参与总资产合计",
+  "accountDayRangeError": "请输入 1-28 的整数",
+  "accountCannotSave": "账户不存在，无法保存",
+  "accountListNew": "新建账户",
+  "accountDeleteConfirmTitle": "删除账户",
+  "accountDeleteConfirmMsg": "确定要删除账户「{name}」吗？\\n\\n该账户下的流水将自动挂到「已删账户」占位。\\n删除后可在垃圾桶中保留 30 天。",
+  "@accountDeleteConfirmMsg": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDeleted": "「{name}」已删除",
+  "@accountDeleted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountTotalAssets": "总资产（当前账本）",
+  "accountEmptyHint": "还没有账户\n点右下角加一个吧 🐰",
+  "accountNotInTotal": " · 不计入总资产",
+  "accountBillingDayDisplay": "账单日 {day} 号",
+  "@accountBillingDayDisplay": {
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "accountRepaymentDayDisplay": "还款日 {day} 号",
+  "@accountRepaymentDayDisplay": {
+    "placeholders": {
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "lockTitle": "应用锁",
+  "lockEnterPin": "请输入 PIN 解锁边边记账",
+  "lockEnterCurrentPinToDisable": "请输入当前 PIN 以关闭应用锁",
+  "lockEnterCurrentPinToVerify": "请输入当前 PIN 以验证身份",
+  "lockForgotPin": "忘记 PIN",
+  "lockForgotPinMsg": "忘记 PIN 后无法通过应用内方式重置。\n如需继续使用，只能：\n\n1. 清除本应用全部数据（卸载或清除数据），重新开始；\n2. 如有云端备份，重装后可恢复数据。\n\n请注意：清除数据将丢失所有本地记账内容。",
+  "lockAcknowledgeAndDisable": "我已知晓，关闭应用锁",
+  "lockEnableAppLock": "启用应用锁",
+  "lockEnabled": "已开启 · PIN 已设置",
+  "lockDisabling": "关闭中 · 启动 / 切回前台时不再要求 PIN",
+  "lockChangePin": "修改 PIN",
+  "lockDisableHint": "关闭应用锁；如需清空本地数据请先确认云端有最新备份",
+  "lockSecurityNote": "安全说明",
+  "lockSecurityNoteMsg": "PIN 存储在设备安全硬件中（Android Keystore / iOS Keychain），以加盐哈希形式保存，无法被逆向读取。\n\n生物识别解锁由操作系统原生 API 提供认证，本应用不接触指纹/面容原始数据。\n\n后台超时锁屏依赖 App 生命周期事件，如果系统强制杀进程则无法触发。",
+  "lockVerifyBiometric": "验证身份以启用生物识别解锁",
+  "lockBiometricEnabled": "已启用",
+  "lockBiometricCancelled": "已取消，未启用生物识别",
+  "lockBiometricLockedOut": "生物识别被系统临时锁定，请稍后再试",
+  "lockBiometricNotAvailable": "当前设备暂不可用",
+  "lockBiometricNotRecognized": "验证未通过，未启用生物识别",
+  "lockBiometricTitle": "生物识别",
+  "lockBiometricDetecting": "正在检测设备…",
+  "lockBiometricDetectFailed": "检测失败：{error}",
+  "@lockBiometricDetectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lockBiometricNotSupported": "本设备不支持生物识别",
+  "lockBiometricNotEnrolled": "请先在系统设置录入指纹 / 面容",
+  "lockBiometricReadingPrefs": "正在读取偏好…",
+  "lockBiometricEnabledDesc": "已开启 · 解锁时优先弹出系统面板",
+  "lockBiometricDisabledDesc": "解锁时仅使用 PIN（开启需要先验证一次）",
+  "lockLockNow": "立即锁定",
+  "lockSeconds": "{count} 秒",
+  "@lockSeconds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lockMinutes": "{count} 分钟",
+  "@lockMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lockHours": "{count} 小时",
+  "@lockHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lockBackgroundTimeout": "后台超时锁定",
+  "lockLockNowDesc": "立即锁定 · 任何后台→前台切换都会要求 PIN",
+  "lockTimeoutDesc": "{label} · 后台超过该时长后回到前台需要 PIN",
+  "@lockTimeoutDesc": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "lockPrivacyMode": "隐私模式",
+  "lockPrivacyEnabledDesc": "已开启 · 多任务预览模糊 + Android 阻止截屏",
+  "lockPrivacyDisabledDesc": "关闭中 · 多任务切换器可见 App 当前画面",
+  "pinSetupNew": "设置应用锁 PIN",
+  "pinSetupChange": "修改应用锁 PIN",
+  "pinSetupHint": "请输入 {min}-{max} 位数字 PIN，避免使用生日等易猜组合。",
+  "@pinSetupHint": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "pinSetupConfirmHint": "请再次输入相同 PIN 以确认。",
+  "pinSetupMismatch": "两次输入不一致，请重新设置",
+  "pinNewLabel": "新 PIN",
+  "pinConfirmLabel": "确认 PIN",
+  "pinValidationError": "PIN 必须为 {min}-{max} 位数字",
+  "@pinValidationError": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "pinDigitsOnly": "PIN 仅允许数字",
+  "pinUnlockTitle": "请输入应用锁 PIN",
+  "pinUnlockBiometricVerify": "验证身份以解锁边边记账",
+  "pinUnlockBiometricLockedOut": "生物识别已被系统临时锁定，请改用 PIN",
+  "pinUnlockBiometricUnavailable": "生物识别暂不可用，请改用 PIN",
+  "pinUnlockBiometricFailed": "生物识别未通过，请改用 PIN",
+  "pinUnlockTooManyErrors": "错误次数过多，已进入冷却",
+  "pinUnlockAttemptsLeft": "PIN 错误，剩余尝试次数 {left}",
+  "@pinUnlockAttemptsLeft": {
+    "placeholders": {
+      "left": {
+        "type": "int"
+      }
+    }
+  },
+  "pinUnlockCooldown": "冷却中（{seconds} 秒）",
+  "@pinUnlockCooldown": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "pinUnlockBiometricHint": "请按提示完成生物识别…",
+  "pinUnlockBiometricButton": "使用指纹 / 面容解锁",
+  "importExportTitle": "导入 / 导出",
+  "importExportExport": "导出",
+  "importExportExportSubtitle": "CSV / JSON / 加密 .bbbak",
+  "importExportImport": "导入",
+  "importExportImportSubtitle": "支持本 App 导出的 JSON / CSV / .bbbak",
+  "exportTitle": "导出",
+  "exportFormat": "格式",
+  "exportEncrypted": "加密",
+  "exportRange": "范围",
+  "exportCurrentLedger": "当前账本",
+  "exportAllLedgers": "全部账本",
+  "exportCurrentLedgerHint": "仅当前选中账本",
+  "exportAllLedgersHint": "包含所有未删除账本(含归档)",
+  "exportTimeRange": "时间区间",
+  "exportAllTime": "全部时间",
+  "exportCustomTime": "自定义",
+  "exporting": "正在导出…",
+  "exportAndShare": "导出并分享",
+  "exportCsvDesc": "Excel / Numbers 直接打开",
+  "exportJsonDesc": "结构化全量备份(可被「导入」恢复)",
+  "exportBbbakDesc": "加密备份包(.bbbak)：JSON + AES-256 密码加密，仅本 App 能导入",
+  "exportPasswordWarning": "该密码用于解密备份。一旦丢失，备份内容将永远无法恢复——请使用密码管理器记录或写在安全的纸上，不要只存在脑子里。",
+  "exportPassword": "密码",
+  "exportShowPassword": "显示密码",
+  "exportHidePassword": "隐藏密码",
+  "exportReEnterPassword": "再次输入密码",
+  "exportPasswordMismatch": "两次输入不一致",
+  "exportCurrentLedgerNotExist": "当前账本不存在",
+  "exportNoLedgerToExport": "没有可导出的账本",
+  "exportedFile": "已导出：{filename}",
+  "@exportedFile": {
+    "placeholders": {
+      "filename": {
+        "type": "String"
+      }
+    }
+  },
+  "exportShareSubject": "边边记账导出",
+  "exportShareText": "边边记账数据导出 ({format})",
+  "@exportShareText": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "importTitle": "导入",
+  "importWritingDb": "正在写入数据库…",
+  "importSupportedFormats": "支持的文件格式",
+  "importJsonDesc": "JSON：本 App 导出的结构化备份（推荐）",
+  "importBbbakDesc": ".bbbak：本 App 导出的加密备份（需要密码）",
+  "importCsvDesc": "CSV：本 App 导出的表格（按账本名匹配）",
+  "importThirdPartyDesc": "第三方账单：钱迹 / 微信 / 支付宝 CSV（自动识别）",
+  "importThirdPartyTip": "提示：第三方账单会被识别为单一账本，自动归入当前账本；分类按关键词推测，不能命中的归到「其他」。",
+  "importSelectFile": "选择备份文件",
+  "importFilePathError": "文件路径不可读",
+  "importSelectFileFailed": "选择文件失败：{error}",
+  "@importSelectFileFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "importSelectedFile": "已选择：{name}",
+  "@importSelectedFile": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importEncryptedFileHint": "此文件已加密。请输入导出时设置的密码。",
+  "importPassword": "密码",
+  "importDecryptAndPreview": "解密并预览",
+  "importInternalError": "内部状态错误：缺少文件字节或类型",
+  "importPasswordWrong": "密码错误。请检查密码是否正确，或文件是否被损坏。",
+  "importFormatUnrecognized": "文件格式不识别（{message}）。请检查是否选错文件。",
+  "@importFormatUnrecognized": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "importParseFailed": "解析失败：{error}",
+  "@importParseFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "importFileLabel": "文件",
+  "importRecognizedAs": "识别为",
+  "importLedgerCount": "账本数",
+  "importTxCount": "流水数",
+  "importUnmappedCategoryTip": "其中 {count} 条按关键词未匹配到本地分类，已归入「其他」。",
+  "@importUnmappedCategoryTip": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importExportTime": "导出时间",
+  "importSourceDevice": "来源设备",
+  "importSampleRows": "前 {count} 行预览",
+  "@importSampleRows": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importNoTxInBackup": "备份内不含流水",
+  "importDedupStrategy": "去重策略",
+  "importDedupSkip": "跳过已存在",
+  "importDedupSkipDesc": "ID 相同时跳过，不覆盖已有数据（最安全）",
+  "importDedupOverwrite": "覆盖",
+  "importDedupOverwriteDesc": "ID 相同时用备份覆盖本地（备份优先）",
+  "importDedupAllNew": "全部作为新记录",
+  "importDedupAllNewDesc": "忽略 ID，所有记录重新生成 ID 写入（可能产生重复）",
+  "importConfirmImport": "确认导入",
+  "importWriteFailed": "写入失败：{error}",
+  "@importWriteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "importComplete": "导入完成",
+  "importUpsertCount": "{label}",
+  "@importUpsertCount": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "importLedgerUpsert": "账本 {count} 条 upsert",
+  "@importLedgerUpsert": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importCategoryUpsert": "分类 {count} 条 upsert",
+  "@importCategoryUpsert": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importAccountUpsert": "账户 {count} 条 upsert",
+  "@importAccountUpsert": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importTxWrite": "流水 {written} 条写入 / {skipped} 条跳过",
+  "@importTxWrite": {
+    "placeholders": {
+      "written": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "importBudgetUpsert": "预算 {count} 条 upsert",
+  "@importBudgetUpsert": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importLedgerNotMatched": "提示：账本「{name}」未匹配到，已归入当前账本。",
+  "@importLedgerNotMatched": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importContinueOther": "继续导入其他文件",
+  "importUnknownError": "未知错误",
+  "importReselect": "重新选择",
+  "importBbbakLabel": "加密备份 (.bbbak)",
+  "syncTitle": "云服务",
+  "syncEnable": "启用云同步",
+  "syncCurrentBackend": "当前后端：{name}",
+  "@syncCurrentBackend": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncDisabled": "关闭中——数据仅保存在本机",
+  "syncSelfHostedWebdav": "自托管 WebDAV 服务",
+  "syncS3Compatible": "S3 兼容存储",
+  "syncS3Desc": "Cloudflare R2, AWS S3, MinIO 等",
+  "syncUseSupabase": "使用 Supabase 后端",
+  "syncLastTestFailed": "上次连接测试失败，点击右侧设置重新配置",
+  "syncNotConfiguredShort": "（未配置）",
+  "syncUseIcloud": "使用 iCloud Drive 同步",
+  "syncIcloudUnavailable": "iCloud 不可用，请检查系统设置",
+  "syncSwitchConfirm": "切换云服务?",
+  "syncSwitchHint": "切换服务后，需要重新进行首次同步。",
+  "syncMigrateAttachments": "迁移附件到新后端？",
+  "syncMigrateAttachmentsHint": "迁移会将已上传的附件从旧后端下载后重新上传到新后端。此过程可能耗时较长，取决于附件数量与网络状况。\n\n如果选择「暂不迁移」，已上传的附件仍保留在旧后端，新上传的附件会存到新后端。",
+  "syncSkipMigration": "暂不迁移",
+  "syncMigrate": "迁移",
+  "syncSwitchNotConfigured": "切换失败：{type} 尚未配置，请先点击右侧设置图标完成配置",
+  "@syncSwitchNotConfigured": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "syncSwitchedWithMigration": "已切换到 {type}（已标记 {migrated} 条流水的附件待重传）",
+  "@syncSwitchedWithMigration": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      },
+      "migrated": {
+        "type": "int"
+      }
+    }
+  },
+  "syncSwitched": "已切换到 {type}",
+  "@syncSwitched": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "syncDisableConfirm": "关闭云同步?",
+  "syncDisableHint": "关闭后将仅使用本机数据，已上传到云端的备份不受影响。",
+  "syncCloudDisabled": "云同步已关闭",
+  "syncPleaseConfigureFirst": "请先在下方任选一个云服务并完成配置",
+  "syncEnabledWith": "已启用云同步：{type}",
+  "@syncEnabledWith": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLocalStorage": "本地存储",
+  "syncConfigSavedAndTested": "配置已保存并通过连接测试",
+  "syncConfigSavedTestFailed": "配置已保存，但连接测试失败：{error}",
+  "@syncConfigSavedTestFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncConfigInvalid": "配置无效",
+  "syncProviderInitNull": "Provider 初始化返回空",
+  "syncConfigSupabase": "配置 Supabase",
+  "syncCustomName": "自定义名称",
+  "syncCustomNameHint": "用作卡片标题（可选）",
+  "syncConfigWebdav": "配置 WebDAV",
+  "syncWebdavUsername": "用户名",
+  "syncWebdavPassword": "密码",
+  "syncWebdavRemotePath": "远程路径",
+  "syncConfigS3": "配置 S3",
+  "syncS3CustomNameHint": "用作卡片标题与云端文件夹名（可选）",
+  "syncLedgerLoadFailed": "账本加载失败：{error}",
+  "@syncLedgerLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncInitFailed": "同步服务初始化失败：{error}",
+  "@syncInitFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncUploaded": "已上传到云端",
+  "syncRestoreFromCloud": "从云端恢复",
+  "syncRestoreConfirmMsg": "当前账本的本地流水与预算将被云端备份覆盖...",
+  "syncRestore": "恢复",
+  "syncRestoredCount": "已恢复 {count} 条流水",
+  "@syncRestoredCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncRestored": "已从云端恢复",
+  "syncDeleteCloudBackup": "删除云端备份",
+  "syncDeleteCloudConfirm": "云端的此账本备份将被删除。本地数据不受影响。继续？",
+  "syncCloudDeleted": "云端备份已删除",
+  "syncRefreshStatus": "刷新状态",
+  "syncFetchingStatus": "正在获取云端状态…",
+  "syncStatusFetchFailed": "状态获取失败：{error}",
+  "@syncStatusFetchFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncUpload": "上传",
+  "syncDownload": "下载",
+  "syncDeleteCloudBackupShort": "删除云端备份",
+  "syncStatusNotConfigured": "未配置",
+  "syncStatusNotLoggedIn": "未登录",
+  "syncStatusNoBackup": "云端无备份",
+  "syncStatusSynced": "已同步",
+  "syncStatusLocalNewer": "本地较新（建议上传）",
+  "syncStatusCloudNewer": "云端较新（建议下载）",
+  "syncStatusDiverged": "本地与云端不一致",
+  "syncStatusUploading": "上传中…",
+  "syncStatusDownloading": "下载中…",
+  "syncStatusError": "错误",
+  "syncStatusUnknown": "未知",
+  "syncLastSyncAt": "上次同步：{time}",
+  "@syncLastSyncAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "syncLocalCloudCount": "本地 {local} · 云端 {cloud}",
+  "@syncLocalCloudCount": {
+    "placeholders": {
+      "local": {
+        "type": "int"
+      },
+      "cloud": {
+        "type": "int"
+      }
+    }
+  },
+  "syncTriggerInProgress": "同步进行中",
+  "syncTriggerNotConfigured": "未配置云服务",
+  "syncTriggerNetworkUnavailable": "网络不可用",
+  "trashTitle": "垃圾桶",
+  "reminderTitle": "提醒",
+  "reminderDailyTitle": "每日记账提醒",
+  "reminderDailyOn": "每天 {time} 提醒你记一笔",
+  "@reminderDailyOn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderOff": "未开启",
+  "reminderTime": "提醒时间",
+  "reminderTest": "测试提醒",
+  "reminderTestHint": "立即发送一条测试通知",
+  "reminderEnableHint": "开启后，每天在设定时间会收到一条可爱的记账提醒 🐻\n如果通知没有按时出现，请检查系统通知权限设置。",
+  "reminderPermissionDenied": "通知权限被拒绝，无法开启提醒",
+  "reminderSelectTime": "选择提醒时间",
+  "reminderEnabledAt": "已开启，每天 {time} 提醒你",
+  "@reminderEnabledAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDisabled": "已关闭每日提醒",
+  "reminderTimeUpdated": "提醒时间已更新为 {time}",
+  "@reminderTimeUpdated": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderTestSent": "测试通知已发送 🐻",
+  "reminderNotificationTitle": "每日记账提醒",
+  "reminderNotificationBody": "每天定时提醒你记一笔",
+  "reminderTestNotification": "这是一条测试提醒 🐻 记账时间到啦！",
+  "widgetAppName": "边边记账",
+  "attachmentNotSynced": "未同步",
+  "attachmentCacheTitle": "附件缓存",
+  "attachmentCacheCurrentUsage": "当前占用",
+  "attachmentCacheCalculating": "计算中…",
+  "attachmentCacheUsage": "{used} / {limit} 上限",
+  "@attachmentCacheUsage": {
+    "placeholders": {
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "attachmentCacheClear": "清除缓存",
+  "attachmentCacheClearDesc": "删除本地缓存的附件文件，不影响原图与云端备份",
+  "attachmentCacheClearConfirm": "清除附件缓存？",
+  "attachmentCacheClearConfirmMsg": "只删除本地缓存文件，不影响您原始保存的图片与云端备份。下次查看流水时会重新从云端下载。",
+  "attachmentCacheCleared": "已清除约 {size}",
+  "@attachmentCacheCleared": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "attachmentCacheLazyLoadDesc": "附件懒加载：仅当查看流水详情时才从云端下载图片，节省流量。系统在空间紧张时会自动清理缓存目录，下次查看会重新下载。",
+  "multiCurrencyTitle": "多币种",
+  "multiCurrencyRefreshNow": "立即刷新汇率",
+  "multiCurrencyRefreshed": "汇率已更新",
+  "multiCurrencyRefreshFailed": "联网失败，使用现有快照",
+  "multiCurrencyAutoRestored": "{code} 已恢复自动刷新",
+  "@multiCurrencyAutoRestored": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "multiCurrencyManualSet": "{code} 汇率已手动设为 {rate}",
+  "@multiCurrencyManualSet": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "multiCurrencyEnable": "开启多币种",
+  "multiCurrencyEnableHint": "开启后，记账页可选择币种；统计按账本默认币种换算展示。",
+  "multiCurrencyBuiltIn": "内置币种",
+  "multiCurrencyRateManagement": "汇率管理",
+  "multiCurrencyRateHint": "点击行可手动设置汇率；标记为「手动」的行不会被自动刷新覆盖。",
+  "multiCurrencyBase": "基准",
+  "multiCurrencyManual": "手动",
+  "multiCurrencyAuto": "自动",
+  "multiCurrencyUpdatedAt": "更新于 {time}",
+  "@multiCurrencyUpdatedAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "multiCurrencyInputPositive": "请输入正数（例如 7.20）",
+  "multiCurrencySetRate": "设置 {code} 汇率",
+  "@multiCurrencySetRate": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "multiCurrencyRateQuestion": "1 {code} 等于多少 CNY？",
+  "@multiCurrencyRateQuestion": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "multiCurrencyRateExample": "例如 7.20",
+  "multiCurrencyManualOverrideHint": "当前为手动覆盖，自动刷新不会修改它。",
+  "multiCurrencyResetToAuto": "重置为自动",
+  "multiCurrencyCnyBaseError": "CNY 是基准币种，不可手动覆盖",
+  "multiCurrencyRateMustBePositive": "汇率必须为正数",
+  "aiInputTitle": "快速输入 · AI 增强",
+  "aiInputEnable": "启用 AI 增强",
+  "aiInputEnableHint": "开启后，本地解析置信度低时确认卡片会出现 \"✨ AI 增强\" 按钮，调用你配置的 LLM 兜底解析。",
+  "aiInputApiConfig": "API 配置",
+  "aiInputApiHint": "使用 OpenAI 兼容协议（chat/completions）。endpoint 完整 URL，例如：",
+  "aiInputHidden": "隐藏",
+  "aiInputShown": "显示",
+  "aiInputPromptTemplate": "Prompt 模板（可选）",
+  "aiInputPromptPlaceholderHint": "占位符 {NOW} / {TEXT} / {CATEGORIES} 会在调用时替换。留空使用内置默认模板。",
+  "aiInputPromptTemplateLabel": "Prompt 模板",
+  "aiInputSaved": "AI 增强配置已保存",
+  "aiInputNotConfigured": "未配置 AI 增强（需启用并填写 endpoint / key / model）",
+  "aiInputEndpointInvalid": "endpoint 不是合法 URL：{endpoint}",
+  "@aiInputEndpointInvalid": {
+    "placeholders": {
+      "endpoint": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputTimeout": "网络请求超时",
+  "aiInputNetworkFailed": "网络请求失败：{error}",
+  "@aiInputNetworkFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputHttpError": "LLM 返回 HTTP {status}",
+  "@aiInputHttpError": {
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "aiInputInvalidJson": "LLM 响应不是合法 JSON：{error}",
+  "@aiInputInvalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputResponseNotObject": "LLM 响应根不是 JSON 对象",
+  "aiInputMissingChoices": "LLM 响应缺少 choices",
+  "aiInputChoiceNotObject": "LLM 响应 choice 非对象",
+  "aiInputMissingMessage": "LLM 响应缺少 message",
+  "aiInputContentNotString": "LLM 响应 content 非字符串",
+  "aiInputContentInvalidJson": "LLM 返回的 content 不是合法 JSON：{error}",
+  "@aiInputContentInvalidJson": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputContentNotObject": "LLM 返回 content 根不是 JSON 对象",
+  "aiInputAmountTypeError": "amount 字段类型非法：{type}",
+  "@aiInputAmountTypeError": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputAmountInvalid": "amount 不是有效正数：{value}",
+  "@aiInputAmountInvalid": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputParentKeyTypeError": "category_parent_key 字段类型非法：{type}",
+  "@aiInputParentKeyTypeError": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputParentKeyInvalid": "category_parent_key 取值非法：{value}",
+  "@aiInputParentKeyInvalid": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputDateTypeError": "occurred_at 字段类型非法：{type}",
+  "@aiInputDateTypeError": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputDateInvalid": "occurred_at 不是合法 ISO 日期：{value}",
+  "@aiInputDateInvalid": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "aiInputNoteTypeError": "note 字段类型非法：{type}",
+  "@aiInputNoteTypeError": {
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "themeTitle": "外观",
+  "themeLabel": "主题",
+  "themeSwitchHint": "切换后所有页面即时生效，包括图表与图标底色",
+  "themeFontSize": "字号",
+  "themeFontSizeHint": "大字号会在系统字号基础上再放大 15%，小字号缩小 15%",
+  "themeIconPack": "分类图标",
+  "themeIconPackSwitchHint": "切换后分类网格与流水列表图标即时更新；自定义图标不受影响",
+  "themePrimary": "主色",
+  "themeContainer": "容器",
+  "themeTertiary": "辅助",
+  "themeSuccess": "成功",
+  "themeWarning": "警告",
+  "themeError": "错误",
+  "colorSemanticPrimary": "主色",
+  "colorSemanticContainer": "容器",
+  "colorSemanticTertiary": "辅助",
+  "colorSemanticSuccess": "成功",
+  "colorSemanticWarning": "警告",
+  "colorSemanticError": "错误",
+  "dateFormatRelative": "{month}月{day}日",
+  "@dateFormatRelative": {
+    "placeholders": {
+      "month": {
+        "type": "int"
+      },
+      "day": {
+        "type": "int"
+      }
+    }
+  },
+  "dateHeatmapCell": "{date}\n支出：¥...",
+  "@dateHeatmapCell": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trashTabRecords": "流水",
+  "trashTabCategories": "分类",
+  "trashTabAccounts": "账户",
+  "trashTabLedgers": "账本",
+  "trashClearCurrent": "清空当前分类",
+  "trashConfirmClear": "确认清空？",
+  "trashClearConfirmMsg": "将永久删除全部已软删的「{label}」（无法恢复）。",
+  "@trashClearConfirmMsg": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "trashPermanentDelete": "永久删除",
+  "trashCleared": "已清空「{label}」垃圾桶",
+  "@trashCleared": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "trashClearFailed": "清空失败：{error}",
+  "@trashClearFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "trashNoDeletedRecords": "没有已删流水",
+  "trashNoDeletedCategories": "没有已删分类",
+  "trashNoDeletedAccounts": "没有已删账户",
+  "trashNoDeletedLedgers": "没有已删账本",
+  "trashRestored": "已恢复 1 条流水",
+  "trashRestoreFailed": "恢复失败：{error}",
+  "@trashRestoreFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "trashPurgeConfirm": "永久删除这条流水？",
+  "trashPurged": "已永久删除",
+  "trashPurgeFailed": "删除失败：{error}",
+  "@trashPurgeFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "trashRestoredCategory": "已恢复分类「{name}」",
+  "@trashRestoredCategory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashPurgeCategoryConfirm": "永久删除分类「{name}」？",
+  "@trashPurgeCategoryConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashRestoredAccount": "已恢复账户「{name}」",
+  "@trashRestoredAccount": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashPurgeAccountConfirm": "永久删除账户「{name}」？",
+  "@trashPurgeAccountConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashRestoredLedger": "已恢复账本「{name}」",
+  "@trashRestoredLedger": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashPurgeLedgerConfirm": "永久删除账本「{name}」？\n该账本下所有流水和预算也会一并永久删除（无法恢复）。",
+  "@trashPurgeLedgerConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trashPurgedLedger": "已永久删除账本",
+  "trashRemainingDays": "剩余 {days} 天 · 删于 {date}",
+  "@trashRemainingDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trashRestore": "恢复",
+  "trashAutoCleanHint": "已软删 30 天后会自动清理",
+  "trashConfirmPermanentDelete": "确认永久删除？",
+  "trashLedgerSubtitle": "账本 · 恢复时会一并复活级联删除的流水/预算",
+  "trashTxSubtitleTransfer": "{date} · 转账",
+  "@trashTxSubtitleTransfer": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "detailType": "类型",
+  "detailTransferFrom": "转出",
+  "detailTransferTo": "转入",
+  "detailAccount": "账户",
+  "detailTime": "时间",
+  "detailImages": "图片",
+  "detailCopy": "复制",
+  "confirmOk": "确定",
+  "syncNotConfiguredFormat": "{defaultText}（未配置）",
+  "@syncNotConfiguredFormat": {
+    "placeholders": {
+      "defaultText": {
+        "type": "String"
+      }
+    }
+  },
+  "syncMigrateAttachmentsDetail": "当前后端已上传 {count} 张附件。\n\n切换后新附件会上传到 {type}，但已在旧后端的附件不会跨设备访问。\n\n选择「迁移」会在下次同步时把这些附件重新上传到新后端（耗时较长，取决于网络与图片数量）；选择「暂不迁移」则旧附件保留在旧后端，可稍后切回去再用。",
+  "@syncMigrateAttachmentsDetail": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "syncError": "错误: {error}",
+  "@syncError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "syncSwitchFailed": "切换失败: {error}",
+  "@syncSwitchFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportBbbakLabel": "加密备份 .bbbak",
+  "importCsvThirdPartyDesc": "第三方账单不含本 App 的 ID，会作为「全部新记录」导入；账本归入当前账本，账户列若与现有账户同名会被关联，否则置空。",
+  "importCsvNoIdDesc": "CSV 文件不含 ID，只能作为「全部新记录」导入；账本/分类/账户按名称匹配，匹配不到时归到当前账本，分类/账户列空。",
+  "pinUnlockSubtitle": "请输入应用锁 PIN",
+  "ledgerDefaultName": "账本",
+  "statsTooltipDateFormat": "M月d日",
+  "a11yRecordHomeNewFab": "记一笔",
+  "a11yRecordHomeSearch": "搜索流水",
+  "a11yRecordHomeSwapCurrency": "切换主副币种",
+  "a11yRecordHomePrevMonth": "上一月",
+  "a11yRecordHomeNextMonth": "下一月",
+  "a11yRecordHomeDismissReminder": "关闭提示",
+  "a11yRecordNewBack": "返回",
+  "a11yQuickConfirmClose": "关闭",
+  "a11yCloudServiceConfigure": "配置",
+  "a11yAttachmentImage": "已添加图片",
+  "meAbout": "关于",
+  "about": "关于",
+  "aboutAppName": "边边记账",
+  "aboutAppTagline": "温暖陪伴你每一笔记录 🐰",
+  "aboutAppVersion": "版本",
+  "aboutAppVersionValue": "{version}（构建 {build}）",
+  "@aboutAppVersionValue": {
+    "placeholders": {
+      "version": { "type": "String" },
+      "build": { "type": "String" }
+    }
+  },
+  "aboutPrivacyPolicy": "隐私政策",
+  "aboutTermsOfService": "用户协议",
+  "aboutLicenses": "开源许可",
+  "aboutLicensesLegalese": "本应用使用了若干开源组件，特此致谢。",
+  "aboutRevokeConsent": "撤回同意",
+  "aboutRevokeConsentSubtitle": "撤回后退出应用，下次启动需要重新同意",
+  "aboutRevokeConsentConfirmTitle": "撤回同意？",
+  "aboutRevokeConsentConfirmMessage": "撤回后将立即退出应用，下次启动会重新征求您的同意。已记录的本地数据不会被清除。",
+  "aboutRevokeConsentConfirm": "撤回并退出",
+  "privacyConsentTitle": "隐私政策与用户协议",
+  "privacyConsentIntro": "感谢使用边边记账。在开始使用前，请阅读以下隐私政策与用户协议。点击「同意并继续」表示您已阅读并同意本政策。",
+  "privacyConsentDataSectionTitle": "我们收集哪些数据",
+  "privacyConsentDataSectionBody": "本应用为离线优先记账工具：流水、账本、分类、账户、预算、附件等数据默认仅保存在您的设备本地，存于 SQLCipher 加密的 SQLite 数据库中。仅当您主动开启云同步时，相应数据才会上传至您指定的云服务（您自建的 Supabase / WebDAV / S3 / iCloud Drive 等）。",
+  "privacyConsentUsageSectionTitle": "数据用途",
+  "privacyConsentUsageSectionBody": "数据仅用于您本人的记账、统计、预算与提醒功能；本应用不进行任何形式的广告投放、用户画像、行为分析或第三方分享。",
+  "privacyConsentStorageSectionTitle": "存储位置",
+  "privacyConsentStorageSectionBody": "本地数据存于设备文档目录的加密 SQLite 文件中；数据库密钥保存在系统 Keystore（Android）/ Keychain（iOS），永不离开设备。云同步数据存于您自行配置的云服务，本应用作者不接触任何用户数据。",
+  "privacyConsentSharingSectionTitle": "数据共享",
+  "privacyConsentSharingSectionBody": "我们不会将您的数据共享给任何第三方。云同步、AI 增强等可选功能会按您的配置向您指定的服务（如您自建的 Supabase、您填写的 LLM API）发送相应数据；这些请求由您直接发起，对方为您选择的服务提供商，与本应用作者无关。",
+  "privacyConsentRightsSectionTitle": "您的权利",
+  "privacyConsentRightsSectionBody": "您可随时通过「我的 → 关于 → 撤回同意」撤回本次授权；撤回后应用会退出，下次启动需要重新同意才能继续使用。所有本地数据可通过「导入 / 导出」功能完整导出或一键清除；流水删除走垃圾桶，可在 30 天内恢复。",
+  "privacyConsentContactSectionTitle": "联系方式",
+  "privacyConsentContactSectionBody": "如对本政策有疑问，可通过应用源码仓库的 Issue 反馈。",
+  "privacyConsentVersionLabel": "政策版本",
+  "privacyConsentVersionValue": "1.0（2026-05-14 生效）",
+  "privacyConsentAccept": "同意并继续",
+  "privacyConsentReject": "不同意",
+  "privacyConsentRejectAlertTitle": "未同意将无法使用",
+  "privacyConsentRejectAlertMessage": "未同意隐私政策与用户协议将无法使用本应用。点击「退出」立即关闭应用；点击「再次阅读」回到政策文本。",
+  "privacyConsentRejectAlertExit": "退出",
+  "privacyConsentRejectAlertReread": "再次阅读",
+  "termsOfServiceTitle": "用户协议",
+  "termsOfServiceIntro": "欢迎使用边边记账。使用本应用即表示您同意以下条款。",
+  "termsOfServiceLicenseSectionTitle": "使用许可",
+  "termsOfServiceLicenseSectionBody": "本应用免费提供给您用于个人记账用途。在遵守本协议的前提下，您可在自己的设备上安装、使用、复制本应用。",
+  "termsOfServiceResponsibilitySectionTitle": "用户责任",
+  "termsOfServiceResponsibilitySectionBody": "您应妥善保管设备与同步凭证；因您本人疏忽（如丢失设备、泄露同步凭证、忘记密码导致无法解密）造成的数据损失，本应用作者不承担责任。请定期使用「导入 / 导出」功能备份重要数据。",
+  "termsOfServiceDisclaimerSectionTitle": "免责声明",
+  "termsOfServiceDisclaimerSectionBody": "本应用按「现状」提供，作者不对应用的可用性、准确性、完整性作出任何明示或默示的担保。在适用法律允许的最大范围内，作者不对因使用本应用而产生的任何直接或间接损失承担责任。",
+  "termsOfServiceVersionLabel": "协议版本",
+  "termsOfServiceVersionValue": "1.0（2026-05-14 生效）"
+}

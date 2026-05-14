@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import 'app_lock_providers.dart';
 import 'biometric_authenticator.dart';
 import 'pin_credential.dart';
@@ -31,10 +32,10 @@ class AppLockSettingsPage extends ConsumerWidget {
     final enabledAsync = ref.watch(appLockEnabledProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('应用锁')),
+      appBar: AppBar(title: Text(context.l10n.lockTitle)),
       body: enabledAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('读取应用锁状态失败：$e')),
+        error: (e, _) => Center(child: Text(context.l10n.readFailedWithError(e.toString()))),
         data: (enabled) => _Body(enabled: enabled),
       ),
     );
@@ -62,8 +63,8 @@ class _Body extends ConsumerWidget {
       // 路径，避免随手扫脸/按指纹绕过验证。
       final ok = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (_) => const PinUnlockPage(
-            subtitle: '请输入当前 PIN 以关闭应用锁',
+          builder: (_) => PinUnlockPage(
+            subtitle: context.l10n.lockEnterCurrentPinToDisable,
             allowBiometric: false,
           ),
         ),
@@ -79,8 +80,8 @@ class _Body extends ConsumerWidget {
     // 修改 PIN：必须用旧 PIN 验证，不允许生物识别——同样属于"持有人确认"路径。
     final verified = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => const PinUnlockPage(
-          subtitle: '请输入当前 PIN 以验证身份',
+        builder: (_) => PinUnlockPage(
+          subtitle: context.l10n.lockEnterCurrentPinToVerify,
           allowBiometric: false,
         ),
       ),
@@ -99,21 +100,16 @@ class _Body extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('忘记 PIN'),
-        content: const Text(
-          '继续后将关闭应用锁并清空 PIN 凭据。\n\n'
-          '本机已有的账本数据不会被自动删除——但若你接下来"清空本地数据并从云端恢复"，'
-          '请确认已在「我的 → 云服务」上传过最新备份；否则未上传的本地修改将不可恢复。\n\n'
-          '云端备份完整时，可在新设备或重置后通过云服务"下载"恢复。',
-        ),
+        title: Text(context.l10n.lockForgotPin),
+        content: Text(context.l10n.lockForgotPinMsg),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('我已知晓，关闭应用锁'),
+            child: Text(context.l10n.lockAcknowledgeAndDisable),
           ),
         ],
       ),
@@ -130,9 +126,9 @@ class _Body extends ConsumerWidget {
       children: [
         SwitchListTile(
           secondary: const Icon(Icons.lock_outline),
-          title: const Text('启用应用锁'),
+          title: Text(context.l10n.lockEnableAppLock),
           subtitle: Text(
-            enabled ? '已开启 · PIN 已设置' : '关闭中 · 启动 / 切回前台时不再要求 PIN',
+            enabled ? context.l10n.lockEnabled : context.l10n.lockDisabling,
           ),
           value: enabled,
           onChanged: (v) => _onToggle(context, ref, v),
@@ -141,7 +137,7 @@ class _Body extends ConsumerWidget {
           const Divider(height: 0),
           ListTile(
             leading: const Icon(Icons.password_outlined),
-            title: const Text('修改 PIN'),
+            title: Text(context.l10n.lockChangePin),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _onChangePin(context, ref),
           ),
@@ -159,31 +155,22 @@ class _Body extends ConsumerWidget {
             color: Theme.of(context).colorScheme.error,
           ),
           title: Text(
-            '忘记 PIN',
+            context.l10n.lockForgotPin,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
-          subtitle: const Text('关闭应用锁；如需清空本地数据请先确认云端有最新备份'),
+          subtitle: Text(context.l10n.lockDisableHint),
           onTap: () => _onForgetPin(context, ref),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 24, 16, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
           child: Text(
-            '安全说明',
-            style: TextStyle(fontWeight: FontWeight.bold),
+            context.l10n.lockSecurityNote,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            '· PIN 经 PBKDF2-HMAC-SHA256 + 16 字节随机 salt 处理后，仅哈希值存于系统安全存储；'
-            'App 与服务器都无法还原原始 PIN。\n'
-            '· 连续输错 3 次将进入 30 秒冷却。\n'
-            '· 启用生物识别后，每次解锁将优先弹出系统面板；失败或取消后可随时改用 PIN。\n'
-            '· 后台超时锁定：App 切回后台超过设定时长后再回到前台时会要求重新解锁。'
-            '"立即锁定"会让任意一次后台→前台切换都触发锁屏。\n'
-            '· 隐私模式：开启后多任务切换器中显示遮盖层；Android 同时阻止系统截屏 / '
-            '录屏，iOS 受限于系统不能阻止截屏（但仍能挡住多任务缩略图）。',
-          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(context.l10n.lockSecurityNoteMsg),
         ),
       ],
     );
@@ -204,12 +191,12 @@ class _BiometricToggle extends ConsumerWidget {
     if (next) {
       final auth = ref.read(biometricAuthenticatorProvider);
       final result =
-          await auth.authenticate(reason: '验证身份以启用生物识别解锁');
+          await auth.authenticate(reason: context.l10n.lockVerifyBiometric);
       if (!context.mounted) return;
       if (result != BiometricResult.success) {
         // 用户取消 / 系统拒绝 / 失败——不开启，但给出温和反馈。
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_resultMessage(result))),
+          SnackBar(content: Text(_resultMessage(context, result))),
         );
         return;
       }
@@ -221,18 +208,18 @@ class _BiometricToggle extends ConsumerWidget {
     }
   }
 
-  String _resultMessage(BiometricResult result) {
+  String _resultMessage(BuildContext context, BiometricResult result) {
     switch (result) {
       case BiometricResult.success:
-        return '已启用';
+        return context.l10n.lockBiometricEnabled;
       case BiometricResult.cancelled:
-        return '已取消，未启用生物识别';
+        return context.l10n.lockBiometricCancelled;
       case BiometricResult.lockedOut:
-        return '生物识别被系统临时锁定，请稍后再试';
+        return context.l10n.lockBiometricLockedOut;
       case BiometricResult.notAvailable:
-        return '当前设备暂不可用';
+        return context.l10n.lockBiometricNotAvailable;
       case BiometricResult.failed:
-        return '验证未通过，未启用生物识别';
+        return context.l10n.lockBiometricNotRecognized;
     }
   }
 
@@ -242,51 +229,51 @@ class _BiometricToggle extends ConsumerWidget {
     final enabledAsync = ref.watch(biometricEnabledProvider);
 
     return capAsync.when(
-      loading: () => const ListTile(
-        leading: Icon(Icons.fingerprint),
-        title: Text('生物识别'),
-        subtitle: Text('正在检测设备…'),
+      loading: () => ListTile(
+        leading: const Icon(Icons.fingerprint),
+        title: Text(context.l10n.lockBiometricTitle),
+        subtitle: Text(context.l10n.lockBiometricDetecting),
       ),
       error: (e, _) => ListTile(
         leading: const Icon(Icons.fingerprint),
-        title: const Text('生物识别'),
-        subtitle: Text('检测失败：$e'),
+        title: Text(context.l10n.lockBiometricTitle),
+        subtitle: Text(context.l10n.lockBiometricDetectFailed(e.toString())),
         enabled: false,
       ),
       data: (cap) {
         final reasonText = !cap.supported
-            ? '本设备不支持生物识别'
+            ? context.l10n.lockBiometricNotSupported
             : !cap.hasEnrolled
-                ? '请先在系统设置录入指纹 / 面容'
+                ? context.l10n.lockBiometricNotEnrolled
                 : null;
         if (reasonText != null) {
           return ListTile(
             leading: const Icon(Icons.fingerprint),
-            title: const Text('生物识别'),
+            title: Text(context.l10n.lockBiometricTitle),
             subtitle: Text(reasonText),
             trailing: const Switch(value: false, onChanged: null),
             enabled: false,
           );
         }
         return enabledAsync.when(
-          loading: () => const ListTile(
-            leading: Icon(Icons.fingerprint),
-            title: Text('生物识别'),
-            subtitle: Text('正在读取偏好…'),
+          loading: () => ListTile(
+            leading: const Icon(Icons.fingerprint),
+            title: Text(context.l10n.lockBiometricTitle),
+            subtitle: Text(context.l10n.lockBiometricReadingPrefs),
           ),
           error: (e, _) => ListTile(
             leading: const Icon(Icons.fingerprint),
-            title: const Text('生物识别'),
-            subtitle: Text('读取失败：$e'),
+            title: Text(context.l10n.lockBiometricTitle),
+            subtitle: Text(context.l10n.readFailedWithError(e.toString())),
             enabled: false,
           ),
           data: (enabled) => SwitchListTile(
             secondary: const Icon(Icons.fingerprint),
-            title: const Text('生物识别'),
+            title: Text(context.l10n.lockBiometricTitle),
             subtitle: Text(
               enabled
-                  ? '已开启 · 解锁时优先弹出系统面板'
-                  : '解锁时仅使用 PIN（开启需要先验证一次）',
+                  ? context.l10n.lockBiometricEnabledDesc
+                  : context.l10n.lockBiometricDisabledDesc,
             ),
             value: enabled,
             onChanged: (v) => _onChange(context, ref, v),
@@ -312,15 +299,15 @@ class _BiometricToggle extends ConsumerWidget {
 class _BackgroundTimeoutTile extends ConsumerWidget {
   const _BackgroundTimeoutTile();
 
-  String _label(int seconds) {
-    if (seconds == 0) return '立即锁定';
-    if (seconds < 60) return '$seconds 秒';
+  String _label(BuildContext context, int seconds) {
+    if (seconds == 0) return context.l10n.lockLockNow;
+    if (seconds < 60) return context.l10n.lockSeconds(seconds);
     if (seconds < 3600) {
       final m = seconds ~/ 60;
-      return '$m 分钟';
+      return context.l10n.lockMinutes(m);
     }
     final h = seconds ~/ 3600;
-    return '$h 小时';
+    return context.l10n.lockHours(h);
   }
 
   Future<void> _onTap(BuildContext context, WidgetRef ref, int current) async {
@@ -336,20 +323,20 @@ class _BackgroundTimeoutTile extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '后台超时锁定',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    context.l10n.lockBackgroundTimeout,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
               ),
               for (final option in kBackgroundLockTimeoutOptions)
                 RadioListTile<int>(
                   value: option,
-                  title: Text(_label(option)),
+                  title: Text(_label(context, option)),
                 ),
               const SizedBox(height: 8),
             ],
@@ -368,24 +355,24 @@ class _BackgroundTimeoutTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncTimeout = ref.watch(backgroundLockTimeoutProvider);
     return asyncTimeout.when(
-      loading: () => const ListTile(
-        leading: Icon(Icons.schedule),
-        title: Text('后台超时锁定'),
-        subtitle: Text('正在读取偏好…'),
+      loading: () => ListTile(
+        leading: const Icon(Icons.schedule),
+        title: Text(context.l10n.lockBackgroundTimeout),
+        subtitle: Text(context.l10n.lockBiometricReadingPrefs),
       ),
       error: (e, _) => ListTile(
         leading: const Icon(Icons.schedule),
-        title: const Text('后台超时锁定'),
-        subtitle: Text('读取失败：$e'),
+        title: Text(context.l10n.lockBackgroundTimeout),
+        subtitle: Text(context.l10n.readFailedWithError(e.toString())),
         enabled: false,
       ),
       data: (seconds) => ListTile(
         leading: const Icon(Icons.schedule),
-        title: const Text('后台超时锁定'),
+        title: Text(context.l10n.lockBackgroundTimeout),
         subtitle: Text(
           seconds == 0
-              ? '立即锁定 · 任何后台→前台切换都会要求 PIN'
-              : '${_label(seconds)} · 后台超过该时长后回到前台需要 PIN',
+              ? context.l10n.lockLockNowDesc
+              : context.l10n.lockTimeoutDesc(_label(context, seconds)),
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => _onTap(context, ref, seconds),
@@ -415,24 +402,24 @@ class _PrivacyModeToggle extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncEnabled = ref.watch(privacyModeProvider);
     return asyncEnabled.when(
-      loading: () => const ListTile(
-        leading: Icon(Icons.visibility_off_outlined),
-        title: Text('隐私模式'),
-        subtitle: Text('正在读取偏好…'),
+      loading: () => ListTile(
+        leading: const Icon(Icons.visibility_off_outlined),
+        title: Text(context.l10n.lockPrivacyMode),
+        subtitle: Text(context.l10n.lockBiometricReadingPrefs),
       ),
       error: (e, _) => ListTile(
         leading: const Icon(Icons.visibility_off_outlined),
-        title: const Text('隐私模式'),
-        subtitle: Text('读取失败：$e'),
+        title: Text(context.l10n.lockPrivacyMode),
+        subtitle: Text(context.l10n.readFailedWithError(e.toString())),
         enabled: false,
       ),
       data: (enabled) => SwitchListTile(
         secondary: const Icon(Icons.visibility_off_outlined),
-        title: const Text('隐私模式'),
+        title: Text(context.l10n.lockPrivacyMode),
         subtitle: Text(
           enabled
-              ? '已开启 · 多任务预览模糊 + Android 阻止截屏'
-              : '关闭中 · 多任务切换器可见 App 当前画面',
+              ? context.l10n.lockPrivacyEnabledDesc
+              : context.l10n.lockPrivacyDisabledDesc,
         ),
         value: enabled,
         onChanged: (v) => _onChange(ref, v),

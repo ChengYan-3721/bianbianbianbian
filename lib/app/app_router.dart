@@ -6,6 +6,9 @@ import '../features/account/account_edit_page.dart';
 import '../features/account/account_list_page.dart';
 import '../features/budget/budget_edit_page.dart';
 import '../features/budget/budget_list_page.dart';
+import '../features/compliance/about_page.dart';
+import '../features/compliance/privacy_policy_page.dart';
+import '../features/compliance/terms_of_service_page.dart';
 import '../features/import_export/export_page.dart';
 import '../features/import_export/import_export_page.dart';
 import '../features/import_export/import_page.dart';
@@ -151,6 +154,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     GoRoute(
       path: '/trash',
       builder: (context, state) => const TrashPage(),
+    ),
+    GoRoute(
+      path: '/about',
+      builder: (context, state) => const AboutPage(),
+    ),
+    GoRoute(
+      path: '/about/privacy',
+      builder: (context, state) => const PrivacyPolicyPage(),
+    ),
+    GoRoute(
+      path: '/about/terms',
+      builder: (context, state) => const TermsOfServicePage(),
     ),
   ],
   );

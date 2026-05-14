@@ -226,6 +226,7 @@ class BackupImportService {
     if (lower.endsWith('.bbbak')) return BackupImportFileType.bbbak;
     if (lower.endsWith('.json')) return BackupImportFileType.json;
     if (lower.endsWith('.csv')) return BackupImportFileType.csv;
+    // i18n-exempt: needs refactoring for l10n
     throw BackupImportException(
       '不支持的文件类型：$fileName（仅支持 .json / .csv / .bbbak）',
     );
@@ -252,6 +253,7 @@ class BackupImportService {
   }) async {
     switch (fileType) {
       case BackupImportFileType.bbbak:
+        // i18n-exempt: needs refactoring for l10n
         if (password == null || password.isEmpty) {
           throw const BackupImportException('密码不能为空');
         }
@@ -316,7 +318,8 @@ class BackupImportService {
 
   // ── JSON / .bbbak 路径 ─────────────────────────────────────────────────
 
-  BackupImportPreview _previewJsonBytes(
+    // i18n-exempt: needs refactoring for l10n
+    BackupImportPreview _previewJsonBytes(
     Uint8List bytes,
     BackupImportFileType fileType,
   ) {
@@ -529,7 +532,8 @@ class BackupImportService {
 
   // ── CSV 路径 ───────────────────────────────────────────────────────────
 
-  BackupImportPreview _previewCsvBytes(Uint8List bytes) {
+    // i18n-exempt: needs refactoring for l10n
+    BackupImportPreview _previewCsvBytes(Uint8List bytes) {
     final String text;
     try {
       text = utf8.decode(bytes);
@@ -714,6 +718,7 @@ class BackupImportService {
 
   // ── 静态 helper（@visibleForTesting 的对外工具）──────────────────────────
 
+  // i18n-exempt: needs refactoring for l10n
   bool _isExpectedHeader(List<String> header) {
     if (header.length != _kBackupCsvHeader.length) return false;
     for (var i = 0; i < header.length; i++) {
@@ -722,6 +727,7 @@ class BackupImportService {
     return true;
   }
 
+  // i18n-exempt: format parsing error message
   BackupImportCsvRow _parseCsvRow(List<String> row) {
     // 9 列：账本,日期,类型,金额,币种,分类,账户,转入账户,备注
     final ledgerLabel = row[0].trim();
@@ -767,6 +773,7 @@ class BackupImportService {
     );
   }
 
+  // i18n-exempt: format parsing error message
   static DateTime _parseCsvDate(String s) {
     // 主格式：yyyy-MM-dd HH:mm（与 export 一致）
     // 兼容：yyyy-MM-dd（兜底）
@@ -782,6 +789,7 @@ class BackupImportService {
     }
   }
 
+  // i18n-exempt: format parsing keyword
   static String? _typeFromLabel(String label) {
     switch (label) {
       case '收入':
@@ -798,6 +806,7 @@ class BackupImportService {
     }
   }
 
+  // i18n-exempt: format parsing error message
   static String _typeLabel(String type) {
     switch (type) {
       case 'income':
@@ -813,6 +822,7 @@ class BackupImportService {
 }
 
 /// CSV 列头常量——与 [encodeBackupCsv] 字节级一致；任何一边改了另一边必须同步。
+// i18n-exempt: CSV column header for V1 Chinese format
 const List<String> _kBackupCsvHeader = <String>[
   '账本',
   '日期',

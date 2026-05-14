@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart';
 import '../../domain/entity/ledger.dart';
@@ -55,29 +56,29 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('导出')),
+      appBar: AppBar(title: Text(context.l10n.exportTitle)),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          const _SectionHeader(text: '格式'),
+          _SectionHeader(text: context.l10n.exportFormat),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: SegmentedButton<BackupFormat>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: BackupFormat.csv,
-                  label: Text('CSV'),
-                  icon: Icon(Icons.table_chart_outlined),
+                  label: const Text('CSV'),
+                  icon: const Icon(Icons.table_chart_outlined),
                 ),
                 ButtonSegment(
                   value: BackupFormat.json,
-                  label: Text('JSON'),
-                  icon: Icon(Icons.data_object),
+                  label: const Text('JSON'),
+                  icon: const Icon(Icons.data_object),
                 ),
                 ButtonSegment(
                   value: BackupFormat.bbbak,
-                  label: Text('加密'),
-                  icon: Icon(Icons.lock_outline),
+                  label: Text(context.l10n.exportEncrypted),
+                  icon: const Icon(Icons.lock_outline),
                 ),
               ],
               selected: {_format},
@@ -89,24 +90,24 @@ class _ExportPageState extends ConsumerState<ExportPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
-              _formatDescription(_format),
+              _formatDescription(context, _format),
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
           if (_format == BackupFormat.bbbak) _buildPasswordSection(context),
           const Divider(),
-          const _SectionHeader(text: '范围'),
+          _SectionHeader(text: context.l10n.exportRange),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: SegmentedButton<BackupScope>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: BackupScope.currentLedger,
-                  label: Text('当前账本'),
+                  label: Text(context.l10n.exportCurrentLedger),
                 ),
                 ButtonSegment(
                   value: BackupScope.allLedgers,
-                  label: Text('全部账本'),
+                  label: Text(context.l10n.exportAllLedgers),
                 ),
               ],
               selected: {_scope},
@@ -119,24 +120,24 @@ class _ExportPageState extends ConsumerState<ExportPage> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
               _scope == BackupScope.currentLedger
-                  ? '仅当前选中账本'
-                  : '包含所有未删除账本(含归档)',
+                  ? context.l10n.exportCurrentLedgerHint
+                  : context.l10n.exportAllLedgersHint,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
           const Divider(),
-          const _SectionHeader(text: '时间区间'),
+          _SectionHeader(text: context.l10n.exportTimeRange),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: SegmentedButton<bool>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: false,
-                  label: Text('全部时间'),
+                  label: Text(context.l10n.exportAllTime),
                 ),
                 ButtonSegment(
                   value: true,
-                  label: Text('自定义'),
+                  label: Text(context.l10n.exportCustomTime),
                 ),
               ],
               selected: {_range != null},
@@ -163,7 +164,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 ),
                 trailing: TextButton(
                   onPressed: _exporting ? null : _pickDateRange,
-                  child: const Text('修改'),
+                  child: Text(context.l10n.modify),
                 ),
               ),
             ),
@@ -178,7 +179,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.ios_share),
-              label: Text(_exporting ? '正在导出…' : '导出并分享'),
+              label: Text(_exporting ? context.l10n.exporting : context.l10n.exportAndShare),
               onPressed: (_exporting || !_canExport()) ? null : _runExport,
             ),
           ),
@@ -188,14 +189,14 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     );
   }
 
-  String _formatDescription(BackupFormat f) {
+  String _formatDescription(BuildContext context, BackupFormat f) {
     switch (f) {
       case BackupFormat.csv:
-        return 'Excel / Numbers 直接打开';
+        return context.l10n.exportCsvDesc;
       case BackupFormat.json:
-        return '结构化全量备份(可被「导入」恢复)';
+        return context.l10n.exportJsonDesc;
       case BackupFormat.bbbak:
-        return '加密备份包(.bbbak)：JSON + AES-256 密码加密，仅本 App 能导入';
+        return context.l10n.exportBbbakDesc;
     }
   }
 
@@ -231,8 +232,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '该密码用于解密备份。一旦丢失，备份内容将永远无法恢复——'
-                    '请使用密码管理器记录或写在安全的纸上，不要只存在脑子里。',
+                    context.l10n.exportPasswordWarning,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onErrorContainer,
                     ),
@@ -248,7 +248,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
             enabled: !_exporting,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              labelText: '密码',
+              labelText: context.l10n.exportPassword,
               border: const OutlineInputBorder(),
               suffixIcon: IconButton(
                 icon: Icon(
@@ -261,7 +261,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                     : () => setState(
                           () => _passwordObscured = !_passwordObscured,
                         ),
-                tooltip: _passwordObscured ? '显示密码' : '隐藏密码',
+                tooltip: _passwordObscured ? context.l10n.exportShowPassword : context.l10n.exportHidePassword,
               ),
             ),
           ),
@@ -272,9 +272,9 @@ class _ExportPageState extends ConsumerState<ExportPage> {
             enabled: !_exporting,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              labelText: '再次输入密码',
+              labelText: context.l10n.exportReEnterPassword,
               border: const OutlineInputBorder(),
-              errorText: mismatch ? '两次输入不一致' : null,
+              errorText: mismatch ? context.l10n.exportPasswordMismatch : null,
             ),
           ),
         ],
@@ -316,6 +316,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   }
 
   Future<void> _runExport() async {
+    final l10n = context.l10n;
     setState(() => _exporting = true);
     File? outFile;
     try {
@@ -346,13 +347,13 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         final id = await ref.read(currentLedgerIdProvider.future);
         final l = await ledgerRepo.getById(id);
         if (l == null) {
-          throw StateError('当前账本不存在');
+          throw StateError(l10n.exportCurrentLedgerNotExist);
         }
         targetLedgers = [l];
       } else {
         targetLedgers = await ledgerRepo.listActive();
         if (targetLedgers.isEmpty) {
-          throw StateError('没有可导出的账本');
+          throw StateError(l10n.exportNoLedgerToExport);
         }
       }
 
@@ -431,18 +432,18 @@ class _ExportPageState extends ConsumerState<ExportPage> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已导出：${outFile.path.split('/').last}')),
+        SnackBar(content: Text(context.l10n.exportedFile(outFile.path.split('/').last))),
       );
 
       await service.shareFile(
         outFile,
-        subject: '边边记账导出',
-        text: '边边记账数据导出 (${_formatLabel(_format)})',
+        subject: context.l10n.exportShareSubject,
+        text: context.l10n.exportShareText(_formatLabel(_format)),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：$e')),
+        SnackBar(content: Text(context.l10n.operationFailedWithError(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -456,7 +457,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       case BackupFormat.json:
         return 'JSON';
       case BackupFormat.bbbak:
-        return '加密备份 .bbbak';
+        return context.l10n.exportBbbakLabel;
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import 'settings_providers.dart';
 
 /// Step 16.1：「我的 → 提醒」设置页。
@@ -21,13 +22,13 @@ class ReminderPage extends ConsumerWidget {
     final timeAsync = ref.watch(reminderTimeProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('提醒')),
+      appBar: AppBar(title: Text(context.l10n.reminderTitle)),
       body: enabledAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('读取提醒状态失败：$e')),
+        error: (e, _) => Center(child: Text(context.l10n.readFailedWithError(e.toString()))),
         data: (enabled) => timeAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('读取提醒时间失败：$e')),
+          error: (e, _) => Center(child: Text(context.l10n.readFailedWithError(e.toString()))),
           data: (time) => _Body(enabled: enabled, time: time),
         ),
       ),
@@ -47,11 +48,11 @@ class _Body extends ConsumerWidget {
       children: [
         SwitchListTile(
           secondary: const Icon(Icons.notifications_outlined),
-          title: const Text('每日记账提醒'),
+          title: Text(context.l10n.reminderDailyTitle),
           subtitle: Text(
             enabled
-                ? '每天 ${_formatTime(time ?? const TimeOfDay(hour: 20, minute: 0))} 提醒你记一笔'
-                : '未开启',
+                ? context.l10n.reminderDailyOn(_formatTime(time ?? const TimeOfDay(hour: 20, minute: 0)))
+                : context.l10n.reminderOff,
           ),
           value: enabled,
           onChanged: (next) => _onToggle(context, ref, next),
@@ -60,7 +61,7 @@ class _Body extends ConsumerWidget {
           const Divider(),
           ListTile(
             leading: const Icon(Icons.access_time),
-            title: const Text('提醒时间'),
+            title: Text(context.l10n.reminderTime),
             trailing: Text(
               _formatTime(time ?? const TimeOfDay(hour: 20, minute: 0)),
               style: Theme.of(context).textTheme.titleMedium,
@@ -69,16 +70,15 @@ class _Body extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.play_circle_outline),
-            title: const Text('测试提醒'),
-            subtitle: const Text('立即发送一条测试通知'),
+            title: Text(context.l10n.reminderTest),
+            subtitle: Text(context.l10n.reminderTestHint),
             onTap: () => _showTest(context, ref),
           ),
           const Divider(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Text(
-              '开启后，每天在设定时间会收到一条可爱的记账提醒 🐻\n'
-              '如果通知没有按时出现，请检查系统通知权限设置。',
+              context.l10n.reminderEnableHint,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(context)
                         .colorScheme
@@ -101,7 +101,7 @@ class _Body extends ConsumerWidget {
       if (!granted) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('通知权限被拒绝，无法开启提醒')),
+          SnackBar(content: Text(context.l10n.reminderPermissionDenied)),
         );
         return;
       }
@@ -110,7 +110,7 @@ class _Body extends ConsumerWidget {
       final picked = await showTimePicker(
         context: context,
         initialTime: time ?? const TimeOfDay(hour: 20, minute: 0),
-        helpText: '选择提醒时间',
+        helpText: context.l10n.reminderSelectTime,
         builder: (context, child) => _themeTimePicker(context, child),
       );
       if (picked == null) {
@@ -125,7 +125,7 @@ class _Body extends ConsumerWidget {
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已开启，每天 ${_formatTime(picked)} 提醒你')),
+        SnackBar(content: Text(context.l10n.reminderEnabledAt(_formatTime(picked)))),
       );
     } else {
       // 关闭：取消通知 + 清 DB。
@@ -135,7 +135,7 @@ class _Body extends ConsumerWidget {
       await ref.read(reminderTimeProvider.notifier).clear();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已关闭每日提醒')),
+        SnackBar(content: Text(context.l10n.reminderDisabled)),
       );
     }
   }
@@ -144,7 +144,7 @@ class _Body extends ConsumerWidget {
     final picked = await showTimePicker(
       context: context,
       initialTime: time ?? const TimeOfDay(hour: 20, minute: 0),
-      helpText: '选择提醒时间',
+      helpText: context.l10n.reminderSelectTime,
       builder: (context, child) => _themeTimePicker(context, child),
     );
     if (picked == null) return;
@@ -156,7 +156,7 @@ class _Body extends ConsumerWidget {
     );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('提醒时间已更新为 ${_formatTime(picked)}')),
+      SnackBar(content: Text(context.l10n.reminderTimeUpdated(_formatTime(picked)))),
     );
   }
 
@@ -165,7 +165,7 @@ class _Body extends ConsumerWidget {
     await service.showTestNotification();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('测试通知已发送 🐻')),
+      SnackBar(content: Text(context.l10n.reminderTestSent)),
     );
   }
 

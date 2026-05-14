@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/home_shell.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/budget.dart';
 import '../budget/budget_progress.dart';
@@ -38,12 +39,12 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.image_outlined),
-                title: const Text('导出 PNG（当前视图截图）'),
+                title: Text(ctx.l10n.statsExportPng),
                 onTap: () => Navigator.of(ctx).pop(_ExportKind.png),
               ),
               ListTile(
                 leading: const Icon(Icons.table_chart_outlined),
-                title: const Text('导出 CSV（当前区间明细）'),
+                title: Text(ctx.l10n.statsExportCsv),
                 onTap: () => Navigator.of(ctx).pop(_ExportKind.csv),
               ),
             ],
@@ -65,7 +66,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('导出失败：$e')),
+        SnackBar(content: Text(context.l10n.statsExportFailed(e.toString()))),
       );
     } finally {
       if (mounted) {
@@ -78,8 +79,9 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     final boundary =
         _chartsBoundaryKey.currentContext?.findRenderObject()
             as RenderRepaintBoundary?;
+    final l10n = context.l10n;
     if (boundary == null) {
-      throw StateError('图表区尚未挂载');
+      throw StateError(l10n.statsChartNotMounted);
     }
     final range = ref.read(statsRangeProvider).range;
     final file = await _exportService.exportPng(
@@ -88,12 +90,13 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     );
     await _exportService.shareFile(
       file,
-      subject: '边边记账 · 统计图表',
-      text: '统计区间：${_formatRange(range)}',
+      subject: l10n.statsPngTitle,
+      text: l10n.statsPngSubtitle(_formatRange(range)),
     );
   }
 
   Future<void> _exportCsv() async {
+    final l10n = context.l10n;
     final range = ref.read(statsRangeProvider).range;
     final ledgerId = await ref.read(currentLedgerIdProvider.future);
     final txRepo = await ref.read(transactionRepositoryProvider.future);
@@ -112,8 +115,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     );
     await _exportService.shareFile(
       file,
-      subject: '边边记账 · 流水明细',
-      text: '统计区间：${_formatRange(range)}',
+      subject: l10n.statsCsvTitle,
+      text: l10n.statsCsvSubtitle(_formatRange(range)),
     );
   }
 
@@ -140,7 +143,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                   Expanded(
                     child: Center(
                       child: Text(
-                        '统计分析',
+                        context.l10n.statsTitle,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
@@ -160,7 +163,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                           )
                         : IconButton(
                             icon: const Icon(Icons.ios_share),
-                            tooltip: '导出',
+                            tooltip: context.l10n.statsExport,
                             onPressed: _onExportPressed,
                           ),
                   ),
@@ -174,25 +177,25 @@ class _StatsPageState extends ConsumerState<StatsPage> {
               child: Row(
                 children: [
                   _PresetChip(
-                    label: '本月',
+                    label: context.l10n.statsThisMonth,
                     selected: state.preset == StatsRangePreset.thisMonth,
                     onTap: () => notifier.setPreset(StatsRangePreset.thisMonth),
                   ),
                   const SizedBox(width: 8),
                   _PresetChip(
-                    label: '上月',
+                    label: context.l10n.statsLastMonth,
                     selected: state.preset == StatsRangePreset.lastMonth,
                     onTap: () => notifier.setPreset(StatsRangePreset.lastMonth),
                   ),
                   const SizedBox(width: 8),
                   _PresetChip(
-                    label: '本年',
+                    label: context.l10n.statsThisYear,
                     selected: state.preset == StatsRangePreset.thisYear,
                     onTap: () => notifier.setPreset(StatsRangePreset.thisYear),
                   ),
                   const SizedBox(width: 8),
                   _PresetChip(
-                    label: '自定义',
+                    label: context.l10n.statsCustom,
                     selected: state.preset == StatsRangePreset.custom,
                     onTap: () async {
                       final now = DateTime.now();
@@ -205,9 +208,9 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                           start: state.range.start,
                           end: state.range.end,
                         ),
-                        helpText: '选择统计区间',
-                        saveText: '确定',
-                        cancelText: '取消',
+                        helpText: context.l10n.statsSelectRange,
+                        saveText: context.l10n.confirm,
+                        cancelText: context.l10n.cancel,
                       );
                       if (picked == null) return;
                       notifier.setCustomRange(picked.start, picked.end);
@@ -332,7 +335,7 @@ class _IncomeExpenseLineCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '收支折线（按日）',
+              context.l10n.statsIncomeExpenseLine,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -343,7 +346,7 @@ class _IncomeExpenseLineCard extends ConsumerWidget {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Text(
-                    '图表加载失败：$e',
+                    context.l10n.statsChartLoadFailed(e.toString()),
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -377,12 +380,12 @@ class _LineChartEmptyState extends StatelessWidget {
           const Icon(Icons.insert_chart_outlined, size: 34),
           const SizedBox(height: 8),
           Text(
-            '暂无收支数据',
+            context.l10n.statsNoIncomeExpenseData,
             style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            '换个区间试试吧 🐰',
+            context.l10n.statsTryAnotherRange,
             style: textTheme.bodySmall,
           ),
         ],
@@ -641,7 +644,7 @@ class _CategoryPieCard extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '支出分类占比',
+                    context.l10n.statsExpenseCategoryPie,
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -663,7 +666,7 @@ class _CategoryPieCard extends ConsumerWidget {
                     const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Text(
-                    '图表加载失败：$e',
+                    context.l10n.statsChartLoadFailed(e.toString()),
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -693,12 +696,12 @@ class _PieChartEmptyState extends StatelessWidget {
           const Icon(Icons.pie_chart_outline, size: 34),
           const SizedBox(height: 8),
           Text(
-            '暂无支出数据',
+            context.l10n.statsNoExpenseData,
             style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            '记一笔支出就能看到啦 🐰',
+            context.l10n.statsAddExpenseHint,
             style: textTheme.bodySmall,
           ),
         ],
@@ -725,7 +728,7 @@ class _TotalBudgetRing extends ConsumerWidget {
     final semantic = theme.extension<BianBianSemanticColors>()!;
 
     return Tooltip(
-      message: '查看预算',
+      message: context.l10n.statsViewBudget,
       child: InkWell(
         borderRadius: BorderRadius.circular(_size),
         onTap: () => context.push('/budget'),
@@ -882,6 +885,11 @@ class _LegendList extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: slices.map((s) {
+          // Localize fallback names from aggregation functions
+          final displayName = s.categoryId == null
+              ? context.l10n.parentKeyOther
+          // i18n-exempt: '未分类' matches DB seed data name, not UI display
+              : (s.categoryName == '未分类' ? context.l10n.txTypeUncategorized : s.categoryName);
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(
@@ -897,7 +905,7 @@ class _LegendList extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    s.categoryName,
+                    displayName,
                     style: textTheme.bodySmall,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -933,7 +941,7 @@ class _RankingCard extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              '收支排行榜',
+              context.l10n.statsRanking,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -944,7 +952,7 @@ class _RankingCard extends ConsumerWidget {
                   const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(
                 child: Text(
-                  '排行榜加载失败：$e',
+                  context.l10n.statsRankLoadFailed(e.toString()),
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
@@ -977,12 +985,12 @@ class _RankingEmptyState extends StatelessWidget {
           const Icon(Icons.leaderboard_outlined, size: 34),
           const SizedBox(height: 8),
           Text(
-            '暂无排行数据',
+            context.l10n.statsNoRankData,
             style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            '记几笔就能看到排名啦 🐰',
+            context.l10n.statsAddMoreHint,
             style: textTheme.bodySmall,
           ),
         ],
@@ -1012,6 +1020,11 @@ class _RankingList extends StatelessWidget {
           if (index > 0) const SizedBox(height: 2),
           Builder(builder: (context) {
             final item = items[index];
+            // Localize fallback names from aggregation functions
+            // i18n-exempt: '未分类' matches DB seed data name, not UI display
+            final displayName = item.categoryName == '未分类'
+                ? context.l10n.txTypeUncategorized
+                : (item.categoryId == null ? context.l10n.parentKeyOther : item.categoryName);
             final ratio = maxAmount > 0 ? item.amount / maxAmount : 0.0;
             final prefix = item.isIncome ? '+' : '-';
 
@@ -1044,7 +1057,7 @@ class _RankingList extends StatelessWidget {
                   Expanded(
                     flex: 3,
                     child: Text(
-                      item.categoryName,
+                      displayName,
                       style: textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
@@ -1118,14 +1131,14 @@ class _HeatmapCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '支出日历热力图',
+              context.l10n.statsHeatmapTitle,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              '颜色越深表示当日支出越高',
+              context.l10n.statsHeatmapLegend,
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 10),
@@ -1134,7 +1147,7 @@ class _HeatmapCard extends ConsumerWidget {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(
                   child: Text(
-                    '热力图加载失败：$e',
+                    context.l10n.statsHeatmapLoadFailed(e.toString()),
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
@@ -1172,12 +1185,12 @@ class _HeatmapEmptyState extends StatelessWidget {
           const Icon(Icons.calendar_month_outlined, size: 34),
           const SizedBox(height: 8),
           Text(
-            '暂无支出热力数据',
+            context.l10n.statsNoHeatmapData,
             style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 4),
           Text(
-            '记一笔支出就能点亮日历啦 🐰',
+            context.l10n.statsHeatmapHint,
             style: textTheme.bodySmall,
           ),
         ],
@@ -1283,13 +1296,22 @@ class _HeatmapView extends StatelessWidget {
 class _WeekdayAxis extends StatelessWidget {
   const _WeekdayAxis();
 
-  static const labels = ['日', '一', '二', '三', '四', '五', '六'];
   static const double _cellSize = 22;
   static const double _cellGap = 6;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final l10n = context.l10n;
+    final labels = [
+      l10n.weekdayShortSun,
+      l10n.weekdayShortMon,
+      l10n.weekdayShortTue,
+      l10n.weekdayShortWed,
+      l10n.weekdayShortThu,
+      l10n.weekdayShortFri,
+      l10n.weekdayShortSat,
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: labels
@@ -1342,7 +1364,7 @@ class _HeatmapCellTile extends StatelessWidget {
 
     return Tooltip(
       message:
-          '${DateFormat('M月d日').format(cell!.day)}\n支出：¥${NumberFormat('#,##0.00').format(cell!.amount)}',
+          '${DateFormat(context.l10n.statsTooltipDateFormat).format(cell!.day)}\n${context.l10n.txTypeExpense}：¥${NumberFormat('#,##0.00').format(cell!.amount)}',
       child: Material(
         color: Colors.transparent,
         child: InkWell(

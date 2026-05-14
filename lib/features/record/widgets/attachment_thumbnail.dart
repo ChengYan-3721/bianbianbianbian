@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/l10n/l10n_ext.dart';
 import '../../../domain/entity/attachment_meta.dart';
 import '../../sync/attachment/attachment_downloader.dart';
 import '../../sync/attachment/attachment_providers.dart';
@@ -150,6 +151,7 @@ class _AttachmentThumbnailState extends ConsumerState<AttachmentThumbnail> {
         width: widget.size,
         height: widget.size,
         fit: widget.fit,
+        semanticLabel: context.l10n.a11yAttachmentImage,
         errorBuilder: (_, _, _) => _renderMissing(),
       ),
     );
@@ -222,7 +224,7 @@ class _AttachmentMissingTile extends StatelessWidget {
           const Icon(Icons.attachment_outlined, size: 22),
           const SizedBox(height: 2),
           Text(
-            '未同步',
+            context.l10n.attachmentNotSynced,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: colors.onSurface.withAlpha(140),
                 ),

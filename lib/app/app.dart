@@ -1,11 +1,12 @@
 import 'dart:async';
 
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:home_widget/home_widget.dart';
 
+import '../features/compliance/privacy_consent_gate.dart';
 import '../features/lock/app_lock_overlay.dart';
 import '../features/lock/app_lock_providers.dart';
 import '../data/repository/providers.dart'
@@ -42,12 +43,19 @@ class BianBianApp extends ConsumerStatefulWidget {
     super.key,
     this.enableSyncLifecycle = true,
     this.enableAppLockGuard = true,
+    this.enablePrivacyConsentGate = true,
   });
 
   final bool enableSyncLifecycle;
 
   /// Step 14.3：测试可关闭。生产恒为 true。
   final bool enableAppLockGuard;
+
+  /// Step 17.3：测试可关闭。生产恒为 true。widget 测试中若不需要走完整
+  /// 隐私同意流程（默认状态：未同意），可关闭本 gate 直接进入主界面。
+  /// 另一种方式是通过 `SharedPreferences.setMockInitialValues` 把同意
+  /// 状态预置为已同意；两种手段择一使用。
+  final bool enablePrivacyConsentGate;
 
   @override
   ConsumerState<BianBianApp> createState() => _BianBianAppState();
@@ -209,20 +217,13 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
     // Step 15.1：主题由 provider 驱动，切换后即时变色。
     final theme = ref.watch(currentThemeProvider);
     return MaterialApp.router(
-      title: '边边记账',
+      title: '边边记账', // i18n-exempt: app title used before localization is available
       theme: theme,
         routerConfig: ref.watch(goRouterProvider),
       debugShowCheckedModeBanner: false,
-      locale: const Locale('zh', 'CN'),
-      supportedLocales: const [
-        Locale('zh', 'CN'),
-        Locale('en', 'US'),
-      ],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
+      locale: const Locale('zh'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       // Step 15.2：字号调节 + 应用锁 overlay。
       // 字号覆盖需包在 router child 之上，这样全 app 所有 widget 都能
       // 通过 MediaQuery.textScalerOf 读到缩放后的值。应用锁 overlay 叠
@@ -242,6 +243,11 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
         );
         if (widget.enableAppLockGuard) {
           child = _AppLockGate(child: child);
+        }
+        if (widget.enablePrivacyConsentGate) {
+          // Step 17.3：套在最外层——同意页必须先于应用锁、底栏出现，
+          // 否则首次启动的新用户会被 PIN/解锁页卡死而看不到政策。
+          child = PrivacyConsentGate(child: child);
         }
         return child;
       },

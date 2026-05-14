@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/quick_text_parser.dart';
 import '../../data/repository/providers.dart';
@@ -16,22 +17,23 @@ import 'ai_input_enhance_service.dart';
 import 'quick_input_providers.dart';
 import 'record_providers.dart';
 
-/// 一级分类的中文标签——与 `seeder.dart::categoriesByParent.keys` /
-/// `budget_providers.dart::kParentKeyLabels` 同集，但本文件刻意复制一份
-/// 而不 import 上层 feature——保持 record/quick 与 budget/ 的解耦。
-const Map<String, String> _parentKeyLabels = {
-  'income': '收入',
-  'food': '饮食',
-  'shopping': '购物',
-  'transport': '出行',
-  'education': '教育',
-  'entertainment': '娱乐',
-  'social': '人情',
-  'housing': '住房',
-  'medical': '医药',
-  'investment': '投资',
-  'other': '其他',
-};
+/// 用于 UI 展示的一级分类标签——从 l10n 取值。
+String _parentLabelFor(BuildContext context, String key) {
+  final l10n = context.l10n;
+  return switch (key) {
+    'income' => l10n.parentKeyIncome,
+    'food' => l10n.parentKeyFood,
+    'shopping' => l10n.parentKeyShopping,
+    'transport' => l10n.parentKeyTransport,
+    'education' => l10n.parentKeyEducation,
+    'entertainment' => l10n.parentKeyEntertainment,
+    'social' => l10n.parentKeySocial,
+    'housing' => l10n.parentKeyHousing,
+    'medical' => l10n.parentKeyMedical,
+    'investment' => l10n.parentKeyInvestment,
+    _ => l10n.parentKeyOther,
+  };
+}
 
 /// 一级分类在确认卡片 / picker 内的展示顺序——与记账页 `parentTabs` 顺序
 /// 一致（食/购/行/育/乐/情/住/医/投/收/其），保证用户在首页快捷输入与
@@ -194,16 +196,14 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
         // 离——原 parser 把"红包"判为 social 时，"收入"作为残余留在 note；
         // 一旦我们覆盖到 income，"收入"就该作为分类标签被吞掉，不再当备
         // 注。
-        final parentLabel = _parentKeyLabels[exactMatch.parentKey];
-        if (parentLabel != null) {
-          final current = _noteController.text;
-          if (current.contains(parentLabel)) {
-            final cleaned = current
-                .replaceAll(parentLabel, ' ')
-                .replaceAll(RegExp(r'\s+'), ' ')
-                .trim();
-            _noteController.text = cleaned;
-          }
+        final parentLabel = _parentLabelFor(context, exactMatch.parentKey);
+        final current = _noteController.text;
+        if (current.contains(parentLabel)) {
+          final cleaned = current
+              .replaceAll(parentLabel, ' ')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
+          _noteController.text = cleaned;
         }
       } else if (_parentKey != null && _categoryId == null) {
         for (final c in cats) {
@@ -287,15 +287,15 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
       firstDate: DateTime(2020),
       lastDate: now,
       locale: const Locale('zh', 'CN'),
-      cancelText: '取消',
-      confirmText: '确定',
+      cancelText: context.l10n.cancel,
+      confirmText: context.l10n.confirm,
     );
     if (date == null || !mounted) return;
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(_occurredAt),
-      cancelText: '取消',
-      confirmText: '确定',
+      cancelText: context.l10n.cancel,
+      confirmText: context.l10n.confirm,
     );
     if (time == null || !mounted) return;
     setState(() {
@@ -353,7 +353,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败：$e')),
+          SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
         );
       }
     }
@@ -408,16 +408,16 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
           _noteController.text = result.note!;
         }
       });
-      messenger.showSnackBar(const SnackBar(content: Text('AI 已更新')));
+      messenger.showSnackBar(SnackBar(content: Text(context.l10n.quickConfirmAiUpdated)));
     } on AiEnhanceException catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('AI 解析失败：${e.message}')),
+          SnackBar(content: Text(context.l10n.quickConfirmAiFailed(e.message))),
         );
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('AI 解析失败：$e')));
+        messenger.showSnackBar(SnackBar(content: Text(context.l10n.quickConfirmAiFailedUnknown(e.toString()))));
       }
     } finally {
       if (mounted) setState(() => _aiEnhancing = false);
@@ -458,7 +458,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
             children: [
               Expanded(
                 child: Text(
-                  '确认记一笔',
+                  context.l10n.quickConfirmTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -466,7 +466,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
               ),
               IconButton(
                 icon: const Icon(Icons.close),
-                tooltip: '关闭',
+                tooltip: context.l10n.close,
                 onPressed: () => Navigator.of(context).pop(false),
               ),
             ],
@@ -495,7 +495,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      '识别置信度较低，请核对',
+                      context.l10n.quickConfirmLowConfidence,
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
@@ -526,7 +526,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('✨'),
-                      label: Text(_aiEnhancing ? '解析中…' : 'AI 增强'),
+                      label: Text(_aiEnhancing ? context.l10n.parsing : context.l10n.quickConfirmAiEnhance),
                     ),
                   ],
                 ],
@@ -540,7 +540,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                 SizedBox(
                   width: 40,
                   child: Text(
-                    '金额',
+                    context.l10n.quickConfirmAmount,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: color.onSurface.withAlpha(160),
                         ),
@@ -582,7 +582,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                   SizedBox(
                     width: 40,
                     child: Text(
-                      '分类',
+                      context.l10n.quickConfirmCategory,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: color.onSurface.withAlpha(160),
                           ),
@@ -600,7 +600,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  '${_parentKeyLabels[selectedCat.parentKey] ?? '其他'} / ${selectedCat.name}',
+                                  '${_parentLabelFor(context, selectedCat.parentKey)} / ${selectedCat.name}',
                                   style:
                                       Theme.of(context).textTheme.bodyMedium,
                                 ),
@@ -608,7 +608,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                             ],
                           )
                         : Text(
-                            _categoriesLoaded ? '请选择' : '加载中…',
+                            _categoriesLoaded ? context.l10n.quickConfirmPleaseSelect : context.l10n.loading,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyMedium
@@ -638,7 +638,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                   SizedBox(
                     width: 40,
                     child: Text(
-                      '时间',
+                      context.l10n.quickConfirmTime,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: color.onSurface.withAlpha(160),
                           ),
@@ -669,7 +669,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                 SizedBox(
                   width: 40,
                   child: Text(
-                    '备注',
+                    context.l10n.recordNewNote,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: color.onSurface.withAlpha(160),
                         ),
@@ -680,8 +680,8 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                   child: TextField(
                     key: const Key('quick_confirm_note_field'),
                     controller: _noteController,
-                    decoration: const InputDecoration(
-                      hintText: '可留空',
+                    decoration: InputDecoration(
+                      hintText: context.l10n.recordNewNoteOptional,
                       isDense: true,
                       border: UnderlineInputBorder(),
                     ),
@@ -698,7 +698,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                   onPressed: _saving
                       ? null
                       : () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
+                  child: Text(context.l10n.cancel),
                 ),
               ),
               const SizedBox(width: 12),
@@ -712,7 +712,7 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('保存'),
+                      : Text(context.l10n.save),
                 ),
               ),
             ],
@@ -755,13 +755,14 @@ class _CategoryPickerList extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '选择分类',
+                  context.l10n.recordNewSelectCategory,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                 ),
               ),
               IconButton(
+                tooltip: context.l10n.a11yQuickConfirmClose,
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -777,7 +778,7 @@ class _CategoryPickerList extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                   child: Text(
-                    _parentKeyLabels[pk] ?? pk,
+                    _parentLabelFor(context, pk),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: color.onSurface.withAlpha(160),
                           fontWeight: FontWeight.w700,

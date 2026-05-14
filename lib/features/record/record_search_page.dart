@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/transaction_entry.dart';
-import '../budget/budget_providers.dart' show kParentKeyLabels;
+import 'category_manage_page.dart' show CategoryManagePage;
 import 'record_search_filters.dart';
 import 'record_tile_actions.dart';
 
@@ -163,10 +164,10 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('搜索流水'),
+        title: Text(context.l10n.recordSearchTitle),
         actions: [
           IconButton(
-            tooltip: '重置',
+            tooltip: context.l10n.reset,
             onPressed: _resetAllFilters,
             icon: const Icon(Icons.refresh),
           ),
@@ -186,7 +187,7 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
               autofocus: true,
               onChanged: _onKeywordChanged,
               decoration: InputDecoration(
-                hintText: '关键词（备注 / 分类 / 账户）',
+                hintText: context.l10n.recordSearchHint,
                 prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
                 border: OutlineInputBorder(
@@ -195,7 +196,7 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
                 suffixIcon: _query.keyword.isEmpty
                     ? null
                     : IconButton(
-                        tooltip: '清空',
+                        tooltip: context.l10n.clear,
                         icon: const Icon(Icons.close, size: 18),
                         onPressed: () {
                           _keywordController.clear();
@@ -215,7 +216,7 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
               shape: const Border(),
               collapsedShape: const Border(),
               title: Text(
-                '筛选',
+                  context.l10n.recordSearchFilter,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: colors.onSurface.withAlpha(180),
                     ),
@@ -254,14 +255,14 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
     final start = _query.startDate;
     final end = _query.endDate;
     final label = (start == null || end == null)
-        ? '不限日期'
+        ? context.l10n.recordSearchNoDateLimit
         : '${_dateFmt.format(start)} ~ ${_dateFmt.format(end)}';
     return Row(
       children: [
         SizedBox(
           width: 64,
           child: Text(
-            '日期',
+            context.l10n.recordSearchDate,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -279,7 +280,7 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
         ),
         if (start != null && end != null)
           IconButton(
-            tooltip: '清空日期',
+            tooltip: context.l10n.recordSearchClearDate,
             onPressed: _clearDateRange,
             icon: const Icon(Icons.close, size: 18),
             visualDensity: VisualDensity.compact,
@@ -294,28 +295,28 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
         SizedBox(
           width: 64,
           child: Text(
-            '类型',
+            context.l10n.recordSearchType,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
         Expanded(
           child: SegmentedButton<SearchTypeFilter>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: SearchTypeFilter.all,
-                label: Text('全部'),
+                label: Text(context.l10n.recordSearchAll),
               ),
               ButtonSegment(
                 value: SearchTypeFilter.expense,
-                label: Text('支出'),
+                label: Text(context.l10n.txTypeExpense),
               ),
               ButtonSegment(
                 value: SearchTypeFilter.income,
-                label: Text('收入'),
+                label: Text(context.l10n.txTypeIncome),
               ),
               ButtonSegment(
                 value: SearchTypeFilter.transfer,
-                label: Text('转账'),
+                label: Text(context.l10n.txTypeTransfer),
               ),
             ],
             selected: {_query.typeFilter},
@@ -336,7 +337,7 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
         SizedBox(
           width: 64,
           child: Text(
-            '金额',
+            context.l10n.recordSearchAmount,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -348,8 +349,8 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
             onChanged: _onMinAmountChanged,
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              hintText: '下限',
+            decoration: InputDecoration(
+              hintText: context.l10n.recordSearchAmountMin,
               isDense: true,
               border: OutlineInputBorder(),
               contentPadding:
@@ -369,8 +370,8 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
             onChanged: _onMaxAmountChanged,
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              hintText: '上限',
+            decoration: InputDecoration(
+              hintText: context.l10n.recordSearchAmountMax,
               isDense: true,
               border: OutlineInputBorder(),
               contentPadding:
@@ -434,7 +435,7 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
       return _buildHint(
         context,
         icon: Icons.search,
-        text: '输入关键词或筛选条件后开始搜索',
+        text: context.l10n.recordSearchEmptyHint,
       );
     }
 
@@ -467,6 +468,10 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
         catRepo: catRepo,
         accRepo: accRepo,
         query: widget.query,
+        parentKeyLabels: {
+          for (final key in CategoryManagePage.parentKeys)
+            key: CategoryManagePage.parentLabelFor(context, key),
+        },
       ),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
@@ -477,7 +482,7 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
           return _buildHint(
             context,
             icon: Icons.sentiment_dissatisfied,
-            text: '没有找到相关流水',
+                text: context.l10n.recordSearchNoResult,
           );
         }
         return ListView.builder(
@@ -506,6 +511,7 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
     required dynamic catRepo,
     required dynamic accRepo,
     required SearchQuery query,
+    required Map<String, String> parentKeyLabels,
   }) async {
     final txs = await txRepo.listActiveByLedger(ledgerId) as List<TransactionEntry>;
     final cats = await catRepo.listActiveAll() as List<Category>;
@@ -517,7 +523,7 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
       query: query,
       // 一级分类是常量、不落库——这里把 key→中文标签字典注入过滤器，
       // 让"餐饮 / 购物 / 收入"这种一级分类名也能命中。
-      parentKeyLabels: kParentKeyLabels,
+      parentKeyLabels: parentKeyLabels,
     )..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
     final categoryById = <String, Category>{
       for (final c in cats) c.id: c,
@@ -606,10 +612,10 @@ class _ResultTile extends ConsumerWidget {
     final iconText = isTransfer
         ? '🔁'
         : (cat?.icon ?? (isExpense ? '💸' : '💰'));
-    final name = isTransfer ? '转账' : (cat?.name ?? '未分类');
+    final name = isTransfer ? context.l10n.txTypeTransfer : (cat?.name ?? context.l10n.txTypeUncategorized);
 
     final acc = tx.accountId == null ? null : data.accountById[tx.accountId!];
-    final accName = acc?.name ?? '账户';
+    final accName = acc?.name ?? context.l10n.recordNewWallet;
     final toAcc =
         tx.toAccountId == null ? null : data.accountById[tx.toAccountId!];
     final toAccName = toAcc?.name;

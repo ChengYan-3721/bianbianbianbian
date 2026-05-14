@@ -1,6 +1,8 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/budget.dart';
 import '../../domain/entity/category.dart';
@@ -15,21 +17,24 @@ typedef BudgetClock = DateTime Function();
 @Riverpod(keepAlive: true)
 BudgetClock budgetClock(Ref ref) => DateTime.now;
 
-/// 一级分类的中文标签——用于预算列表/编辑页展示。
+/// 一级分类的本地化标签——用于预算列表/编辑页展示。
 /// 键集来自 `seeder.dart` 的 `categoriesByParent.keys`。
-const Map<String, String> kParentKeyLabels = {
-  'income': '收入',
-  'food': '饮食',
-  'shopping': '购物',
-  'transport': '出行',
-  'education': '教育',
-  'entertainment': '娱乐',
-  'social': '人情',
-  'housing': '住房',
-  'medical': '医药',
-  'investment': '投资',
-  'other': '其他',
-};
+Map<String, String> parentKeyLabels(BuildContext context) {
+  final l10n = context.l10n;
+  return {
+    'income': l10n.parentKeyIncome,
+    'food': l10n.parentKeyFood,
+    'shopping': l10n.parentKeyShopping,
+    'transport': l10n.parentKeyTransport,
+    'education': l10n.parentKeyEducation,
+    'entertainment': l10n.parentKeyEntertainment,
+    'social': l10n.parentKeySocial,
+    'housing': l10n.parentKeyHousing,
+    'medical': l10n.parentKeyMedical,
+    'investment': l10n.parentKeyInvestment,
+    'other': l10n.parentKeyOther,
+  };
+}
 
 /// 当前账本的活跃预算列表（按周期升序、`categoryId == null` 排前）。
 @riverpod

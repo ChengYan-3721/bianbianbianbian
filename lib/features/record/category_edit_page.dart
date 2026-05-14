@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
 import 'category_manage_page.dart';
@@ -23,6 +24,7 @@ class CategoryEditPage extends ConsumerStatefulWidget {
     this.initialCategory,
   }) : assert(
           (parentKey != null) ^ (initialCategory != null),
+          // i18n-exempt: assertion message (developer-facing, not UI)
           '新建模式需要 parentKey，编辑模式需要 initialCategory',
         );
 
@@ -41,12 +43,9 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
 
   bool get _isEditing => widget.initialCategory != null;
 
-  String get _parentLabel {
+  String _parentLabel(BuildContext context) {
     final key = _isEditing ? widget.initialCategory!.parentKey : widget.parentKey!;
-    for (final (label, k) in CategoryManagePage.parentTabs) {
-      if (k == key) return label;
-    }
-    return '分类';
+    return CategoryManagePage.parentLabelFor(context, key);
   }
 
   @override
@@ -73,14 +72,14 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
       appBar: AppBar(
         leading: TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(false),
-          child: const Text('取消'),
+          child: Text(context.l10n.cancel),
         ),
         leadingWidth: 64,
-        title: Text(_isEditing ? '编辑分类' : '添加分类'),
+        title: Text(_isEditing ? context.l10n.categoryEditTitle : context.l10n.categoryAddTitle),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('保存'),
+            child: Text(context.l10n.save),
           ),
         ],
       ),
@@ -95,12 +94,12 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
                 controller: _nameController,
                 maxLength: 10,
                 decoration: InputDecoration(
-                  labelText: '名称',
-                  hintText: '设置分类名称（一级：$_parentLabel）',
+                  labelText: context.l10n.categoryName,
+                  hintText: context.l10n.categoryNameHint(_parentLabel(context)),
                   border: const OutlineInputBorder(),
                 ),
                 validator: (v) {
-                  if (v == null || v.trim().isEmpty) return '请输入分类名称';
+                  if (v == null || v.trim().isEmpty) return context.l10n.categoryNameRequired;
                   return null;
                 },
               ),
@@ -108,10 +107,10 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
               TextFormField(
                 controller: _iconController,
                 maxLength: 2,
-                decoration: const InputDecoration(
-                  labelText: '图标 Emoji（可选）',
-                  hintText: '例如 🍔、🚗、🎁',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.categoryIconEmoji,
+                  hintText: context.l10n.categoryIconEmojiHint,
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ],
@@ -143,7 +142,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
       if (duplicate) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('该一级分类下已存在同名分类')),
+          SnackBar(content: Text(context.l10n.categoryDuplicateName)),
         );
         setState(() => _saving = false);
         return;
@@ -180,7 +179,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
+        SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

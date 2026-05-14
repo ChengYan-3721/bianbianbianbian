@@ -165,6 +165,7 @@ String? _decodeApiKey(Uint8List? raw) {
 ///   避免 LLM 在不确定时随便编造数字。
 /// - 字段名使用 snake_case（`category_parent_key` / `occurred_at`），与
 ///   design-document §7.1 DDL 列名一致，便于用户/开发者直观理解。
+// i18n-exempt: LLM prompt template, not user-facing UI text
 const String kDefaultAiInputPromptTemplate = '''你是一个中文记账文本解析助手。请分析以下文本，提取记账信息后以严格 JSON 格式回复。
 
 允许字段：

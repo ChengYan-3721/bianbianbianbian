@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../app/app_theme.dart';
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import 'account_balance.dart';
@@ -25,7 +26,7 @@ class AccountListPage extends ConsumerWidget {
     final totalAsync = ref.watch(totalAssetsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('资产')),
+      appBar: AppBar(title: Text(context.l10n.meAssets)),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'account_list_fab',
         onPressed: () async {
@@ -37,14 +38,14 @@ class AccountListPage extends ConsumerWidget {
           }
         },
         icon: const Icon(Icons.add),
-        label: const Text('新建账户'),
+        label: Text(context.l10n.accountNewTitle),
       ),
       body: accountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('加载失败：$e')),
+        error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
         data: (accounts) => balancesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('加载失败：$e')),
+          error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
           data: (balances) {
             final byId = {for (final b in balances) b.accountId: b};
             return ListView(
@@ -97,7 +98,7 @@ class AccountListPage extends ConsumerWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('编辑'),
+              title: Text(context.l10n.edit),
               onTap: () async {
                 Navigator.pop(ctx);
                 final saved = await context.push<bool>(
@@ -112,7 +113,7 @@ class AccountListPage extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('删除', style: TextStyle(color: Colors.red)),
+              title: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(context, ref, account);
@@ -132,21 +133,17 @@ class AccountListPage extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除账户'),
-        content: Text(
-          '确定要删除账户「${account.name}」吗？\n\n'
-          '该账户下的流水将自动挂到"（已删账户）"占位。\n'
-          '删除后可在垃圾桶中保留 30 天。',
-        ),
+        title: Text(context.l10n.delete),
+        content: Text(context.l10n.accountDeleteConfirmMsg(account.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -161,12 +158,12 @@ class AccountListPage extends ConsumerWidget {
       ref.invalidate(totalAssetsProvider);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('「${account.name}」已删除')),
+        SnackBar(content: Text(context.l10n.accountDeleted(account.name))),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败：$e')),
+        SnackBar(content: Text(context.l10n.deleteFailedWithError(e.toString()))),
       );
     }
   }
@@ -184,7 +181,7 @@ class _TotalAssetsCard extends StatelessWidget {
     final theme = Theme.of(context);
     final amountText = totalAsync.when(
       loading: () => '--',
-      error: (e, _) => '加载失败',
+      error: (e, _) => context.l10n.loadFailed,
       data: (v) => '¥${_fmt.format(v)}',
     );
     return Card(
@@ -195,7 +192,7 @@ class _TotalAssetsCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '总资产（当前账本）',
+              context.l10n.accountTotalAssets,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onPrimaryContainer.withValues(
                   alpha: 0.8,
@@ -234,7 +231,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '还没有账户\n点右下角加一个吧 🐰',
+            context.l10n.accountEmptyHint,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),
@@ -267,10 +264,10 @@ class _AccountCard extends StatelessWidget {
     final isNegative = amount < 0;
     final amountColor =
         isNegative ? semantic.danger : theme.colorScheme.onSurface;
-    final typeLabel = _typeLabel(account.type);
-    final notInTotalSuffix = account.includeInTotal ? '' : ' · 不计入总资产';
+    final typeLabel = _typeLabel(context, account.type);
+    final notInTotalSuffix = account.includeInTotal ? '' : context.l10n.accountNotInTotal;
     final creditInfo = account.type == 'credit'
-        ? _creditDayLine(account.billingDay, account.repaymentDay)
+        ? _creditDayLine(context, account.billingDay, account.repaymentDay)
         : null;
 
     return Card(
@@ -329,27 +326,28 @@ class _AccountCard extends StatelessWidget {
 
   /// 信用卡专属副标题文案：根据填写情况组合"账单日 X 号 · 还款日 Y 号"，
   /// 任一字段缺失时仅显示已填字段；两者都缺失返回 null（UI 不渲染整行）。
-  static String? _creditDayLine(int? billingDay, int? repaymentDay) {
+  String? _creditDayLine(BuildContext context, int? billingDay, int? repaymentDay) {
     final parts = <String>[];
-    if (billingDay != null) parts.add('账单日 $billingDay 号');
-    if (repaymentDay != null) parts.add('还款日 $repaymentDay 号');
+    if (billingDay != null) parts.add(context.l10n.accountBillingDayDisplay(billingDay));
+    if (repaymentDay != null) parts.add(context.l10n.accountRepaymentDayDisplay(repaymentDay));
     if (parts.isEmpty) return null;
     return parts.join(' · ');
   }
 
-  static String _typeLabel(String type) {
+  static String _typeLabel(BuildContext context, String type) {
+    final l10n = context.l10n;
     switch (type) {
       case 'cash':
-        return '现金';
+        return l10n.accountTypeCash;
       case 'debit':
-        return '储蓄卡';
+        return l10n.accountTypeDebit;
       case 'credit':
-        return '信用卡';
+        return l10n.accountTypeCredit;
       case 'third_party':
-        return '第三方支付';
+        return l10n.accountTypeThirdParty;
       case 'other':
       default:
-        return '其他';
+        return l10n.accountTypeOther;
     }
   }
 }

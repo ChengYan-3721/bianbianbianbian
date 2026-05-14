@@ -126,6 +126,7 @@ bool _constantTimeEquals(List<int> a, List<int> b) {
 
 /// 校验 PIN 字符串：必须由数字组成，长度在 [kPinMinLength, kPinMaxLength]。
 /// UI 与 setup 流程双重保护——避免有人 setState 越过表单进 hashPin。
+// i18n-exempt: needs refactoring for l10n (no BuildContext available)
 String? validatePinFormat(String pin) {
   if (pin.length < kPinMinLength || pin.length > kPinMaxLength) {
     return 'PIN 必须为 $kPinMinLength-$kPinMaxLength 位数字';

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import 'app_lock_providers.dart';
 import 'pin_credential.dart';
 
@@ -40,15 +41,6 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
     super.dispose();
   }
 
-  String get _title =>
-      widget.mode == PinSetupMode.setup ? '设置应用锁 PIN' : '修改应用锁 PIN';
-
-  String get _subtitle => switch (_stage) {
-        _SetupStage.enter =>
-          '请输入 $kPinMinLength-$kPinMaxLength 位数字 PIN，避免使用生日等易猜组合。',
-        _SetupStage.confirm => '请再次输入相同 PIN 以确认。',
-      };
-
   Future<void> _onContinue() async {
     if (_busy) return;
     setState(() => _errorText = null);
@@ -72,7 +64,7 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
     final pin = _secondCtrl.text;
     if (pin != _firstPin) {
       setState(() {
-        _errorText = '两次输入不一致，请重新设置';
+        _errorText = context.l10n.pinSetupMismatch;
         _stage = _SetupStage.enter;
         _firstCtrl.clear();
         _secondCtrl.clear();
@@ -95,7 +87,7 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorText = '保存失败：$e';
+        _errorText = context.l10n.saveFailedWithError(e.toString());
         _busy = false;
       });
     }
@@ -104,15 +96,21 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
   @override
   Widget build(BuildContext context) {
     final controller = _stage == _SetupStage.enter ? _firstCtrl : _secondCtrl;
+    final title = widget.mode == PinSetupMode.setup
+        ? context.l10n.pinSetupNew
+        : context.l10n.pinSetupChange;
+    final subtitle = _stage == _SetupStage.enter
+        ? context.l10n.pinSetupHint(kPinMinLength, kPinMaxLength)
+        : context.l10n.pinSetupConfirmHint;
     return Scaffold(
-      appBar: AppBar(title: Text(_title)),
+      appBar: AppBar(title: Text(title)),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _subtitle,
+              subtitle,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 24),
@@ -128,7 +126,9 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
                 LengthLimitingTextInputFormatter(kPinMaxLength),
               ],
               decoration: InputDecoration(
-                labelText: _stage == _SetupStage.enter ? '新 PIN' : '确认 PIN',
+                labelText: _stage == _SetupStage.enter
+                    ? context.l10n.pinNewLabel
+                    : context.l10n.pinConfirmLabel,
                 errorText: _errorText,
                 border: const OutlineInputBorder(),
               ),
@@ -138,7 +138,9 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
             FilledButton(
               onPressed: _busy ? null : _onContinue,
               child: Text(
-                _stage == _SetupStage.enter ? '下一步' : '保存',
+                _stage == _SetupStage.enter
+                    ? context.l10n.nextStep
+                    : context.l10n.save,
               ),
             ),
           ],

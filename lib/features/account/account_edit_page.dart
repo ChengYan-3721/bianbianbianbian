@@ -3,21 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/l10n/l10n_ext.dart';
+import '../../core/util/currencies.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import 'account_providers.dart';
 
-/// 账户新建 / 编辑页（Step 7.2 + Step 7.3）。
-///
-/// `accountId` 为 null → 新建模式；非 null → 编辑模式。字段集合按
-/// design-document §5.6 资产账户：名称 / 类型 / 图标 emoji / 初始余额 /
-/// 默认币种 / 是否计入总资产。Step 7.3：当类型为 `credit` 时额外渲染
-/// 账单日 / 还款日两字段（仅展示，1-28 整数校验）；切换到非信用卡时本地
-/// 输入清空，保存时也写入 null，避免“切回信用卡又出现旧值”。
 class AccountEditPage extends ConsumerStatefulWidget {
   const AccountEditPage({super.key, this.accountId});
 
-  /// 编辑模式传入此参数；新建模式留空。
   final String? accountId;
 
   @override
@@ -40,23 +34,18 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
 
   late Future<Account?> _loadFuture;
 
-  static const _typeOptions = <(String, String)>[
-    ('cash', '现金'),
-    ('debit', '储蓄卡'),
-    ('credit', '信用卡'),
-    ('third_party', '第三方支付'),
-    ('other', '其他'),
-  ];
+  static const _typeKeys = ['cash', 'debit', 'credit', 'third_party', 'other'];
 
-  static const _currencyOptions = <(String, String)>[
-    ('CNY', '人民币 (CNY)'),
-    ('USD', '美元 (USD)'),
-    ('EUR', '欧元 (EUR)'),
-    ('JPY', '日元 (JPY)'),
-    ('KRW', '韩元 (KRW)'),
-    ('GBP', '英镑 (GBP)'),
-    ('HKD', '港币 (HKD)'),
-  ];
+  String _typeLabel(BuildContext context, String key) {
+    final l10n = context.l10n;
+    return switch (key) {
+      'cash' => l10n.accountTypeCash,
+      'debit' => l10n.accountTypeDebit,
+      'credit' => l10n.accountTypeCredit,
+      'third_party' => l10n.accountTypeThirdParty,
+      _ => l10n.accountTypeOther,
+    };
+  }
 
   @override
   void initState() {
@@ -97,14 +86,15 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final isEdit = widget.accountId != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isEdit ? '编辑账户' : '新建账户'),
+        title: Text(isEdit ? l10n.accountEditTitle : l10n.accountNewTitle),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('保存'),
+            child: Text(l10n.save),
           ),
         ],
       ),
@@ -115,11 +105,11 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('加载失败：${snapshot.error}'));
+            return Center(child: Text(l10n.loadFailedWithError(snapshot.error.toString())));
           }
           final acc = snapshot.data;
           if (isEdit && acc == null) {
-            return const Center(child: Text('账户不存在'));
+            return Center(child: Text(l10n.accountNotExist));
           }
           if (acc != null) _hydrate(acc);
 
@@ -132,14 +122,14 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                 children: [
                   TextFormField(
                     controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: '账户名称',
-                      hintText: '例如：现金、工商银行卡',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.accountName,
+                      hintText: l10n.accountNameHint,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) {
-                        return '请输入账户名称';
+                        return l10n.accountNameRequired;
                       }
                       return null;
                     },
@@ -147,15 +137,15 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: _type,
-                    decoration: const InputDecoration(
-                      labelText: '账户类型',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.accountType,
+                      border: const OutlineInputBorder(),
                     ),
-                    items: _typeOptions
+                    items: _typeKeys
                         .map(
-                          (e) => DropdownMenuItem(
-                            value: e.$1,
-                            child: Text(e.$2),
+                          (key) => DropdownMenuItem(
+                            value: key,
+                            child: Text(_typeLabel(context, key)),
                           ),
                         )
                         .toList(),
@@ -163,8 +153,6 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                       if (v == null) return;
                       setState(() {
                         _type = v;
-                        // 切到非信用卡时，清掉本地输入，避免"再切回 credit
-                        // 又出现旧值"的视觉残留；保存时同样按当前 type 写入 null。
                         if (v != 'credit') {
                           _billingDayController.clear();
                           _repaymentDayController.clear();
@@ -175,10 +163,10 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _iconController,
-                    decoration: const InputDecoration(
-                      labelText: '图标 Emoji（可选）',
-                      hintText: '例如 💰、💳、🏦',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.accountIconEmoji,
+                      hintText: l10n.accountIconEmojiHint,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -189,20 +177,19 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                       signed: true,
                     ),
                     inputFormatters: [
-                      // 允许负号 + 最多两位小数
                       FilteringTextInputFormatter.allow(
                         RegExp(r'^-?\d*\.?\d{0,2}'),
                       ),
                     ],
-                    decoration: const InputDecoration(
-                      labelText: '初始余额',
-                      hintText: '可为负（信用卡欠款填负值）',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.accountInitialBalance,
+                      hintText: l10n.accountInitialBalanceHint,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
                       if (v == null || v.trim().isEmpty) return null;
                       if (double.tryParse(v.trim()) == null) {
-                        return '请输入合法的数字';
+                        return l10n.accountBalanceInvalid;
                       }
                       return null;
                     },
@@ -210,15 +197,15 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     initialValue: _currency,
-                    decoration: const InputDecoration(
-                      labelText: '默认币种',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.accountDefaultCurrency,
+                      border: const OutlineInputBorder(),
                     ),
-                    items: _currencyOptions
+                    items: kBuiltInCurrencies
                         .map(
-                          (e) => DropdownMenuItem(
-                            value: e.$1,
-                            child: Text(e.$2),
+                          (c) => DropdownMenuItem(
+                            value: c.code,
+                            child: Text(c.localizedName(l10n)),
                           ),
                         )
                         .toList(),
@@ -240,10 +227,10 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(2),
                             ],
-                            decoration: const InputDecoration(
-                              labelText: '账单日（1-28）',
-                              hintText: '例如 5',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l10n.accountBillingDay,
+                              hintText: l10n.accountBillingDayHint,
+                              border: const OutlineInputBorder(),
                             ),
                             validator: _validateDay,
                           ),
@@ -258,10 +245,10 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                               FilteringTextInputFormatter.digitsOnly,
                               LengthLimitingTextInputFormatter(2),
                             ],
-                            decoration: const InputDecoration(
-                              labelText: '还款日（1-28）',
-                              hintText: '例如 22',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l10n.accountRepaymentDay,
+                              hintText: l10n.accountRepaymentDayHint,
+                              border: const OutlineInputBorder(),
                             ),
                             validator: _validateDay,
                           ),
@@ -271,8 +258,8 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                   ],
                   const SizedBox(height: 8),
                   SwitchListTile(
-                    title: const Text('计入总资产'),
-                    subtitle: const Text('关闭后该账户余额不参与总资产合计'),
+                    title: Text(l10n.accountIncludeInTotal),
+                    subtitle: Text(l10n.accountIncludeInTotalHint),
                     value: _includeInTotal,
                     onChanged: (v) => setState(() => _includeInTotal = v),
                   ),
@@ -285,13 +272,12 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
     );
   }
 
-  /// 1-28 整数校验：空字符串视为"未填"放行（信用卡也允许暂时不填）。
   String? _validateDay(String? v) {
     final raw = v?.trim() ?? '';
     if (raw.isEmpty) return null;
     final n = int.tryParse(raw);
     if (n == null || n < 1 || n > 28) {
-      return '请输入 1-28 的整数';
+      return context.l10n.accountDayRangeError;
     }
     return null;
   }
@@ -313,7 +299,6 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
       final iconValue = iconText.isEmpty ? null : iconText;
       final name = _nameController.text.trim();
 
-      // 仅信用卡保存账单日 / 还款日；其它类型一律落 null。
       final billingDay = _type == 'credit'
           ? int.tryParse(_billingDayController.text.trim())
           : null;
@@ -327,13 +312,10 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
         if (existing == null) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('账户不存在，无法保存')),
+            SnackBar(content: Text(context.l10n.accountCannotSave)),
           );
           return;
         }
-        // 信用卡字段需要支持"清空"语义——copyWith 不能把 T? 清回 null。
-        // 改为裸构造保留所有其它字段，同时 billingDay / repaymentDay 显式传 null
-        // 时就是清空（非 credit 类型同样清空，这里也走裸构造路径）。
         entity = Account(
           id: existing.id,
           name: name,
@@ -361,7 +343,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
           billingDay: billingDay,
           repaymentDay: repaymentDay,
           updatedAt: now,
-          deviceId: '', // repo 会覆写
+          deviceId: '',
         );
       }
 
@@ -374,7 +356,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
+        SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

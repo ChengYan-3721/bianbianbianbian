@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
@@ -45,11 +46,11 @@ class _FavoriteReorderPageState extends ConsumerState<FavoriteReorderPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('排序'),
+        title: Text(context.l10n.categoryFavoriteReorderTitle),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
-            child: const Text('保存'),
+            child: Text(context.l10n.save),
           ),
         ],
       ),
@@ -60,12 +61,12 @@ class _FavoriteReorderPageState extends ConsumerState<FavoriteReorderPage> {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('加载失败：${snapshot.error}'));
+            return Center(child: Text(context.l10n.loadFailedWithError(snapshot.error.toString())));
           }
           _items ??= [...?snapshot.data];
           final items = _items!;
           if (items.isEmpty) {
-            return const Center(child: Text('还没有收藏分类'));
+            return Center(child: Text(context.l10n.categoryNoFavorite));
           }
           return ReorderableListView.builder(
             buildDefaultDragHandles: false,
@@ -118,7 +119,7 @@ class _FavoriteReorderPageState extends ConsumerState<FavoriteReorderPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：$e')),
+        SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _saving = false);

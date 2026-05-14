@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/l10n_ext.dart';
+
 /// 导入 / 导出 hub 页（Step 13.1 + 13.3）。
 ///
 /// 当前承载两个入口：
@@ -15,20 +17,20 @@ class ImportExportPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('导入 / 导出')),
+      appBar: AppBar(title: Text(context.l10n.importExportTitle)),
       body: ListView(
         children: [
           ListTile(
             leading: const Icon(Icons.upload_outlined),
-            title: const Text('导出'),
-            subtitle: const Text('CSV / JSON / 加密 .bbbak'),
+            title: Text(context.l10n.importExportExport),
+            subtitle: Text(context.l10n.importExportExportSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/import-export/export'),
           ),
           ListTile(
             leading: const Icon(Icons.download_outlined),
-            title: const Text('导入'),
-            subtitle: const Text('支持本 App 导出的 JSON / CSV / .bbbak'),
+            title: Text(context.l10n.importExportImport),
+            subtitle: Text(context.l10n.importExportImportSubtitle),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/import-export/import'),
           ),

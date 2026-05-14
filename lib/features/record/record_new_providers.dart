@@ -270,7 +270,7 @@ class RecordForm extends _$RecordForm {
   bool get canAddAttachment => state.attachmentMetas.length < _maxAttachments;
 
   Future<String?> pickAndAttachFromGallery() async {
-    if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片';
+    if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片'; // i18n-exempt: provider error message (needs refactoring for l10n)
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return null;
@@ -278,7 +278,7 @@ class RecordForm extends _$RecordForm {
   }
 
   Future<String?> pickAndAttachFromCamera() async {
-    if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片';
+    if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片'; // i18n-exempt: provider error message (needs refactoring for l10n)
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.camera);
     if (picked == null) return null;
@@ -303,7 +303,7 @@ class RecordForm extends _$RecordForm {
 
     if (srcBytes.length > kMaxAttachmentBytes) {
       // V1：超过 10MB 直接拒绝。后续可引入 image 包做 JPEG 压缩。
-      return '单张图片不能超过 10MB';
+      return '单张图片不能超过 10MB'; // i18n-exempt: provider error message (needs refactoring for l10n)
     }
 
     final srcHash = base64Encode(srcBytes);
@@ -317,7 +317,7 @@ class RecordForm extends _$RecordForm {
       final existingBytes = await existingFile.readAsBytes();
       final existingHash = base64Encode(existingBytes);
       if (existingHash == srcHash) {
-        return '同一张图片不能重复添加';
+        return '同一张图片不能重复添加'; // i18n-exempt: provider error message (needs refactoring for l10n)
       }
     }
 

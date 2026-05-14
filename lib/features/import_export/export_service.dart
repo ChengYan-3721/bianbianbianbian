@@ -100,6 +100,7 @@ const _csvBom = '\uFEFF';
 /// **始终带账本列**——即使单账本导出也带：① 让 Step 13.3 round-trip 能识别归属；
 /// ② 用户合并多份备份到同一文件时不至于丢失账本边界。这与 `stats_export_service`
 /// 的 8 列 CSV 故意不同——那个是 ledger-scoped 的统计视图导出，本文件是跨账本备份。
+// i18n-exempt: CSV column header for V1 Chinese format
 const List<String> _backupCsvHeader = <String>[
   '账本',
   '日期',
@@ -112,6 +113,7 @@ const List<String> _backupCsvHeader = <String>[
   '备注',
 ];
 
+// i18n-exempt: CSV format keyword
 String _typeLabel(String type) {
   switch (type) {
     case 'income':

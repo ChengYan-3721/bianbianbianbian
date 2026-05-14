@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../data/repository/providers.dart';
@@ -28,20 +29,25 @@ class RecordNewPage extends ConsumerStatefulWidget {
   final bool isTransfer;
   final bool startAtKeyboard;
 
-  static const parentTabs = [
-    ('☆', 'favorite'),
-    ('收', 'income'),
-    ('食', 'food'),
-    ('购', 'shopping'),
-    ('行', 'transport'),
-    ('育', 'education'),
-    ('乐', 'entertainment'),
-    ('情', 'social'),
-    ('住', 'housing'),
-    ('医', 'medical'),
-    ('投', 'investment'),
-    ('其', 'other'),
-  ];
+  /// 一级分类 tab 列表：短标签 + key。因短标签依赖 l10n，需在 build 时从
+  /// [BuildContext] 取值。'☆' 固定不变（收藏 tab 不走 l10n）。
+  static List<(String label, String key)> parentTabsFor(BuildContext context) {
+    final l = context.l10n;
+    return [
+      ('☆', 'favorite'),
+      (l.quickCatIncome, 'income'),
+      (l.quickCatFood, 'food'),
+      (l.quickCatShopping, 'shopping'),
+      (l.quickCatTransport, 'transport'),
+      (l.quickCatEducation, 'education'),
+      (l.quickCatEntertainment, 'entertainment'),
+      (l.quickCatSocial, 'social'),
+      (l.quickCatHousing, 'housing'),
+      (l.quickCatMedical, 'medical'),
+      (l.quickCatInvestment, 'investment'),
+      (l.quickCatOther, 'other'),
+    ];
+  }
 
   @override
   ConsumerState<RecordNewPage> createState() => _RecordNewPageState();
@@ -83,8 +89,9 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
       resizeToAvoidBottomInset: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: Text(widget.isTransfer ? '转账' : '记一笔'),
+        title: Text(widget.isTransfer ? context.l10n.recordNewTransferTitle : context.l10n.recordNewTitle),
         leading: IconButton(
+          tooltip: context.l10n.a11yRecordNewBack,
           icon: const Icon(Icons.keyboard_arrow_down),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
@@ -154,19 +161,20 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                   return;
                 }
                 if (!form.canSave) return;
+                final l10n = context.l10n;
                 if (widget.isTransfer &&
                     form.accountId != null &&
                     form.toAccountId != null &&
                     form.accountId == form.toAccountId) {
-                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('转出账户和转入账户不能相同')),
+                    SnackBar(content: Text(l10n.recordNewTransferSameError)),
                   );
                   return;
                 }
+                final goRouter = GoRouter.of(context);
                 final ok = await notifier.save();
                 if (!mounted) return;
-                if (ok) context.go('/');
+                if (ok) goRouter.go('/');
               },
               canAction: notifier.hasOperator ? notifier.canAction : form.canSave,
             ),
@@ -210,7 +218,7 @@ class _CategoryStage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '选择分类',
+            context.l10n.recordNewSelectCategory,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -250,6 +258,7 @@ class _KeyboardStage extends ConsumerWidget {
       builder: (context, snapshot) {
         final categories = snapshot.data ?? const <Category>[];
         final selectedCategoryName = _resolveCategoryName(
+          context,
           categories,
           form.categoryId,
         );
@@ -284,12 +293,12 @@ class _KeyboardStage extends ConsumerWidget {
     );
   }
 
-  String _resolveCategoryName(List<Category> categories, String? categoryId) {
-    if (categoryId == null) return '切换';
+  String _resolveCategoryName(BuildContext context, List<Category> categories, String? categoryId) {
+    if (categoryId == null) return context.l10n.recordNewSwitchTo;
     for (final c in categories) {
       if (c.id == categoryId) return c.name;
     }
-    return '切换';
+    return context.l10n.recordNewSwitchTo;
   }
 }
 
@@ -310,10 +319,10 @@ class _ParentTabs extends StatelessWidget {
       ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: RecordNewPage.parentTabs.length,
+        itemCount: RecordNewPage.parentTabsFor(context).length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final (label, key) = RecordNewPage.parentTabs[index];
+          final (label, key) = RecordNewPage.parentTabsFor(context)[index];
           final selected = selectedKey == key;
           return InkWell(
             borderRadius: BorderRadius.circular(12),
@@ -412,7 +421,7 @@ class _CategoryGrid extends ConsumerWidget {
     // Step 15.3：当前图标包——分类网格图标解析。
     final iconPack = ref.watch(currentIconPackProvider);
     if (repo == null) {
-      return const Center(child: Text('加载分类…'));
+      return Center(child: Text(context.l10n.recordNewLoadingCategories));
     }
 
     return FutureBuilder<List<Category>>(
@@ -465,7 +474,7 @@ class _CategoryGrid extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isFavoriteTab ? '添加' : '编辑',
+                        isFavoriteTab ? context.l10n.recordNewAdd : context.l10n.recordNewEditCategory,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12),
@@ -555,12 +564,12 @@ class _MetaToolbar extends StatelessWidget {
                     ? _WalletPillButton(
                         selectedId: form.accountId,
                         onSelected: onAccountSelected,
-                        emptyText: '转出账户',
+                        emptyText: context.l10n.recordNewFromAccount,
                         icon: Icons.call_made,
                         excludeId: form.toAccountId,
                       )
                     : _MetaPillButton(
-                        label: '分类',
+                        label: context.l10n.recordNewCategory,
                         value: selectedCategoryName,
                         icon: Icons.breakfast_dining,
                         onTap: onBackToCategory,
@@ -571,7 +580,7 @@ class _MetaToolbar extends StatelessWidget {
               child: Align(
                 alignment: Alignment.center,
                 child: _MetaPillButton(
-                  label: '日期',
+                  label: context.l10n.recordNewDate,
                   value: timeLabel,
                   icon: Icons.schedule,
                   onTap: () async {
@@ -583,8 +592,8 @@ class _MetaToolbar extends StatelessWidget {
                       firstDate: DateTime(2020),
                       lastDate: now,
                       locale: const Locale('zh', 'CN'),
-                      cancelText: '取消',
-                      confirmText: '确定',
+                      cancelText: context.l10n.cancel,
+                      confirmText: context.l10n.confirm,
                       builder: (context, child) {
                         final scheme = Theme.of(context).colorScheme;
                         final base = Theme.of(context);
@@ -615,8 +624,8 @@ class _MetaToolbar extends StatelessWidget {
                     final t = await showTimePicker(
                       context: context,
                       initialTime: TimeOfDay.fromDateTime(time),
-                      cancelText: '取消',
-                      confirmText: '确定',
+                      cancelText: context.l10n.cancel,
+                      confirmText: context.l10n.confirm,
                       builder: (context, child) {
                         final scheme = Theme.of(context).colorScheme;
                         return Theme(
@@ -653,13 +662,14 @@ class _MetaToolbar extends StatelessWidget {
                     ? _WalletPillButton(
                         selectedId: form.toAccountId,
                         onSelected: onToAccountSelected,
-                        emptyText: '转入账户',
+                        emptyText: context.l10n.recordNewToAccount,
                         icon: Icons.call_received,
                         excludeId: form.accountId,
                       )
                     : _WalletPillButton(
                         selectedId: form.accountId,
                         onSelected: onAccountSelected,
+                        emptyText: context.l10n.recordNewWallet,
                       ),
               ),
             ),
@@ -730,7 +740,7 @@ class _WalletPillButton extends ConsumerWidget {
   const _WalletPillButton({
     required this.selectedId,
     required this.onSelected,
-    this.emptyText = '钱包',
+    required this.emptyText,
     this.icon = Icons.account_balance_wallet_outlined,
     this.excludeId,
   });
@@ -826,7 +836,7 @@ class _NoteSheet extends ConsumerWidget {
             ),
           ),
           Text(
-            '备注',
+            context.l10n.recordNewNote,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -838,8 +848,8 @@ class _NoteSheet extends ConsumerWidget {
             autofocus: true,
             minLines: 3,
             maxLines: 6,
-            decoration: const InputDecoration(
-              hintText: '输入备注',
+            decoration: InputDecoration(
+              hintText: context.l10n.recordNewInputNote,
               alignLabelWithHint: true,
               border: OutlineInputBorder(),
             ),
@@ -897,7 +907,8 @@ class _NoteAttachments extends ConsumerWidget {
                     child: IconButton(
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      tooltip: '删除图片',
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                      tooltip: context.l10n.recordNewDeleteImage,
                       onPressed: () => notifier.removeAttachmentAt(index),
                       icon: const Icon(Icons.cancel, size: 18),
                     ),
@@ -925,12 +936,12 @@ class _NoteActions extends ConsumerWidget {
     return Row(
       children: [
         IconButton(
-          tooltip: '相册',
+          tooltip: context.l10n.recordNewGallery,
           onPressed: () => _pickAndShowError(context, () => notifier.pickAndAttachFromGallery()),
           icon: const Icon(Icons.photo_library_outlined),
         ),
         IconButton(
-          tooltip: '拍照',
+          tooltip: context.l10n.recordNewCamera,
           onPressed: () => _pickAndShowError(context, () => notifier.pickAndAttachFromCamera()),
           icon: const Icon(Icons.camera_alt_outlined),
         ),
@@ -945,7 +956,7 @@ class _NoteActions extends ConsumerWidget {
             textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(context.l10n.cancel),
         ),
         TextButton(
           style: TextButton.styleFrom(
@@ -953,7 +964,7 @@ class _NoteActions extends ConsumerWidget {
             textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
           onPressed: onConfirm,
-          child: const Text('确定'),
+          child: Text(context.l10n.confirm),
         ),
       ],
     );
@@ -968,7 +979,7 @@ class _NoteActions extends ConsumerWidget {
       showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('提示'),
+          title: Text(context.l10n.tip),
           content: Text(msg),
           actions: [
             TextButton(
@@ -978,7 +989,7 @@ class _NoteActions extends ConsumerWidget {
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
+              child: Text(context.l10n.know),
             ),
           ],
         ),
@@ -1002,7 +1013,7 @@ class _TransferEntryStage extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '转账设置',
+            context.l10n.recordNewTransferSettings,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -1010,7 +1021,7 @@ class _TransferEntryStage extends ConsumerWidget {
           const SizedBox(height: 10),
           _MetaToolbar(
             form: form,
-            selectedCategoryName: '转账',
+            selectedCategoryName: context.l10n.txTypeTransfer,
             onBackToCategory: _noop,
             onTimeChanged: ref.read(recordFormProvider.notifier).setOccurredAt,
             onAccountSelected: ref.read(recordFormProvider.notifier).setAccount,
@@ -1025,7 +1036,7 @@ class _TransferEntryStage extends ConsumerWidget {
             child: FilledButton.icon(
               onPressed: canEnter ? onEnter : null,
               icon: const Icon(Icons.swap_horiz),
-              label: const Text('输入金额'),
+              label: Text(context.l10n.recordNewInputAmount),
             ),
           ),
         ],
@@ -1042,9 +1053,9 @@ class _NotePillButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final value = note.isEmpty ? '备注' : note;
+    final value = note.isEmpty ? context.l10n.recordNewNote : note;
     return _MetaPillButton(
-      label: '备注',
+      label: context.l10n.recordNewNote,
       value: value,
       icon: Icons.edit_note_outlined,
       onTap: () async {
@@ -1099,7 +1110,7 @@ class _CurrencyPicker extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '选择币种',
+                  context.l10n.recordNewSelectCurrency,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),

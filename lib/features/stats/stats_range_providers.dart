@@ -159,7 +159,7 @@ List<StatsPieSlice> aggregatePieSlices(
       final cat = categoryMap[entry.key];
       slices.add(StatsPieSlice(
         categoryId: entry.key,
-        categoryName: cat?.name ?? '未分类',
+        categoryName: cat?.name ?? '未分类', // i18n-exempt: fallback label, localized in UI
         categoryColor:
             _parseHexColor(cat?.color) ?? _piePalette[i % _piePalette.length],
         amount: entry.value,
@@ -173,7 +173,7 @@ List<StatsPieSlice> aggregatePieSlices(
   if (othersAmount > 0) {
     slices.add(StatsPieSlice(
       categoryId: null,
-      categoryName: '其他',
+      categoryName: '其他', // i18n-exempt: fallback label, localized in UI
       categoryColor: const Color(0xFFBDBDBD),
       amount: othersAmount,
       percentage: total > 0 ? othersAmount / total * 100 : 0,
@@ -490,7 +490,7 @@ List<StatsRankItem> aggregateRankItems(
 
     items.add(StatsRankItem(
       categoryId: catId,
-      categoryName: cat?.name ?? '未分类',
+      categoryName: cat?.name ?? '未分类', // i18n-exempt: provider without BuildContext
       categoryColor:
           _parseHexColor(cat?.color) ?? _piePalette[items.length % _piePalette.length],
       amount: entry.value.amount,

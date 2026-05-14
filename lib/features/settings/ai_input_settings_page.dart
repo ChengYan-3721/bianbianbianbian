@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/l10n/l10n_ext.dart';
+
 import 'ai_input_settings_providers.dart';
 
 /// Step 9.3：AI 增强配置页（"我的 → 快速输入 · AI 增强"）。
@@ -75,10 +77,10 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
         ),
       );
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text('AI 增强配置已保存')));
+      messenger.showSnackBar(SnackBar(content: Text(context.l10n.aiInputSaved)));
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('保存失败：$e')));
+      messenger.showSnackBar(SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -89,11 +91,11 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
     final asyncSettings = ref.watch(aiInputSettingsNotifierProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('快速输入 · AI 增强')),
+      appBar: AppBar(title: Text(context.l10n.aiInputTitle)),
       body: asyncSettings.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) =>
-            Center(child: Text('读取配置失败：$e', textAlign: TextAlign.center)),
+            Center(child: Text(context.l10n.readFailedWithError(e.toString()), textAlign: TextAlign.center)),
         data: (settings) {
           _hydrate(settings);
           return _buildBody(context);
@@ -114,10 +116,9 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                   key: const Key('ai_input_enabled_switch'),
                   value: _enabled,
                   onChanged: (v) => setState(() => _enabled = v),
-                  title: const Text('启用 AI 增强'),
-                  subtitle: const Text(
-                    '开启后，本地解析置信度低时确认卡片会出现 "✨ AI 增强" 按钮，'
-                    '调用你配置的 LLM 兜底解析。',
+                  title: Text(context.l10n.aiInputEnable),
+                  subtitle: Text(
+                    context.l10n.aiInputEnableHint,
                   ),
                   secondary: const Icon(Icons.auto_awesome),
                 ),
@@ -125,7 +126,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                   child: Text(
-                    'API 配置',
+                    context.l10n.aiInputApiConfig,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -134,8 +135,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: Text(
-                    '使用 OpenAI 兼容协议（chat/completions）。endpoint 完整 URL，例如：'
-                    'https://api.openai.com/v1/chat/completions',
+                    context.l10n.aiInputApiHint,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -169,7 +169,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                         icon: Icon(_showApiKey
                             ? Icons.visibility_off
                             : Icons.visibility),
-                        tooltip: _showApiKey ? '隐藏' : '显示',
+                        tooltip: _showApiKey ? context.l10n.aiInputHidden : context.l10n.aiInputShown,
                         onPressed: () =>
                             setState(() => _showApiKey = !_showApiKey),
                       ),
@@ -193,7 +193,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   child: Text(
-                    'Prompt 模板（可选）',
+                    context.l10n.aiInputPromptTemplate,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -202,8 +202,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: Text(
-                    '占位符 {NOW} / {TEXT} / {CATEGORIES} 会在调用时替换。'
-                    '留空使用内置默认模板。',
+                    context.l10n.aiInputPromptPlaceholderHint('{NOW}', '{TEXT}', '{CATEGORIES}'),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -215,7 +214,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                     minLines: 6,
                     maxLines: 12,
                     decoration: InputDecoration(
-                      labelText: 'Prompt 模板',
+                      labelText: context.l10n.aiInputPromptTemplateLabel,
                       hintText: kDefaultAiInputPromptTemplate,
                       border: const OutlineInputBorder(),
                       alignLabelWithHint: true,
@@ -240,7 +239,7 @@ class _AiInputSettingsPageState extends ConsumerState<AiInputSettingsPage> {
                           height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('保存'),
+                      : Text(context.l10n.save),
                 ),
               ),
             ),

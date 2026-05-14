@@ -19,24 +19,24 @@ import 'stats_range_providers.dart';
 const _csvBom = '\uFEFF';
 
 const _csvHeader = <String>[
-  '日期',
-  '类型',
-  '金额',
-  '币种',
-  '分类',
-  '账户',
-  '转入账户',
-  '备注',
+  '日期', // i18n-exempt: CSV column header
+  '类型', // i18n-exempt: CSV column header
+  '金额', // i18n-exempt: CSV column header
+  '币种', // i18n-exempt: CSV column header
+  '分类', // i18n-exempt: CSV column header
+  '账户', // i18n-exempt: CSV column header
+  '转入账户', // i18n-exempt: CSV column header
+  '备注', // i18n-exempt: CSV column header
 ];
 
 String _typeLabel(String type) {
   switch (type) {
     case 'income':
-      return '收入';
+      return '收入'; // i18n-exempt: CSV column header
     case 'expense':
-      return '支出';
+      return '支出'; // i18n-exempt: CSV column header
     case 'transfer':
-      return '转账';
+      return '转账'; // i18n-exempt: CSV column header
     default:
       return type;
   }

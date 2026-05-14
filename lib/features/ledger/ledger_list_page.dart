@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/ledger.dart';
 import 'ledger_providers.dart';
@@ -26,7 +27,7 @@ class LedgerListPage extends ConsumerWidget {
     return Scaffold(
       body: repoAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('加载失败：$e')),
+        error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
         data: (_) => _LedgerListContent(
           currentId: currentId,
           txCounts: txCounts,
@@ -36,7 +37,7 @@ class LedgerListPage extends ConsumerWidget {
         heroTag: 'ledger_list_fab',
         onPressed: () => _onNewLedger(context),
         icon: const Icon(Icons.add),
-        label: const Text('新建账本'),
+        label: Text(context.l10n.ledgerNew),
       ),
     );
   }
@@ -62,13 +63,13 @@ class _LedgerListContent extends ConsumerWidget {
 
     return groupsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('加载失败：$e')),
+      error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
       data: (data) {
         final active = data.active;
         final archived = data.archived;
 
         if (active.isEmpty && archived.isEmpty) {
-          return const Center(child: Text('还没有账本，去创建一个吧 🐰'));
+          return Center(child: Text(context.l10n.ledgerEmptyHint));
         }
 
         return ListView(
@@ -84,7 +85,7 @@ class _LedgerListContent extends ConsumerWidget {
             if (archived.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                '已归档',
+                context.l10n.ledgerArchived,
                 style: theme.textTheme.titleSmall?.copyWith(
                   color: theme.colorScheme.onSurface.withAlpha(128),
                 ),
@@ -121,7 +122,7 @@ class _LedgerListContent extends ConsumerWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('编辑'),
+              title: Text(context.l10n.edit),
               onTap: () {
                 Navigator.pop(ctx);
                 context.push('/ledger/edit?id=${ledger.id}');
@@ -131,7 +132,7 @@ class _LedgerListContent extends ConsumerWidget {
               leading: Icon(ledger.archived
                   ? Icons.unarchive_outlined
                   : Icons.archive_outlined),
-              title: Text(ledger.archived ? '取消归档' : '归档'),
+              title: Text(ledger.archived ? context.l10n.ledgerUnarchive : context.l10n.ledgerArchive),
               onTap: () {
                 Navigator.pop(ctx);
                 _toggleArchive(ref, ledger);
@@ -140,7 +141,7 @@ class _LedgerListContent extends ConsumerWidget {
             if (!isCurrent)
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text('删除', style: TextStyle(color: Colors.red)),
+                title: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
                 onTap: () {
                   Navigator.pop(ctx);
                   _confirmDelete(context, ref, ledger);
@@ -161,7 +162,7 @@ class _LedgerListContent extends ConsumerWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.unarchive_outlined),
-              title: const Text('取消归档'),
+              title: Text(context.l10n.ledgerUnarchive),
               onTap: () {
                 Navigator.pop(ctx);
                 _toggleArchive(ref, ledger);
@@ -169,7 +170,7 @@ class _LedgerListContent extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('删除', style: TextStyle(color: Colors.red)),
+              title: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(context, ref, ledger);
@@ -200,19 +201,17 @@ class _LedgerListContent extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认删除'),
-        content: Text('确定要删除账本「${ledger.name}」吗？\n\n'
-            '该账本下的所有流水和预算也将被删除。\n'
-            '删除后可在垃圾桶中保留 30 天。'),
+        title: Text(context.l10n.ledgerConfirmDelete),
+        content: Text(context.l10n.ledgerDeleteConfirmMsg(ledger.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
+            child: Text(context.l10n.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('删除'),
+            child: Text(context.l10n.delete),
           ),
         ],
       ),
@@ -231,12 +230,12 @@ class _LedgerListContent extends ConsumerWidget {
       }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('「${ledger.name}」已删除')),
+        SnackBar(content: Text(context.l10n.ledgerDeleted(ledger.name))),
       );
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除失败: $e')),
+        SnackBar(content: Text(context.l10n.deleteFailedWithError(e.toString()))),
       );
     }
   }
@@ -319,7 +318,7 @@ class _LedgerCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '$txCount 笔流水  ·  ${ledger.defaultCurrency}',
+                        context.l10n.ledgerTxCountCurrency(txCount, ledger.defaultCurrency),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: textColor.withAlpha(dimmed ? 100 : 160),
                         ),
