@@ -226,7 +226,10 @@ void main() {
             statsHeatmapCellsProvider.overrideWith((ref) async => const []),
             activeBudgetsProvider.overrideWith((ref) async => const []),
           ],
-          child: const BianBianApp(enableSyncLifecycle: false),
+          child: const BianBianApp(
+            enableSyncLifecycle: false,
+            enablePrivacyConsentGate: false,
+          ),
         ),
       );
       await tester.pumpAndSettle();

@@ -191,7 +191,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();
@@ -207,7 +210,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();
@@ -227,7 +233,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();
@@ -247,7 +256,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: _standardOverrides(),
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();
@@ -312,7 +324,10 @@ void main() {
           statsHeatmapCellsProvider.overrideWith((ref) async => []),
           activeBudgetsProvider.overrideWith((ref) async => []),
         ],
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();
@@ -371,7 +386,10 @@ void main() {
           statsHeatmapCellsProvider.overrideWith((ref) async => []),
           activeBudgetsProvider.overrideWith((ref) async => []),
         ],
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();
@@ -451,7 +469,10 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const BianBianApp(enableSyncLifecycle: false),
+        child: const BianBianApp(
+              enableSyncLifecycle: false,
+              enablePrivacyConsentGate: false,
+            ),
       ),
     );
     await tester.pumpAndSettle();

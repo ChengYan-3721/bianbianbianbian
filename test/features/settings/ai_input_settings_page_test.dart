@@ -1,5 +1,6 @@
 import 'package:bianbianbianbian/features/settings/ai_input_settings_page.dart';
 import 'package:bianbianbianbian/features/settings/ai_input_settings_providers.dart';
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,7 +32,12 @@ Widget _wrap(_RecordingNotifier notifier) {
     overrides: [
       aiInputSettingsNotifierProvider.overrideWith(() => notifier),
     ],
-    child: const MaterialApp(home: AiInputSettingsPage()),
+    child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh'),
+      home: const AiInputSettingsPage(),
+    ),
   );
 }
 

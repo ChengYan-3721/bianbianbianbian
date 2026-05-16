@@ -1,5 +1,6 @@
 import 'package:bianbianbianbian/data/local/app_database.dart';
 import 'package:bianbianbianbian/data/repository/budget_repository.dart';
+import 'package:bianbianbianbian/data/repository/exceptions.dart';
 import 'package:bianbianbianbian/domain/entity/budget.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';

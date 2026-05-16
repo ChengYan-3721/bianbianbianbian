@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:bianbianbianbian/data/repository/account_repository.dart';
 import 'package:bianbianbianbian/data/repository/category_repository.dart';
@@ -14,6 +15,7 @@ import 'package:bianbianbianbian/domain/entity/transaction_entry.dart';
 import 'package:bianbianbianbian/features/record/record_new_page.dart';
 import 'package:bianbianbianbian/features/record/record_providers.dart';
 import 'package:bianbianbianbian/features/settings/settings_providers.dart';
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
 
 // ---- 假仓库 ----
 
@@ -296,10 +298,22 @@ List<Override> _saveOverrides({
 }
 
 Widget _wrapApp(Widget child, {List<Override>? overrides}) {
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => child,
+      ),
+    ],
+  );
   return ProviderScope(
     overrides: overrides ?? _formOverrides(),
-    child: MaterialApp(
-      home: child,
+    child: MaterialApp.router(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh'),
+      routerConfig: router,
     ),
   );
 }

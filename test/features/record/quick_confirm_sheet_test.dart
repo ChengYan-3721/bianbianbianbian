@@ -18,6 +18,7 @@ import 'package:bianbianbianbian/features/record/quick_confirm_sheet.dart';
 import 'package:bianbianbianbian/features/record/quick_input_providers.dart';
 import 'package:bianbianbianbian/features/settings/ai_input_settings_providers.dart';
 import 'package:bianbianbianbian/features/settings/settings_providers.dart';
+import 'package:bianbianbianbian/l10n/app_localizations.dart';
 
 // ---- 假仓库 / 假 provider ----
 
@@ -243,6 +244,9 @@ Widget _cardHarness(
       aiService: aiService,
     ),
     child: MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh'),
       home: Scaffold(
         body: QuickConfirmCard(parsed: parsed),
       ),
@@ -401,6 +405,9 @@ void main() {
           ProviderScope(
             overrides: _overrides(parser: parser, txRepo: txRepo),
             child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              locale: const Locale('zh'),
               home: Builder(
                 builder: (ctx) => Scaffold(
                   body: Center(
