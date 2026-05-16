@@ -8,13 +8,16 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/local/app_database.dart';
 import 'csv/csv_lexer.dart';
+import 'csv/csv_format_detector.dart';
+import 'csv/csv_text_decoder.dart';
+import 'csv/bill_parser.dart' show BillParser;
+import 'csv/parsers/generic_parser.dart' show GenericBillParser;
 import '../../data/repository/entity_mappers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/transaction_entry.dart';
 import 'bbbak_codec.dart';
 import 'export_service.dart';
-import 'templates/third_party_template.dart';
 
 /// 导入文件类型——按文件后缀分流（用户选文件后立刻识别决定 UI 文案）。
 ///
@@ -274,11 +277,15 @@ class BackupImportService {
   ///
   /// [bbbakIterations] 仅 `.bbbak` 路径用于 PBKDF2——生产保持默认；测试可降到
   /// 1 让套件保持秒级（语义已由 `bianbian_crypto_test.dart` KAT 套件保证）。
+  ///
+  /// [overrideColumnMapping] 仅 `csv` 路径用于高级映射——不为空时跳过格式检测，
+  /// 直接用 [GenericBillParser] 按该映射解析(Step 13.5)。
   Future<BackupImportPreview> preview({
     required Uint8List bytes,
     required BackupImportFileType fileType,
     String? password,
     int? bbbakIterations,
+    Map<String, int>? overrideColumnMapping,
   }) async {
     switch (fileType) {
       case BackupImportFileType.bbbak:
@@ -297,7 +304,7 @@ class BackupImportService {
       case BackupImportFileType.json:
         return _previewJsonBytes(bytes, BackupImportFileType.json);
       case BackupImportFileType.csv:
-        return _previewCsvBytes(bytes);
+        return _previewCsvBytes(bytes, overrideColumnMapping: overrideColumnMapping);
     }
   }
 
@@ -562,51 +569,68 @@ class BackupImportService {
   // ── CSV 路径 ───────────────────────────────────────────────────────────
 
     // i18n-exempt: needs refactoring for l10n
-    BackupImportPreview _previewCsvBytes(Uint8List bytes) {
-    final String text;
-    try {
-      text = utf8.decode(bytes);
-    } on FormatException catch (e) {
-      throw BackupImportException('CSV 文件不是合法 UTF-8：${e.message}');
-    }
+    BackupImportPreview _previewCsvBytes(
+    Uint8List bytes, {
+    Map<String, int>? overrideColumnMapping,
+  }) {
+    final text = decodeCsvBytes(bytes);
     final stripped = stripUtf8Bom(text);
     final rows = parseCsvRows(stripped);
     if (rows.isEmpty) {
       throw const BackupImportException('CSV 文件为空');
     }
 
-    // 优先尝试三方模板（钱迹 / 微信 / 支付宝）——header 签名命中即接管解析。
-    // 未命中再走本 App 9 列 CSV。
-    final thirdPartyMatch = detectThirdPartyTemplate(rows);
-    if (thirdPartyMatch != null) {
-      return _previewFromThirdPartyMatch(thirdPartyMatch);
-    }
+    BillParser effectiveParser;
+    Map<String, int> effectiveMapping;
+    int headerRowIdx;
 
-    final header = rows.first;
-    if (!_isExpectedHeader(header)) {
-      throw BackupImportException(
-        'CSV 列头不识别（期望 9 列：${_kBackupCsvHeader.join(",")}；'
-        '实际：${header.join(",")}）',
-      );
-    }
-    final csvRows = <BackupImportCsvRow>[];
-    for (var i = 1; i < rows.length; i++) {
-      final row = rows[i];
-      if (row.length == 1 && row[0].isEmpty) continue; // 空行跳过
-      if (row.length != header.length) {
+    if (overrideColumnMapping != null) {
+      effectiveParser = const GenericBillParser();
+      effectiveMapping = overrideColumnMapping;
+      headerRowIdx = 0;
+    } else {
+      final detected = detectBillParser(rows);
+      if (detected == null) {
+        throw const BackupImportException('无法识别的 CSV 格式');
+      }
+      effectiveParser = detected;
+      headerRowIdx = detected.findHeaderRow(rows);
+      if (headerRowIdx < 0) {
         throw BackupImportException(
-          '第 ${i + 1} 行字段数不匹配（期望 ${header.length}，实际 ${row.length}）',
-        );
+            '${detected.displayName}:未找到表头行');
       }
+      effectiveMapping = detected.mapColumns(rows[headerRowIdx]);
+    }
+    final header = rows[headerRowIdx];
+
+    final csvRows = <BackupImportCsvRow>[];
+    for (var i = headerRowIdx + 1; i < rows.length; i++) {
+      final row = rows[i];
+      if (row.length == 1 && row[0].isEmpty) continue;
       try {
-        csvRows.add(_parseCsvRow(row));
-      } on FormatException catch (e) {
-        throw BackupImportException('第 ${i + 1} 行解析失败：${e.message}');
+        final parsed = effectiveParser.parseRow(row, effectiveMapping);
+        if (parsed != null) csvRows.add(parsed);
+      } catch (_) {
+        // 单行解析异常忽略,继续下一行
       }
     }
 
-    // 预览前 20 行 + 唯一账本标签计数
-    final ledgerLabels = <String>{for (final r in csvRows) r.ledgerLabel};
+    // 统计 CSV 内 unique 分类 / 账户 name(上限值,Apply 时再减去复用)
+    final uniqueCategoryNames = <String>{
+      for (final r in csvRows)
+        if (r.categoryName != null && r.categoryName!.isNotEmpty)
+          r.categoryName!,
+    };
+    final uniqueAccountNames = <String>{
+      for (final r in csvRows) ...[
+        if (r.accountName != null && r.accountName!.isNotEmpty)
+          r.accountName!,
+        if (r.toAccountName != null && r.toAccountName!.isNotEmpty)
+          r.toAccountName!,
+      ],
+    };
+
+    // 准备 20 行 sample
     final amountFmt = NumberFormat('0.00');
     final dateFmt = DateFormat('yyyy-MM-dd HH:mm');
     final samples = <BackupImportPreviewRow>[];
@@ -623,49 +647,24 @@ class BackupImportService {
         note: r.note,
       ));
     }
+
+    final ledgerLabels = <String>{for (final r in csvRows) r.ledgerLabel};
     return BackupImportPreview(
       fileType: BackupImportFileType.csv,
       ledgerCount: ledgerLabels.length,
       transactionCount: csvRows.length,
       sampleRows: List.unmodifiable(samples),
       csvRows: List.unmodifiable(csvRows),
-    );
-  }
-
-  /// 三方模板路径——把 [ThirdPartyMatch.rows] 包成 [BackupImportPreview]。
-  ///
-  /// 字段语义：
-  /// - `ledgerCount` 强制为 1：模板把所有流水写到 `displayName` 这个虚拟账本名，
-  ///   apply 阶段会 unresolved → fallback 到当前账本。
-  /// - `parserId` / `parserDisplayName`：三方模板的 id / displayName(Step 13.5)。
-  BackupImportPreview _previewFromThirdPartyMatch(ThirdPartyMatch match) {
-    final csvRows = match.rows;
-    final amountFmt = NumberFormat('0.00');
-    final dateFmt = DateFormat('yyyy-MM-dd HH:mm');
-    final samples = <BackupImportPreviewRow>[];
-    for (final r in csvRows) {
-      if (samples.length < 20) {
-        samples.add(BackupImportPreviewRow(
-          ledgerLabel: r.ledgerLabel,
-          date: dateFmt.format(r.occurredAt),
-          type: _typeLabel(r.type),
-          amount: amountFmt.format(r.amount),
-          currency: r.currency,
-          category: r.categoryName,
-          account: r.accountName,
-          toAccount: r.toAccountName,
-          note: r.note,
-        ));
-      }
-    }
-    return BackupImportPreview(
-      fileType: BackupImportFileType.csv,
-      ledgerCount: 1,
-      transactionCount: csvRows.length,
-      sampleRows: List.unmodifiable(samples),
-      csvRows: List.unmodifiable(csvRows),
-      parserId: match.template.id,
-      parserDisplayName: match.template.displayName,
+      parserId: overrideColumnMapping != null
+          ? 'custom'
+          : effectiveParser.id,
+      parserDisplayName: overrideColumnMapping != null
+          ? '自定义映射'
+          : effectiveParser.displayName,
+      newCategoryCount: uniqueCategoryNames.length,
+      newAccountCount: uniqueAccountNames.length,
+      columnMapping: Map.unmodifiable(effectiveMapping),
+      csvHeader: List.unmodifiable(header),
     );
   }
 
@@ -743,6 +742,7 @@ class BackupImportService {
   // ── 静态 helper（@visibleForTesting 的对外工具）──────────────────────────
 
   // i18n-exempt: needs refactoring for l10n
+  // ignore: unused_element
   bool _isExpectedHeader(List<String> header) {
     if (header.length != _kBackupCsvHeader.length) return false;
     for (var i = 0; i < header.length; i++) {
@@ -752,6 +752,7 @@ class BackupImportService {
   }
 
   // i18n-exempt: format parsing error message
+  // ignore: unused_element
   BackupImportCsvRow _parseCsvRow(List<String> row) {
     // 9 列：账本,日期,类型,金额,币种,分类,账户,转入账户,备注
     final ledgerLabel = row[0].trim();
