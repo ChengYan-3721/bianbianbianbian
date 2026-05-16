@@ -170,7 +170,7 @@ class _AppHeader extends StatelessWidget {
               color: Theme.of(context).colorScheme.primaryContainer,
             ),
             child: const Center(
-              child: Text('🐰', style: TextStyle(fontSize: 36)),
+              child: Text('🐱', style: TextStyle(fontSize: 36)),
             ),
           ),
           const SizedBox(height: 12),

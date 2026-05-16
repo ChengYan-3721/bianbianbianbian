@@ -37,7 +37,7 @@ class ReminderService {
   // i18n-exempt: notification content (no BuildContext available)
   static const _messages = [
     '今天还没记一笔呢 🐻',
-    '记账时间到啦 🐰',
+    '记账时间到啦 🐱',
     '快来记一笔吧，别忘啦 🧸',
     '你的账本想你了 🐷',
     '今天花了多少？记一下吧 🍯',

@@ -78,7 +78,7 @@ void main() {
     test('roundtrip:encrypt → decrypt 回到原明文（含非 ASCII）', () async {
       final key = _countingBytes(32);
       final plaintext = Uint8List.fromList(
-        utf8.encode('你好，边边！Hello 🐰'),
+        utf8.encode('你好，边边！Hello 🐱'),
       );
 
       final packed = await BianbianCrypto.encrypt(plaintext, key);

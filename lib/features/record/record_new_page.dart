@@ -70,8 +70,18 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
     _showKeyboard = widget.startAtKeyboard || widget.isTransfer;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(recordFormProvider.notifier).reset();
-      ref.read(recordFormProvider.notifier).initDefaultCurrency();
+      final notifier = ref.read(recordFormProvider.notifier);
+      // editingEntryId 非空表示调用方已通过 preloadFromEntry 预填了 state
+      // （编辑/复制路径）——再 reset 会把 preload 数据擦掉。FAB / 转账按钮 /
+      // 小组件深链这些"新建"入口的 editingEntryId 都是 null，正常初始化。
+      final hasPreload = ref.read(recordFormProvider).editingEntryId != null;
+      if (!hasPreload) {
+        notifier.reset();
+        notifier.initDefaultCurrency();
+        if (widget.isTransfer) {
+          notifier.setTransferMode(true);
+        }
+      }
     });
   }
 
@@ -171,10 +181,29 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                   );
                   return;
                 }
+                final navigator = Navigator.of(context);
+                final canPop = navigator.canPop();
                 final goRouter = GoRouter.of(context);
+                final modalRoute = ModalRoute.of(context);
                 final ok = await notifier.save();
                 if (!mounted) return;
-                if (ok) goRouter.go('/');
+                if (!ok) return;
+                // canPop=true：当前在 modal sheet 内（FAB / 转账 / 编辑 / 复制
+                // 入口），关闭 sheet 即可。canPop=false：当前是路由栈顶
+                // （小组件深链 go('/record/new') 替换栈），跳回首页。
+                if (canPop) {
+                  navigator.maybePop();
+                } else {
+                  goRouter.go('/');
+                }
+                // 等过渡动画完成、widget 彻底 dispose 后再 reset，避免在
+                // 关闭过程中触发 rebuild 让用户看到金额闪回 0。sheet 场景下
+                // ModalRoute.popped 是 pop 动画结束的精确信号；深链场景
+                // go_router 没有同等 Future，用 300ms 兜底 PageRoute 切换。
+                // notifier 由 keepAlive provider 持有，dispose 后仍可调用。
+                await modalRoute?.popped;
+                await Future.delayed(const Duration(milliseconds: 300));
+                notifier.reset();
               },
               canAction: notifier.hasOperator ? notifier.canAction : form.canSave,
             ),

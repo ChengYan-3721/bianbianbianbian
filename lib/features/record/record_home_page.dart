@@ -102,34 +102,53 @@ class RecordHomePage extends ConsumerWidget {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'record_home_fab',
-        tooltip: context.l10n.a11yRecordHomeNewFab,
-        onPressed: () {
-          ref.read(recordFormProvider.notifier).reset();
-          showModalBottomSheet<void>(
-            context: context,
-            isScrollControlled: true,
-            backgroundColor: Colors.transparent,
-            builder: (sheetContext) => FractionallySizedBox(
-              heightFactor: 0.58,
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Material(
-                  color: Theme.of(sheetContext).colorScheme.surface,
-                  child: const _RecordBottomSheetPage(),
+      floatingActionButtonLocation: _BottomStickFabLocation.instance,
+      // 自定义 D 形按钮：宽 80 / 高 44，顶部半径取 40（= 宽/2）让上沿
+      // 形成完整半圆；下沿是 4px 直边 + 平底，配合 _BottomStickFabLocation
+      // 直接焊在安全区底边。`FloatingActionButton` 内部强制 56×56 约束，
+      // 外层 SizedBox 无效，所以这里直接用 Material + InkWell 自绘。
+      floatingActionButton: Tooltip(
+        message: context.l10n.a11yRecordHomeNewFab,
+        child: SizedBox(
+          width: 80,
+          height: 42,
+          child: Material(
+            color: Theme.of(context).colorScheme.primary,
+            elevation: 6,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(40)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () {
+                ref.read(recordFormProvider.notifier).reset();
+                showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (sheetContext) => FractionallySizedBox(
+                    heightFactor: 0.58,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(20)),
+                      child: Material(
+                        color: Theme.of(sheetContext).colorScheme.surface,
+                        child: const _RecordBottomSheetPage(),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              child: Center(
+                child: Icon(
+                  Icons.add,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  size: 42,
                 ),
               ),
             ),
-          );
-        },
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          ),
         ),
-        child: const Icon(Icons.add, size: 32),
       ),
     );
   }
@@ -1275,4 +1294,33 @@ class _IdleReminderCardState extends ConsumerState<_IdleReminderCard> {
       ),
     );
   }
+}
+
+// ---- FAB 贴底定位 ----
+
+/// 把 FAB 平底直接贴到安全区底边（home indicator / 手势导航条之上），
+/// 没有默认 `centerFloat` 的 16px 留白——配合 D 形 shape 让 FAB 看起来
+/// 「焊」在屏幕底部。
+///
+/// 这里只扣 `minViewPadding.bottom`（避开 home indicator），不扣
+/// `minInsets.bottom`（键盘）——键盘弹起时 FAB 留在原位被键盘盖住即可，
+/// 不希望它跟着浮到屏幕中部。
+class _BottomStickFabLocation extends FloatingActionButtonLocation {
+  const _BottomStickFabLocation();
+
+  static const instance = _BottomStickFabLocation();
+
+  @override
+  Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
+    final double fabX = (scaffoldGeometry.scaffoldSize.width -
+            scaffoldGeometry.floatingActionButtonSize.width) /
+        2.0;
+    final double fabY = scaffoldGeometry.scaffoldSize.height -
+        scaffoldGeometry.minViewPadding.bottom -
+        scaffoldGeometry.floatingActionButtonSize.height;
+    return Offset(fabX, fabY);
+  }
+
+  @override
+  String toString() => '_BottomStickFabLocation';
 }

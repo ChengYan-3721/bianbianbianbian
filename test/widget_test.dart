@@ -280,7 +280,7 @@ void main() {
     expect(find.text('识别'), findsOneWidget);
 
     // 无流水时显示空状态引导
-    expect(find.text('开始记第一笔吧 🐰'), findsOneWidget);
+    expect(find.text('开始记第一笔吧 🐱'), findsOneWidget);
 
     // FAB 存在
     expect(find.byType(FloatingActionButton), findsOneWidget);

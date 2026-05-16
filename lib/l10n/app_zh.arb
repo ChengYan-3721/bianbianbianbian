@@ -230,9 +230,9 @@
       }
     }
   },
-  "recordQuickHint": "写点什么，我来帮你记 🐰",
+  "recordQuickHint": "写点什么，我来帮你记 🐱",
   "recordRecognize": "识别",
-  "recordStartFirst": "开始记第一笔吧 🐰",
+  "recordStartFirst": "开始记第一笔吧 🐱",
   "recordSynced": "已同步",
   "recordNetworkUnavailable": "网络不可用",
   "recordSyncFailedMsg": "同步失败：{message}",
@@ -382,10 +382,10 @@
     }
   },
   "statsNoIncomeExpenseData": "暂无收支数据",
-  "statsTryAnotherRange": "换个区间试试吧 🐰",
+  "statsTryAnotherRange": "换个区间试试吧 🐱",
   "statsExpenseCategoryPie": "支出分类占比",
   "statsNoExpenseData": "暂无支出数据",
-  "statsAddExpenseHint": "记一笔支出就能看到啦 🐰",
+  "statsAddExpenseHint": "记一笔支出就能看到啦 🐱",
   "statsViewBudget": "查看预算",
   "statsRanking": "收支排行榜",
   "statsRankLoadFailed": "排行榜加载失败：{error}",
@@ -397,7 +397,7 @@
     }
   },
   "statsNoRankData": "暂无排行数据",
-  "statsAddMoreHint": "记几笔就能看到排名啦 🐰",
+  "statsAddMoreHint": "记几笔就能看到排名啦 🐱",
   "statsHeatmapTitle": "支出日历热力图",
   "statsHeatmapLegend": "颜色越深表示当日支出越高",
   "statsHeatmapLoadFailed": "热力图加载失败：{error}",
@@ -409,7 +409,7 @@
     }
   },
   "statsNoHeatmapData": "暂无支出热力数据",
-  "statsHeatmapHint": "记一笔支出就能点亮日历啦 🐰",
+  "statsHeatmapHint": "记一笔支出就能点亮日历啦 🐱",
   "statsExportPng": "导出 PNG（当前视图截图）",
   "statsExportCsv": "导出 CSV（当前区间明细）",
   "statsExportFailed": "导出失败：{error}",
@@ -487,7 +487,7 @@
     }
   },
   "ledgerNew": "新建账本",
-  "ledgerEmptyHint": "还没有账本，去创建一个吧 🐰",
+  "ledgerEmptyHint": "还没有账本，去创建一个吧 🐱",
   "ledgerUnarchive": "取消归档",
   "ledgerArchive": "归档",
   "ledgerConfirmDelete": "确认删除",
@@ -531,7 +531,7 @@
   "budgetCarryOverHint": "未花完金额累加到下个周期",
   "budgetDeleteConfirm": "删除预算",
   "budgetDeleteHint": "删除后将无法恢复，确定继续？",
-  "budgetEmptyHint": "还没有预算\n点右下角加一个吧 🐰",
+  "budgetEmptyHint": "还没有预算\n点右下角加一个吧 🐱",
   "budgetTotal": "总预算",
   "budgetDeletedCategory": "（已删除分类）",
   "budgetCarryOverLabel": " · 结转",
@@ -607,7 +607,7 @@
     }
   },
   "accountTotalAssets": "总资产（当前账本）",
-  "accountEmptyHint": "还没有账户\n点右下角加一个吧 🐰",
+  "accountEmptyHint": "还没有账户\n点右下角加一个吧 🐱",
   "accountNotInTotal": " · 不计入总资产",
   "accountBillingDayDisplay": "账单日 {day} 号",
   "@accountBillingDayDisplay": {
@@ -1580,7 +1580,7 @@
   "meAbout": "关于",
   "about": "关于",
   "aboutAppName": "边边记账",
-  "aboutAppTagline": "温暖陪伴你每一笔记录 🐰",
+  "aboutAppTagline": "温暖陪伴你每一笔记录 🐱",
   "aboutAppVersion": "版本",
   "aboutAppVersionValue": "{version}（构建 {build}）",
   "@aboutAppVersionValue": {

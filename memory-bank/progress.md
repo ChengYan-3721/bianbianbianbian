@@ -421,8 +421,8 @@
   1. **`_TopBar`**（StatelessWidget）：`currentLedgerIdProvider` + `ledgerRepositoryProvider` → `FutureBuilder<Ledger?>` → 显示 `coverEmoji` + `name` + 下拉箭头（占位）+ 搜索图标（占位）。
   2. **`_MonthBar`**（StatelessWidget）：`ref.watch(recordMonthProvider)` → 左右箭头 + `{year}年{month}月` 标签。`previous()` / `next()` 通过 `ref.read(recordMonthProvider.notifier)` 驱动。
   3. **`_DataCards`**（StatelessWidget）：`summary.valueOrNull` → 3 个 `_CardChip`（收入/支出/结余），分别用抹茶绿 `#A8D8B9` / 苹果红 `#E76F51` / 奶油黄上色，空数据显示 `¥--.--`。
-  4. **`_QuickInputBar`**（StatelessWidget）：单行 `TextField`（hint "写点什么，我来帮你记 🐰"）+ `✨ 识别` 按钮，均为占位（onSubmitted / onPressed 留空，Step 3.2 接线）。
-  5. **`_TransactionList`**（StatelessWidget）：`summary.when()` 三态——loading `CircularProgressIndicator`、error 文本、data 则判断 `dailyGroups.isEmpty` → 空状态引导（咖啡图标 + "开始记第一笔吧 🐰"）或 `ListView.builder` 按天分组，每组日期 header（"4月25日 周六"）+ 流水 tile（`_TxTile`：类型 emoji + 标签 + 金额 ±¥0.00，当前 `noteEncrypted` 非空显示「[已加密]」否则显示 `tags`）。
+  4. **`_QuickInputBar`**（StatelessWidget）：单行 `TextField`（hint "写点什么，我来帮你记 🐱"）+ `✨ 识别` 按钮，均为占位（onSubmitted / onPressed 留空，Step 3.2 接线）。
+  5. **`_TransactionList`**（StatelessWidget）：`summary.when()` 三态——loading `CircularProgressIndicator`、error 文本、data 则判断 `dailyGroups.isEmpty` → 空状态引导（咖啡图标 + "开始记第一笔吧 🐱"）或 `ListView.builder` 按天分组，每组日期 header（"4月25日 周六"）+ 流水 tile（`_TxTile`：类型 emoji + 标签 + 金额 ±¥0.00，当前 `noteEncrypted` 非空显示「[已加密]」否则显示 `tags`）。
   - **FAB**：`FloatingActionButton`（圆角 20、theme primary 色、`+` 图标），onPressed 空（Step 3.2 接入路由 `/record/new`）。
 - `lib/features/record/.gitkeep`：删除（目录已有真实文件）。
 - `lib/app/home_shell.dart`：index=0 body 从 `_RecordTabBody` 改为 `const RecordHomePage()`。移除 `_RecordTabBody` 类定义和对应的 `currentLedgerIdProvider` / `ledgerRepositoryProvider` / `ledger.dart` import（改为 import `record_home_page.dart`）。
@@ -430,7 +430,7 @@
   1. **HomeShell renders all 4 bottom-nav tabs**（不变）。
   2. **BottomNavigationBar background is cream yellow**（不变）。
   3. **Tapping "统计" tab switches body text**（不变）。
-  4. **记账 Tab 无数据时显示空状态引导**（新增 Step 3.1）：覆盖 `recordMonthSummaryProvider` 为空汇总，验证顶栏账本名 📒、月份 "2026年4月"、三卡片标签、快捷输入条、"开始记第一笔吧 🐰" 空状态、FAB 存在。
+  4. **记账 Tab 无数据时显示空状态引导**（新增 Step 3.1）：覆盖 `recordMonthSummaryProvider` 为空汇总，验证顶栏账本名 📒、月份 "2026年4月"、三卡片标签、快捷输入条、"开始记第一笔吧 🐱" 空状态、FAB 存在。
   5. **有 mock 数据时流水列表按天分组**（新增 Step 3.1）：注入 2 条流水（4/25 支出 ¥30 + 4/24 收入 ¥100），验证日期 header "4月25日"/"4月24日"、金额显示 "-¥30.00"/"+¥100.00"、数据卡片 ¥100.00 / ¥30.00 / ¥70.00。
   - 新增 `_FakeTransactionRepository`（实现 `TransactionRepository`，`listActiveByLedger` 返回固定列表）。
   - `_standardOverrides()` 增加 `transactionRepositoryProvider.overrideWith` + `recordMonthSummaryProvider.overrideWith`。
@@ -885,7 +885,7 @@
 - `lib/features/stats/stats_page.dart`：
   - `StatsPage` 的 `Column` children 中新增 `SizedBox(height: 360, child: _RankingCard())` 卡片。
   - 新增 `_RankingCard`（ConsumerWidget）：订阅 `statsRankItemsProvider`，loading/error/data 三态渲染；空数据显示 `_RankingEmptyState`。
-  - 新增 `_RankingEmptyState`：空状态占位（"暂无排行数据" + "记几笔就能看到排名啦 🐰"）。
+  - 新增 `_RankingEmptyState`：空状态占位（"暂无排行数据" + "记几笔就能看到排名啦 🐱"）。
   - 新增 `_RankingList`（StatelessWidget）：`ListView.separated` 渲染排行榜。每行含排名序号（前 3 名用分类颜色高亮）、分类颜色圆点、分类名称、占比进度条（`FractionallySizedBox` 按 `amount/maxAmount` 比例填充分类颜色）、金额（收入绿色 `+` 前缀、支出红色 `-` 前缀）。
 - `test/features/stats/stats_range_providers_test.dart`：
   - 新增 8 条 `aggregateRankItems` 测试：空数据、排除 transfer、同分类聚合、百分比计算、排除超时、使用分类颜色、回退调色板、混合收支正确分组与百分比。
@@ -1000,7 +1000,7 @@
 - `lib/features/budget/budget_list_page.dart`（新建）：
   - `BudgetListPage`（ConsumerWidget）：`Scaffold` + `FloatingActionButton.extended('新建预算')` → `context.push('/budget/edit')`，返回 `true` 时 `invalidate(activeBudgetsProvider)`。
   - `_BudgetCard`：左 emoji（来自分类 icon，总预算用 💰 兜底）+ 标题（分类名 / "总预算"）+ 副标题（"月预算 · 结转"）+ 金额（`NumberFormat('#,##0.00')`）+ 删除 `IconButton`。点击卡片进入编辑；删除走 `showDialog<bool>` 二次确认 + `repo.softDeleteById` + Snackbar。
-  - `_EmptyState`：💰 图标 + "还没有预算" + "点右下角加一个吧 🐰"。
+  - `_EmptyState`：💰 图标 + "还没有预算" + "点右下角加一个吧 🐱"。
 - `lib/features/budget/budget_edit_page.dart`（新建）：
   - `BudgetEditPage`（ConsumerStatefulWidget，`budgetId` 可选 → 新建 / 编辑双模式）。
   - `_loadBudget()` + `FutureBuilder`：编辑模式异步从 `repo.listActiveByLedger` 提取（不存在抛 `StateError`）。`_hydrate(...)` 守 `_initialized` flag 仅首次写入字段，避免重渲染覆盖用户编辑。
@@ -3482,7 +3482,7 @@ Bootstrap：
 - `flutter test` → 696/696 通过（682 前 + 14 新增 theme/theme_page 测试）。
 - 用户本机 `flutter run` 待手工验证：
   1. "我的"Tab 顶部"外观"入口（调色盘图标），点击进入 `/settings/theme`，标题显示"外观"。
-  2. 主题区 4 张卡片渲染，"🐰 奶油兔"默认选中带 ✓。
+  2. 主题区 4 张卡片渲染，"🐱 奶油兔"默认选中带 ✓。
   3. 字号区 SegmentedButton 显示"小 / 标准 / 大"，"标准"默认选中。
   4. 点击"大" → 全 App 文字即时放大 15%（首页标题/流水金额/按钮文字均变大）。
   5. 点击"小" → 全 App 文字缩小 15%。
@@ -3609,7 +3609,7 @@ Schema / 数据层：
   - `cancelReminder()`：调 `plugin.cancel(id: _notificationId)`。
   - `showTestNotification()`：调 `plugin.show(...)` 立即展示一条测试通知。
   - 通知详情使用 `AndroidNotificationDetails(channelId, channelName, ...)` + `DarwinNotificationDetails(presentAlert: true, presentSound: true)`，嵌套在 `NotificationDetails(android: ..., iOS: ...)` 中。
-  - 可爱风文案池 7 条（🐻🐰🧸🐷🍯🐱🐼）。
+  - 可爱风文案池 7 条（🐻🐱🧸🐷🍯🐱🐼）。
 
 Provider：
 - `lib/features/settings/settings_providers.dart`（修改）：
@@ -3761,7 +3761,7 @@ Flutter 侧——数据计算与持久化：
   - 新增 import `dart:async` + `widget_data_service.dart`。
 
 Android 原生小组件：
-- `android/app/src/main/res/layout/bianbian_widget.xml`（新建）：奶油兔风格布局（背景 `#FFF9EF`、文字可可棕 `#8A5A3B`、支出金额苹果红 `#E76F51`），4 个 TextView：ledgerName / todayLabel+todayExpense / balanceLabel+monthlyBalance / hint "点击记一笔 🐰"。根 RelativeLayout 的 `id=widget_root`。
+- `android/app/src/main/res/layout/bianbian_widget.xml`（新建）：奶油兔风格布局（背景 `#FFF9EF`、文字可可棕 `#8A5A3B`、支出金额苹果红 `#E76F51`），4 个 TextView：ledgerName / todayLabel+todayExpense / balanceLabel+monthlyBalance / hint "点击记一笔 🐱"。根 RelativeLayout 的 `id=widget_root`。
 - `android/app/src/main/res/xml/bianbian_widget_info.xml`（新建）：4×1 格子小部件（`minWidth=250dp`, `minHeight=40dp`），`updatePeriodMillis=0`（Flutter 主动 push，不走系统轮询），可水平+垂直缩放。
 - `android/app/src/main/res/values/strings.xml`（新建）：`widget_description` 字符串资源。
 - `android/app/src/main/kotlin/.../BianBianWidgetProvider.kt`（新建）：继承 `es.antonborri.home_widget.HomeWidgetProvider`。`onUpdate` 读 `HomeWidgetPreferences` SharedPreferences → 填 RemoteViews → 结余为负时苹果红。点击 PendingIntent 打开 `MainActivity` + 携带 `bianbian://app/record/new` URI。
@@ -3972,7 +3972,7 @@ Semantics label（图像类）：
 
 "我的 → 关于"链路：
 - `lib/features/compliance/about_page.dart`（新建）：`AboutPage` ConsumerWidget。
-  - 顶部 `_AppHeader`：72pt 圆形容器（primaryContainer 色）+ 兔团子 emoji 🐰 + 应用名 + tagline。
+  - 顶部 `_AppHeader`：72pt 圆形容器（primaryContainer 色）+ 猫脸 emoji 🐱 + 应用名 + tagline。
   - ListView 项：
     1. 版本号——`FutureBuilder<PackageInfo>` + `PackageInfo.fromPlatform()`；测试环境 plugin 未 bind 时取 null，UI 兜底 "—"。Trailing 文字按 ARB 模板 `aboutAppVersionValue` 渲染（如 "1.0.0（构建 1）"）。
     2. 隐私政策 → `context.push('/about/privacy')`。

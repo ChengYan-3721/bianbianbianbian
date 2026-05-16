@@ -76,7 +76,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_alignParentEnd="true"
-        android:text="点击记一笔 🐰"
+        android:text="点击记一笔 🐱"
         android:textColor="#8A5A3B"
         android:textSize="10sp"
         android:alpha="0.5" />

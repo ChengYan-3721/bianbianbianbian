@@ -871,7 +871,7 @@ abstract class AppLocalizations {
   /// No description provided for @recordQuickHint.
   ///
   /// In zh, this message translates to:
-  /// **'写点什么，我来帮你记 🐰'**
+  /// **'写点什么，我来帮你记 🐱'**
   String get recordQuickHint;
 
   /// No description provided for @recordRecognize.
@@ -883,7 +883,7 @@ abstract class AppLocalizations {
   /// No description provided for @recordStartFirst.
   ///
   /// In zh, this message translates to:
-  /// **'开始记第一笔吧 🐰'**
+  /// **'开始记第一笔吧 🐱'**
   String get recordStartFirst;
 
   /// No description provided for @recordSynced.
@@ -1405,7 +1405,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsTryAnotherRange.
   ///
   /// In zh, this message translates to:
-  /// **'换个区间试试吧 🐰'**
+  /// **'换个区间试试吧 🐱'**
   String get statsTryAnotherRange;
 
   /// No description provided for @statsExpenseCategoryPie.
@@ -1423,7 +1423,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsAddExpenseHint.
   ///
   /// In zh, this message translates to:
-  /// **'记一笔支出就能看到啦 🐰'**
+  /// **'记一笔支出就能看到啦 🐱'**
   String get statsAddExpenseHint;
 
   /// No description provided for @statsViewBudget.
@@ -1453,7 +1453,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsAddMoreHint.
   ///
   /// In zh, this message translates to:
-  /// **'记几笔就能看到排名啦 🐰'**
+  /// **'记几笔就能看到排名啦 🐱'**
   String get statsAddMoreHint;
 
   /// No description provided for @statsHeatmapTitle.
@@ -1483,7 +1483,7 @@ abstract class AppLocalizations {
   /// No description provided for @statsHeatmapHint.
   ///
   /// In zh, this message translates to:
-  /// **'记一笔支出就能点亮日历啦 🐰'**
+  /// **'记一笔支出就能点亮日历啦 🐱'**
   String get statsHeatmapHint;
 
   /// No description provided for @statsExportPng.
@@ -1705,7 +1705,7 @@ abstract class AppLocalizations {
   /// No description provided for @ledgerEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'还没有账本，去创建一个吧 🐰'**
+  /// **'还没有账本，去创建一个吧 🐱'**
   String get ledgerEmptyHint;
 
   /// No description provided for @ledgerUnarchive.
@@ -1825,7 +1825,7 @@ abstract class AppLocalizations {
   /// No description provided for @budgetEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'还没有预算\n点右下角加一个吧 🐰'**
+  /// **'还没有预算\n点右下角加一个吧 🐱'**
   String get budgetEmptyHint;
 
   /// No description provided for @budgetTotal.
@@ -2053,7 +2053,7 @@ abstract class AppLocalizations {
   /// No description provided for @accountEmptyHint.
   ///
   /// In zh, this message translates to:
-  /// **'还没有账户\n点右下角加一个吧 🐰'**
+  /// **'还没有账户\n点右下角加一个吧 🐱'**
   String get accountEmptyHint;
 
   /// No description provided for @accountNotInTotal.
@@ -4355,7 +4355,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutAppTagline.
   ///
   /// In zh, this message translates to:
-  /// **'温暖陪伴你每一笔记录 🐰'**
+  /// **'温暖陪伴你每一笔记录 🐱'**
   String get aboutAppTagline;
 
   /// No description provided for @aboutAppVersion.

@@ -424,13 +424,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get recordQuickHint => '写点什么，我来帮你记 🐰';
+  String get recordQuickHint => '写点什么，我来帮你记 🐱';
 
   @override
   String get recordRecognize => '识别';
 
   @override
-  String get recordStartFirst => '开始记第一笔吧 🐰';
+  String get recordStartFirst => '开始记第一笔吧 🐱';
 
   @override
   String get recordSynced => '已同步';
@@ -709,7 +709,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsNoIncomeExpenseData => '暂无收支数据';
 
   @override
-  String get statsTryAnotherRange => '换个区间试试吧 🐰';
+  String get statsTryAnotherRange => '换个区间试试吧 🐱';
 
   @override
   String get statsExpenseCategoryPie => '支出分类占比';
@@ -718,7 +718,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsNoExpenseData => '暂无支出数据';
 
   @override
-  String get statsAddExpenseHint => '记一笔支出就能看到啦 🐰';
+  String get statsAddExpenseHint => '记一笔支出就能看到啦 🐱';
 
   @override
   String get statsViewBudget => '查看预算';
@@ -735,7 +735,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsNoRankData => '暂无排行数据';
 
   @override
-  String get statsAddMoreHint => '记几笔就能看到排名啦 🐰';
+  String get statsAddMoreHint => '记几笔就能看到排名啦 🐱';
 
   @override
   String get statsHeatmapTitle => '支出日历热力图';
@@ -752,7 +752,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statsNoHeatmapData => '暂无支出热力数据';
 
   @override
-  String get statsHeatmapHint => '记一笔支出就能点亮日历啦 🐰';
+  String get statsHeatmapHint => '记一笔支出就能点亮日历啦 🐱';
 
   @override
   String get statsExportPng => '导出 PNG（当前视图截图）';
@@ -873,7 +873,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ledgerNew => '新建账本';
 
   @override
-  String get ledgerEmptyHint => '还没有账本，去创建一个吧 🐰';
+  String get ledgerEmptyHint => '还没有账本，去创建一个吧 🐱';
 
   @override
   String get ledgerUnarchive => '取消归档';
@@ -939,7 +939,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get budgetDeleteHint => '删除后将无法恢复，确定继续？';
 
   @override
-  String get budgetEmptyHint => '还没有预算\n点右下角加一个吧 🐰';
+  String get budgetEmptyHint => '还没有预算\n点右下角加一个吧 🐱';
 
   @override
   String get budgetTotal => '总预算';
@@ -1063,7 +1063,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountTotalAssets => '总资产（当前账本）';
 
   @override
-  String get accountEmptyHint => '还没有账户\n点右下角加一个吧 🐰';
+  String get accountEmptyHint => '还没有账户\n点右下角加一个吧 🐱';
 
   @override
   String get accountNotInTotal => ' · 不计入总资产';
@@ -2390,7 +2390,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutAppName => '边边记账';
 
   @override
-  String get aboutAppTagline => '温暖陪伴你每一笔记录 🐰';
+  String get aboutAppTagline => '温暖陪伴你每一笔记录 🐱';
 
   @override
   String get aboutAppVersion => '版本';

@@ -180,7 +180,7 @@ bianbianbianbian/
 │        ├─ policy_body.dart                 PrivacyPolicyBody / TermsOfServiceBody 共享渲染组件（_Section 内部小组件 · 同时被 dialog 与详情页消费保证文本不漂移）
 │        ├─ privacy_policy_page.dart         "我的 → 关于 → 隐私政策"详情页（AppBar + PrivacyPolicyBody）
 │        ├─ terms_of_service_page.dart       "我的 → 关于 → 用户协议"详情页（AppBar + TermsOfServiceBody）
-│        └─ about_page.dart                  "我的 → 关于"页（_AppHeader 兔团子 emoji + 应用名/Tagline + 版本 ListTile via package_info_plus + 隐私政策/用户协议/开源许可（showLicensePage）入口 + 红色"撤回同意"二次确认 → revoke + SystemNavigator.pop）
+│        └─ about_page.dart                  "我的 → 关于"页（_AppHeader 猫脸 emoji + 应用名/Tagline + 版本 ListTile via package_info_plus + 隐私政策/用户协议/开源许可（showLicensePage）入口 + 红色"撤回同意"二次确认 → revoke + SystemNavigator.pop）
 ├─ android/app/build.gradle.kts Android 构建脚本（core library desugaring + minSdk 23）
 │  android/app/src/main/AndroidManifest.xml  Step 16.1 通知权限+receiver；Step 16.3 小组件 Provider receiver + bianbian 深链 intent-filter
 │  android/app/src/main/res/layout/bianbian_widget.xml  Step 16.3 桌面小组件布局（奶油兔风格）
@@ -413,8 +413,8 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
     - `Scaffold` + `FloatingActionButton.extended('新建预算')` → `context.push('/budget/edit')`，返回 `true` 时 `invalidate(activeBudgetsProvider)` 刷新。
     - 内嵌 `_BudgetCard`（Step 6.2 升级为 `ConsumerWidget`）：左侧分类 emoji（总预算用 💰）+ 中部"标题（分类名 / 总预算）+ 周期/结转副标题"+ 右侧金额 + 删除按钮；下方追加 `_ProgressSection`（订阅 `budgetProgressForProvider(budget)`）。
     - **`_ProgressSection`**（ConsumerWidget）：渲染彩色 `LinearProgressIndicator`（color 来自 `BianBianSemanticColors`：green=success / orange=warning / red=danger，进度条 value 用 `ratio.clamp(0, 1)` 防止溢出）+ 一行"已花 ¥X / ¥Y · 百分比"。当 `shouldTriggerBudgetVibration(level, alreadyVibrated)` 为真时，**整段** `markVibrated + HapticFeedback.heavyImpact()` 都放进 `WidgetsBinding.addPostFrameCallback`——build 期间修改 provider state 会触发 Riverpod 的 "Tried to modify a provider while the widget tree was building" 断言。回调内再做一次 `hasVibrated` 检查，保证同帧多次 build 注册多个 postFrame 时只执行一次。
-    - 空状态：`_EmptyState`（💰 图标 + "还没有预算"+"点右下角加一个吧 🐰"）。
-    - 空状态：`_EmptyState`（💰 图标 + "还没有预算"+"点右下角加一个吧 🐰"）。
+    - 空状态：`_EmptyState`（💰 图标 + "还没有预算"+"点右下角加一个吧 🐱"）。
+    - 空状态：`_EmptyState`（💰 图标 + "还没有预算"+"点右下角加一个吧 🐱"）。
   - **`budget_edit_page.dart`**：`BudgetEditPage`（ConsumerStatefulWidget，`budgetId` 可选——传入即编辑，否则新建）。
     - `_loadBudget()` 编辑模式下从 `repo.listActiveByLedger` 中按 id 提取（不存在抛 `StateError`）；`_hydrate(...)` 仅在第一次 build 时把字段写入表单 controller / `_period` / `_categoryId` / `_carryOver`，避免 setState 循环覆盖输入。
     - 表单组件：周期 `SegmentedButton<String>('monthly'/'yearly')`、分类 `DropdownButtonFormField<String?>`（首项"总预算（不限分类）"对应 `null`，其余按 `(parentKey 中文 + sortOrder)` 排序）、金额 `TextFormField`（`numberWithOptions(decimal: true)` + 正则限制最多两位小数）、结转 `SwitchListTile`（subtitle 注明"Step 6.4 实装"）。
@@ -453,7 +453,7 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
     2. `_MonthBar`：左右箭头 + `{year}年{month}月` → `ref.read(recordMonthProvider.notifier).previous()/next()`
     3. `_DataCards`：3 个 `_CardChip`（收入/支出/结余），财务三色
     4. `_QuickInputBar`：单行输入 + `✨ 识别` 占位
-    5. `_TransactionList`：`summary.when()` 三态（loading/error/data），无数据时"开始记第一笔吧 🐰"空状态，有数据时按天分组列表
+    5. `_TransactionList`：`summary.when()` 三态（loading/error/data），无数据时"开始记第一笔吧 🐱"空状态，有数据时按天分组列表
   - FAB `+` → Step 3.2 已接线到 `/record/new`（`context.go('/record/new')`）。
   - **`record_new_providers.dart`**（Step 3.2 新增并重构）：
     - `RecordFormData`：表单数据类（`selectedParentKey` / expression / amount / categoryId / accountId / occurredAt / note），`canSave => amount != null && amount! > 0 && categoryId != null`。
@@ -490,7 +490,7 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
 - Step 1.6 落地的 11 个用例：
   - **deriveKey（3）**：① RFC 7914 §11 的 PBKDF2-HMAC-SHA256(`passwd`,`salt`,c=1,64B) 向量（取前 32 字节 = `55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc`）；② 默认 iterations=100000 产出 32 字节长度校验；③ 确定性（同输入同输出）+ 不同 salt 产出不同密钥。
   - **AES-GCM KAT（1）**：NIST SP 800-38D Test Case 13（zero key / zero nonce / 16 字节零明文），对照固定 `cea7403d4d606b6e074ec5d3baf39d18 ‖ d0d1c8a799996bf0265b98b5d48ab919` —— 通过 `@visibleForTesting` 的 `encryptWithFixedNonce` 注入 nonce，然后断言打包 bytes 精确相等；同步反向验 decrypt 得回 16 字节零明文。
-  - **encrypt/decrypt 往返（2）**：含非 ASCII 的 UTF-8 字符串（中文 + emoji 🐰）往返不丢失字节；同明文二次 encrypt 产出不同 bytes（fresh nonce）但都能解回。
+  - **encrypt/decrypt 往返（2）**：含非 ASCII 的 UTF-8 字符串（中文 + emoji 🐱）往返不丢失字节；同明文二次 encrypt 产出不同 bytes（fresh nonce）但都能解回。
   - **失败场景（4）**：错误密钥 → `DecryptionFailure`；密文段某字节翻转 → `DecryptionFailure`（GCM tag 认证生效）；tag 段某字节翻转 → 同；packed 短于 `12+16=28` 字节 → 同。
   - **参数校验（1）**：非 32 字节 key 抛 `ArgumentError`。
 - 辅助函数：`_hex(String)` 把 hex 字符串转 `Uint8List`；`_countingBytes(32)` 产出 `[0,1,2,...,31]` 作为合法非零测试 key。
@@ -811,7 +811,7 @@ features/*  →  domain/entity/*  →  data/repository/（抽象接口） →  d
 - `lib/features/budget/budget_list_page.dart`（新建）：
   - `BudgetListPage`（ConsumerWidget）：`Scaffold` + 列表 + `FloatingActionButton.extended`。卡片点击进入编辑、按钮触发删除二次确认（`AlertDialog`）。删除走 `repo.softDeleteById` → `invalidate(activeBudgetsProvider)` + Snackbar。
   - 私有 `_BudgetCard`：左 emoji（来自分类 icon，总预算用 💰 兜底）+ 中部双行（标题/副标题"周期 · 结转标记"）+ 右金额（`NumberFormat('#,##0.00')`）+ 删除 `IconButton`。
-  - 私有 `_EmptyState`：💰 图标 + "还没有预算" + "点右下角加一个吧 🐰"。
+  - 私有 `_EmptyState`：💰 图标 + "还没有预算" + "点右下角加一个吧 🐱"。
 
 - `lib/features/budget/budget_edit_page.dart`（新建）：
   - `BudgetEditPage`（ConsumerStatefulWidget，`budgetId` 可选）。`_loadBudget()` 在 `FutureBuilder` 内异步取 budget；`_hydrate(...)` 守 `_initialized` flag 仅首次 build 写入字段，避免重渲染时覆盖用户编辑。
