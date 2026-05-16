@@ -255,6 +255,7 @@ class BackupImportPreview {
   final String? parserId;             // 命中 parser 的 id;null 表示 JSON / .bbbak 路径
   final String? parserDisplayName;    // 命中 parser 的 displayName;同上
   final int newCategoryCount;         // 本次预览统计:apply 时会新建的二级分类数(去重 by name)
+  final int newAccountCount;          // 本次预览统计:apply 时会新建的账户数(去重 by name)
   final Map<String, int>? columnMapping;  // 命中 parser 的列映射;UI「高级映射」用
   final List<String>? csvHeader;      // 原始 header 行;UI「高级映射」用
 }
@@ -266,12 +267,13 @@ class BackupImportPreview {
 class BackupImportResult {
   // 沿用 13.4 全部字段
   final int categoriesCreated;        // ← 新增。实际新建的二级分类数(apply 完成后由 service 上报)
+  final int accountsCreated;          // ← 新增。实际新建的账户数(同上)
 }
 ```
 
-## 8 · 自动新建二级分类语义
+## 8 · 自动新建二级分类与账户语义
 
-### 8.1 触发条件
+### 8.1 触发条件(分类)
 
 CSV apply 阶段,第一遍扫描 `preview.csvRows`,对每条行的 `categoryName`(不为 null 不为空)做检查:
 
@@ -287,35 +289,56 @@ CSV apply 阶段,第一遍扫描 `preview.csvRows`,对每条行的 `categoryName
 - 理由:① 二级分类名重复在 UI 会引起混乱;② 用户的语义应当以本地"已存在"为准。
 - 副作用:CSV 来源说"早餐属于教育",但本地落到 food 下——可能不符合用户预期。**这是已知 trade-off**;如果用户要严格归一,需手动到分类管理页改名后再导入。
 
+### 8.1.1 触发条件(账户)
+
+CSV apply 阶段,第一遍扫描 `preview.csvRows`,对每条行的 `accountName` / `toAccountName`(不为 null 不为空)做检查:
+
+```
+若本地 account 表中已有同名账户 → 复用其 id;不新建。
+否则 → 标记为"待新建",新账户字段默认:
+  - type        = 'other'(语义"未知";用户可在账户管理页改 cash/debit/credit/third_party)
+  - icon        = null(账户管理页可编辑)
+  - color       = null
+  - currency    = 'CNY'(沿用账户表默认值)
+  - includeInTotal = 1(默认计入总资产;与现有种子账户一致)
+  - initialBalance = 0
+```
+
+**同名复用 + 账户共享**:account 不区分 parent,本地全局共享;同名直接复用,无层级冲突。
+
+**accountName / toAccountName 都参与**:若 CSV 转账行同时含两个新账户名,会建两条账户记录。
+
 ### 8.2 写库流程
 
 在单个 `db.transaction` 内:
 
 ```
-1. 第一遍扫 csvRows,收集 newCategorySpecs = [{name, parentKey, sortOrderHint}, ...](去重 by name)。
-2. 预拉本地 categories(已含软删的也要拉,避免新建后撞唯一约束;若软删行同名,**复活**它而不是新建)。
-   - 复活策略:把该 category row 的 deletedAt 改 null + parentKey 改为新决策的 parentKey + updatedAt 刷新 + deviceId 改 currentDeviceId。
-3. 对每条 newCategorySpec:
+1. 第一遍扫 csvRows:
+   a. 收集 newCategorySpecs = [{name, parentKey, sortOrderHint}, ...](去重 by name)。
+   b. 收集 newAccountSpecs  = [{name, type='other', currency='CNY'}, ...](去重 by name;来源 accountName + toAccountName 合并)。
+2. 预拉本地 categories / accounts(均含软删行,避免新建撞同名;软删行同名 → 复活)。
+   - 分类复活:把该 category row 的 deletedAt 改 null + parentKey 改为新决策的 parentKey + updatedAt 刷新 + deviceId 改 currentDeviceId。
+   - 账户复活:把该 account row 的 deletedAt 改 null + updatedAt 刷新 + deviceId 改 currentDeviceId(type / currency / icon / color 等不动,保留用户原配置)。
+3. 对每条 newCategorySpec / newAccountSpec(各自循环):
    a. 若本地有软删同名 row → 走"复活"路径(update,不 insert)。
-   b. 否则:生成新 UUID;插入 category 表;sort_order = (同 parentKey 下 max sort_order) + 1;icon / color 留 null(用户可后续在分类管理页编辑)。
+   b. 否则:生成新 UUID;插入相应表;
+      - category 的 sort_order = (同 parentKey 下 max sort_order) + 1;
+      - account 无 sort_order 概念,按插入顺序自然排列;icon / color 留 null。
    c. **同事务内调 db.syncOpDao.enqueue**:
-      - entity = 'category'
-      - entityId = 新 id / 或复活 row 的 id
-      - op = 'upsert'(不区分 insert / update,与 LocalCategoryRepository.save 一致)
-      - payload = jsonEncode(category.toJson())
-      - enqueuedAt = clock().millisecondsSinceEpoch
-4. 刷新 categories 缓存(把新建 / 复活的并入)。
-5. 第二遍扫 csvRows 写流水(沿用 13.4 _applyCsv 后半段):categoryId 查 name → id;account / toAccount 同 13.4。
-6. 返回 BackupImportResult(categoriesCreated 由步骤 3 累计)。
+      - 分类:entity='category', entityId=新id/复活 id, op='upsert', payload=jsonEncode(category.toJson()), enqueuedAt=clock().millisecondsSinceEpoch
+      - 账户:entity='account',  entityId=同上,            op='upsert', payload=jsonEncode(account.toJson()),  enqueuedAt=同上
+4. 刷新 categories / accounts 缓存(把新建 / 复活的并入)。
+5. 第二遍扫 csvRows 写流水(沿用 13.4 _applyCsv 后半段):categoryId / accountId / toAccountId 查 name → id(此时缓存已含新建项);流水仍**不写** sync_op。
+6. 返回 BackupImportResult(categoriesCreated + accountsCreated 由步骤 3 累计)。
 ```
 
-**事务原子性**:任一分类新建失败 → 整个 transaction 回滚;不会留下"半建分类 + 已写流水"的中间状态。
+**事务原子性**:任一分类 / 账户新建失败 → 整个 transaction 回滚;不会留下"半建配置 + 已写流水"的中间状态。
 
-### 8.3 不复用 LocalCategoryRepository.save 的理由
+### 8.3 不复用 LocalCategoryRepository.save / LocalAccountRepository.save 的理由
 
 - 保持 import_service "故意绕开 Repository"批量化路径(与 13.3 / 13.4 一致;Repository 单条 save 嵌套 transaction 在 drift 里走 savepoint,语义虽 OK 但增加复杂度)。
-- 减少跨层依赖:import_service 已经持有 AppDatabase,直接 `db.into(db.categoryTable).insert(...)` + `db.syncOpDao.enqueue(...)` 即可。
-- 缺点:enqueue payload 构造与 LocalCategoryRepository 重复一份代码——需在代码注释里明确"任何对分类同步字段的修改必须同步修改两处"。
+- 减少跨层依赖:import_service 已经持有 AppDatabase,直接 `db.into(db.categoryTable / db.accountTable).insert(...)` + `db.syncOpDao.enqueue(...)` 即可。
+- 缺点:enqueue payload 构造与 LocalCategoryRepository / LocalAccountRepository 重复一份代码——需在代码注释里明确"任何对分类 / 账户同步字段的修改必须同步修改两处"。
 
 ## 9 · 编码自动识别(csv_text_decoder.dart)
 
@@ -412,9 +435,9 @@ String? chineseLabelToParentKey(String label) => kLabelToParentKey[label.trim()]
 新增 / 修改:
 - 删除 13.4 「识别为:三方模板」相关 UI(`thirdPartyTemplateId != null` 分支)。
 - 新增「识别为:`<parserDisplayName>`」一行(图标 `Icons.auto_awesome`),所有 parser 都显示(包括 Generic = 「通用 CSV」)。
-- 新增「将新建 N 个二级分类」橙色提示(`newCategoryCount > 0` 时显示):
-  - 文案:「检测到 N 个本地不存在的分类,导入时会自动创建并默认归入对应一级分类(无法判断的归到「其他」)。可在「高级映射」中跳过此列或重新映射。」
-- 策略区文字:CSV 路径不再特别区分模板/非模板;统一文案「CSV 不含本 App 的 ID,会作为「全部新记录」导入;账本归入当前账本,账户列若与现有账户同名会被关联,否则置空。」
+- 新增「将新建 N 个二级分类 / M 个账户」橙色提示(`newCategoryCount > 0 || newAccountCount > 0` 时显示):
+  - 文案:「检测到 N 个本地不存在的分类(将创建并默认归入对应一级分类,无法判断的归到「其他」)+ M 个本地不存在的账户(将以 type=其他 创建)。可在「高级映射」中跳过相应列。」
+- 策略区文字:CSV 路径不再特别区分模板/非模板;统一文案「CSV 不含本 App 的 ID,会作为「全部新记录」导入;账本归入当前账本;分类与账户列若与本地已有同名则关联,否则**自动新建**(可在「高级映射」中跳过)。」
 
 ### 11.2 「高级映射」折叠区
 
@@ -476,13 +499,17 @@ String? chineseLabelToParentKey(String label) => kLabelToParentKey[label.trim()]
 
 ### 12.3 修改
 
-- `test/features/import_export/import_service_test.dart`(+~6 用例):
+- `test/features/import_export/import_service_test.dart`(+~9 用例):
   - 10 列 CSV preview + 字段全部识别(parserDisplayName = '本 App')。
   - 旧 9 列 CSV preview 仍能工作(向后兼容)。
   - apply 时新建 3 个二级分类:① 「私房菜」+一级=「饮食」→ 落到 food;② 「玄学」+一级=null → 落到 other;③ 「咖啡」(已存在 food/咖啡)→ 复用不新建。
   - apply 后查 sync_op 表:3 - 1 = 2 条 category upsert 记录(复用的那条不写 sync_op);流水不写 sync_op。
   - apply 后 BackupImportResult.categoriesCreated == 2。
+  - **新增账户用例**:apply 时含 3 个账户名:① 「招商卡(尾号8888)」(本地不存在)→ 新建 type='other';② 「现金」(已存在)→ 复用;③ 转账行的 toAccountName=「零钱通」(本地不存在)→ 新建。
+  - apply 后查 sync_op 表:2 条 account upsert(复用的那条不写)。
+  - apply 后 BackupImportResult.accountsCreated == 2。
   - 软删同名分类「复活」:本地有软删的「私房菜」(parentKey=food, deletedAt!=null) → 导入命中 → 复活(deletedAt=null, updatedAt 刷新),sync_op 写一条 upsert。
+  - 软删同名账户「复活」:本地有软删的「招商卡(尾号8888)」→ 导入命中 → 复活;**type / icon / color 不动**(保留用户原配置)。
 - `test/features/import_export/export_service_test.dart`(+~3 用例):
   - encodeBackupCsv 输出 10 列 header。
   - 流水的「一级分类」列是中文标签(食物 → 「饮食」)。
@@ -494,11 +521,11 @@ String? chineseLabelToParentKey(String label) => kLabelToParentKey[label.trim()]
 | :-- | --: |
 | 删除(third_party_template_test) | -37 |
 | 新增 csv/* 与 parsers/* | +48 |
-| 修改 import_service_test | +6 |
+| 修改 import_service_test | +9 |
 | 修改 export_service_test | +3 |
-| **净变化** | **+20** |
+| **净变化** | **+23** |
 
-全量回归预期:**当前 14.x 基线**(14.1 时为 591;14.2+ 数量以实测为准) + **本次净变化 +20**(+48 新建 csv 测试 + 6 改 import_service_test + 3 改 export_service_test - 37 删 third_party_template_test)。最终数字以 `flutter test` 实测为准。
+全量回归预期:**当前 14.x 基线**(14.1 时为 591;14.2+ 数量以实测为准) + **本次净变化 +23**(+48 新建 csv 测试 + 9 改 import_service_test + 3 改 export_service_test - 37 删 third_party_template_test)。最终数字以 `flutter test` 实测为准。
 
 **重要**:`flutter test`(全量回归)应通过,Phase 14.x 的锁屏 / 生物识别 / 加密测试不受本次重构影响。
 
@@ -533,14 +560,15 @@ String? chineseLabelToParentKey(String label) => kLabelToParentKey[label.trim()]
 
 ## 15 · 已知风险与权衡
 
-### 15.1 微信账单「分类爆炸」
+### 15.1 微信账单「分类爆炸」与「账户爆炸」
 
-- **现象**:微信「交易类型」列是噪音化的(扫码付 / 转账给XX / 二维码收款 / 商户消费 / ...),一份 200 行的微信账单可能产生 10-30 个新二级分类,全部挂到 `other` 一级下。
-- **用户的明确选择**:完全废弃关键词映射;接受这个 trade-off。
+- **分类**:微信「交易类型」列噪音化,一份 200 行的微信账单可能产生 10-30 个新二级分类,全部挂到 `other` 一级下。
+- **账户**:微信「支付方式」列粒度细(零钱 / 零钱通 / 建设银行卡(7234) / 招商信用卡(...) / ...),同样会建出多个新账户。支付宝路径相对干净(account 固定为「支付宝」),钱迹路径取决于用户原有账户配置。
+- **用户的明确选择**:完全废弃关键词映射;接受这两个 trade-off。
 - **缓解措施**:
-  - 预览页显示「将新建 N 个二级分类」橙色提示,让用户知情。
-  - 高级映射的「忽略此列」选项允许用户主动跳过分类导入(全部归 null,流水仍写入)。
-  - 文档明确告知用户:导入后到「分类管理 → 其他」批量改名 / 删除 / 合并。
+  - 预览页显示「将新建 N 个二级分类 + M 个账户」橙色提示,让用户知情。
+  - 高级映射的「忽略此列」选项允许用户主动跳过 category / account / from_account / to_account 任一列的导入(对应字段全部归 null,流水仍写入)。
+  - 文档明确告知用户:导入后到「分类管理 → 其他」/「账户管理」批量改名 / 删除 / 合并。
 
 ### 15.2 现有 13.4 用户的迁移
 
@@ -550,11 +578,11 @@ String? chineseLabelToParentKey(String label) => kLabelToParentKey[label.trim()]
 
 ### 15.3 跨设备同步 + CSV 导入的边界
 
-- **现象**:用户 A 在 A 设备导入 100 行带 5 个新分类的微信账单:
-  - A 设备:5 条 category 进 sync_op;100 条流水**不进** sync_op。
-  - 同步触发:5 个分类 push 到云端 / pull 到 B 设备。
-  - B 设备:看到 5 个新分类,但**看不到 100 条流水**(因为流水不进 sync_op)。
-  - 用户在 B 设备看「其他」一级下多出 5 个空分类,可能困惑。
+- **现象**:用户 A 在 A 设备导入 100 行带 5 个新分类 + 3 个新账户的微信账单:
+  - A 设备:5 条 category + 3 条 account 进 sync_op;100 条流水**不进** sync_op。
+  - 同步触发:5 个分类 + 3 个账户 push 到云端 / pull 到 B 设备。
+  - B 设备:看到 5 个新分类 + 3 个新账户,但**看不到 100 条流水**(因为流水不进 sync_op)。
+  - 用户在 B 设备看「其他」一级下多出 5 个空分类 / 账户列表多出 3 个零余额账户,可能困惑。
 - **沿用 13.3 决策**:流水不进 sync_op;若用户希望跨设备完整数据,需用 backup 文件转移(导出 `.bbbak` → 跨设备恢复)或等下一次「整盘 push」(Phase 18.x 完整云端备份机制)。
 - **不在 13.5 范围**;但需在用户文档 / FAQ 说明。
 
