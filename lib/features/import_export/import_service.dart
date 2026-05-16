@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:drift/drift.dart' show InsertMode;
+import 'package:drift/drift.dart' show InsertMode, Value;
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/util/parent_key_labels.dart';
 import '../../data/local/app_database.dart';
 import 'csv/csv_lexer.dart';
 import 'csv/csv_format_detector.dart';
@@ -674,56 +675,182 @@ class BackupImportService {
     required String currentDeviceId,
     required String fallbackLedgerId,
   }) async {
-    // 预拉 ledger / category / account 列表用于 name → id 解析。
     final ledgers = await db.ledgerDao.listActive();
-    final categories = await db.categoryDao.listActiveAll();
-    final accounts = await db.accountDao.listActive();
+    // 预拉 categories / accounts 含软删行(复活路径需要)
+    final allCategoriesRows = await db.select(db.categoryTable).get();
+    final allAccountsRows = await db.select(db.accountTable).get();
+    final categoryByName = <String, CategoryEntry>{
+      for (final c in allCategoriesRows) c.name: c,
+    };
+    final accountByName = <String, AccountEntry>{
+      for (final a in allAccountsRows) a.name: a,
+    };
 
-    String? resolveLedgerId(String label) {
-      final name = stripLedgerEmoji(label);
-      for (final l in ledgers) {
-        if (l.name == name) return l.id;
+    // ── 第一遍:收集需要新建 / 复活的分类 / 账户 ──────────────────────
+    final newCategorySpecs = <_NewCategorySpec>{};
+    final newAccountSpecs = <_NewAccountSpec>{};
+    final categorySeen = <String>{};
+    final accountSeen = <String>{};
+    for (final r in rows) {
+      final cat = r.categoryName;
+      if (cat != null && cat.isNotEmpty && !categorySeen.contains(cat)) {
+        categorySeen.add(cat);
+        final existing = categoryByName[cat];
+        if (existing == null || existing.deletedAt != null) {
+          final parentKey = _resolveParentKeyFromLabel(r.primaryCategoryName);
+          newCategorySpecs.add(_NewCategorySpec(
+            name: cat,
+            parentKey: parentKey,
+            existing: existing,
+          ));
+        }
       }
-      return null;
-    }
-
-    String? resolveCategoryId(String? name) {
-      if (name == null || name.isEmpty) return null;
-      for (final c in categories) {
-        if (c.name == name) return c.id;
+      for (final acc in [r.accountName, r.toAccountName]) {
+        if (acc == null || acc.isEmpty || accountSeen.contains(acc)) continue;
+        accountSeen.add(acc);
+        final existing = accountByName[acc];
+        if (existing == null || existing.deletedAt != null) {
+          newAccountSpecs.add(_NewAccountSpec(
+            name: acc,
+            existing: existing,
+          ));
+        }
       }
-      return null;
-    }
-
-    String? resolveAccountId(String? name) {
-      if (name == null || name.isEmpty) return null;
-      for (final a in accounts) {
-        if (a.name == name) return a.id;
-      }
-      return null;
     }
 
     final unresolvedLabels = <String>{};
     var transactionsWritten = 0;
+    var categoriesCreated = 0;
+    var accountsCreated = 0;
+    final now = _clock();
+    final nowMs = now.millisecondsSinceEpoch;
+
     await db.transaction(() async {
+      // ── 新建 / 复活分类 ──
+      for (final spec in newCategorySpecs) {
+        String entityId;
+        if (spec.existing != null) {
+          // 复活:deletedAt 清空,parentKey 重置,updatedAt/deviceId 刷新
+          entityId = spec.existing!.id;
+          await (db.update(db.categoryTable)
+                ..where((t) => t.id.equals(entityId)))
+              .write(CategoryTableCompanion(
+            parentKey: Value(spec.parentKey),
+            deletedAt: const Value(null),
+            updatedAt: Value(nowMs),
+            deviceId: Value(currentDeviceId),
+          ));
+        } else {
+          // 新建
+          final maxOrder = await _maxSortOrder(db, spec.parentKey);
+          entityId = _uuid.v4();
+          await db.into(db.categoryTable).insert(
+                CategoryTableCompanion.insert(
+                  id: entityId,
+                  name: spec.name,
+                  parentKey: spec.parentKey,
+                  sortOrder: Value(maxOrder + 1),
+                  updatedAt: nowMs,
+                  deviceId: currentDeviceId,
+                ),
+              );
+        }
+        // 拉刚才写入的行 → 转 entity → 写 sync_op
+        final updatedRow = await (db.select(db.categoryTable)
+              ..where((t) => t.id.equals(entityId)))
+            .getSingle();
+        final categoryEntity = rowToCategory(updatedRow);
+        await db.syncOpDao.enqueue(
+          entity: 'category',
+          entityId: entityId,
+          op: 'upsert',
+          payload: jsonEncode(categoryEntity.toJson()),
+          enqueuedAt: nowMs,
+        );
+        categoryByName[spec.name] = updatedRow;
+        categoriesCreated++;
+      }
+
+      // ── 新建 / 复活账户 ──
+      for (final spec in newAccountSpecs) {
+        String entityId;
+        if (spec.existing != null) {
+          entityId = spec.existing!.id;
+          await (db.update(db.accountTable)
+                ..where((t) => t.id.equals(entityId)))
+              .write(AccountTableCompanion(
+            deletedAt: const Value(null),
+            updatedAt: Value(nowMs),
+            deviceId: Value(currentDeviceId),
+            // type / icon / color 不动,保留用户原配置
+          ));
+        } else {
+          entityId = _uuid.v4();
+          await db.into(db.accountTable).insert(
+                AccountTableCompanion.insert(
+                  id: entityId,
+                  name: spec.name,
+                  type: 'other',
+                  updatedAt: nowMs,
+                  deviceId: currentDeviceId,
+                ),
+              );
+        }
+        final updatedRow = await (db.select(db.accountTable)
+              ..where((t) => t.id.equals(entityId)))
+            .getSingle();
+        final accountEntity = rowToAccount(updatedRow);
+        await db.syncOpDao.enqueue(
+          entity: 'account',
+          entityId: entityId,
+          op: 'upsert',
+          payload: jsonEncode(accountEntity.toJson()),
+          enqueuedAt: nowMs,
+        );
+        accountByName[spec.name] = updatedRow;
+        accountsCreated++;
+      }
+
+      // ── 第二遍:写流水(刷新后的缓存 resolve id)──
+      String? resolveLedgerId(String label) {
+        final name = stripLedgerEmoji(label);
+        for (final l in ledgers) {
+          if (l.name == name) return l.id;
+        }
+        return null;
+      }
+
       for (final row in rows) {
         var ledgerId = resolveLedgerId(row.ledgerLabel);
         if (ledgerId == null) {
           ledgerId = fallbackLedgerId;
           unresolvedLabels.add(row.ledgerLabel);
         }
+        String? categoryId;
+        if (row.categoryName != null) {
+          categoryId = categoryByName[row.categoryName!]?.id;
+        }
+        String? accountId;
+        if (row.accountName != null) {
+          accountId = accountByName[row.accountName!]?.id;
+        }
+        String? toAccountId;
+        if (row.toAccountName != null) {
+          toAccountId = accountByName[row.toAccountName!]?.id;
+        }
+
         final tx = TransactionEntry(
           id: _uuid.v4(),
           ledgerId: ledgerId,
           type: row.type,
           amount: row.amount,
           currency: row.currency,
-          categoryId: resolveCategoryId(row.categoryName),
-          accountId: resolveAccountId(row.accountName),
-          toAccountId: resolveAccountId(row.toAccountName),
+          categoryId: categoryId,
+          accountId: accountId,
+          toAccountId: toAccountId,
           occurredAt: row.occurredAt,
           tags: (row.note != null && row.note!.isNotEmpty) ? row.note : null,
-          updatedAt: _clock(),
+          updatedAt: now,
           deviceId: currentDeviceId,
         );
         await db.into(db.transactionEntryTable).insert(
@@ -733,10 +860,30 @@ class BackupImportService {
         transactionsWritten++;
       }
     });
+
     return BackupImportResult(
       transactionsWritten: transactionsWritten,
+      categoriesCreated: categoriesCreated,
+      accountsCreated: accountsCreated,
       unresolvedLedgerLabels: unresolvedLabels,
     );
+  }
+
+  /// 同 parentKey 下当前最大 sort_order(含软删);空表返回 -1(新分类即 0)。
+  Future<int> _maxSortOrder(AppDatabase db, String parentKey) async {
+    final rows = await (db.select(db.categoryTable)
+          ..where((t) => t.parentKey.equals(parentKey)))
+        .get();
+    var max = -1;
+    for (final r in rows) {
+      if (r.sortOrder > max) max = r.sortOrder;
+    }
+    return max;
+  }
+
+  String _resolveParentKeyFromLabel(String? label) {
+    if (label == null) return 'other';
+    return chineseLabelToParentKey(label) ?? 'other';
   }
 
   // ── 静态 helper（@visibleForTesting 的对外工具）──────────────────────────
@@ -844,6 +991,38 @@ class BackupImportService {
         return type;
     }
   }
+}
+
+/// CSV apply 第一遍扫描时收集的"待新建二级分类"规格。
+/// `existing != null` 表示本地有同名(可能软删)行,走"复活"路径而非新建。
+class _NewCategorySpec {
+  _NewCategorySpec({
+    required this.name,
+    required this.parentKey,
+    this.existing,
+  });
+  final String name;
+  final String parentKey;
+  final CategoryEntry? existing;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _NewCategorySpec && other.name == name;
+  @override
+  int get hashCode => name.hashCode;
+}
+
+/// CSV apply 第一遍扫描时收集的"待新建账户"规格。
+class _NewAccountSpec {
+  _NewAccountSpec({required this.name, this.existing});
+  final String name;
+  final AccountEntry? existing;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _NewAccountSpec && other.name == name;
+  @override
+  int get hashCode => name.hashCode;
 }
 
 /// CSV 列头常量——与 [encodeBackupCsv] 字节级一致；任何一边改了另一边必须同步。
