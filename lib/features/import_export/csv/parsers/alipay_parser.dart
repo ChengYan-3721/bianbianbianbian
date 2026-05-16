@@ -105,7 +105,7 @@ class AlipayBillParser extends GenericBillParser {
       type: type,
       amount: amount,
       currency: 'CNY',
-      // primaryCategoryName: null,  // TODO Task 12 解开
+      primaryCategoryName: null,
       categoryName: getBy('category'),
       accountName: '支付宝',
       toAccountName: null,

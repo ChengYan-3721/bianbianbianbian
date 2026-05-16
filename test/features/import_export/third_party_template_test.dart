@@ -205,8 +205,8 @@ void main() {
         fileType: BackupImportFileType.csv,
       );
       return preview.then((p) {
-        expect(p.thirdPartyTemplateId, 'wechat_bill');
-        expect(p.thirdPartyTemplateName, '微信账单');
+        expect(p.parserId, 'wechat_bill');
+        expect(p.parserDisplayName, '微信账单');
         expect(p.transactionCount, sample.expectedRowCount);
         // 金额汇总（仅"支出"列）应等于样本生成器记录的总额
         final actualTotal = p.csvRows!
@@ -230,7 +230,7 @@ void main() {
         bytes: Uint8List.fromList(utf8.encode(csv)),
         fileType: BackupImportFileType.csv,
       );
-      expect(preview.thirdPartyTemplateId, 'wechat_bill');
+      expect(preview.parserId, 'wechat_bill');
       expect(preview.transactionCount, 1);
       expect(preview.csvRows!.first.amount, 35.0);
     });
@@ -258,8 +258,8 @@ void main() {
         bytes: Uint8List.fromList(utf8.encode(sample.csv)),
         fileType: BackupImportFileType.csv,
       );
-      expect(preview.thirdPartyTemplateId, 'alipay_bill');
-      expect(preview.thirdPartyTemplateName, '支付宝账单');
+      expect(preview.parserId, 'alipay_bill');
+      expect(preview.parserDisplayName, '支付宝账单');
       expect(preview.transactionCount, sample.expectedRowCount);
       final actualTotal = preview.csvRows!
           .where((r) => r.type == 'expense')
@@ -293,7 +293,7 @@ T1,,2026-01-01 10:00:00,2026-01-01 10:00:00,2026-01-01 10:00:00,其他,即时到
         fileType: BackupImportFileType.csv,
       );
       expect(preview.csvRows!.first.categoryName, '其他');
-      expect(preview.unmappedCategoryCount, 1);
+      expect(preview.newCategoryCount, 0);
     });
   });
 
@@ -304,8 +304,8 @@ T1,,2026-01-01 10:00:00,2026-01-01 10:00:00,2026-01-01 10:00:00,其他,即时到
         bytes: Uint8List.fromList(utf8.encode(sample.csv)),
         fileType: BackupImportFileType.csv,
       );
-      expect(preview.thirdPartyTemplateId, 'qianji');
-      expect(preview.thirdPartyTemplateName, '钱迹');
+      expect(preview.parserId, 'qianji');
+      expect(preview.parserDisplayName, '钱迹');
       expect(preview.transactionCount, sample.expectedRowCount);
       final actualTotal = preview.csvRows!
           .where((r) => r.type == 'expense')
@@ -408,8 +408,8 @@ T2,,2026-01-02 10:00:00,2026-01-02 10:00:00,2026-01-02 10:00:00,其他,即时到
         bytes: Uint8List.fromList(utf8.encode(csv)),
         fileType: BackupImportFileType.csv,
       );
-      expect(preview.thirdPartyTemplateId, 'alipay_bill');
-      expect(preview.unmappedCategoryCount, 1);
+      expect(preview.parserId, 'alipay_bill');
+      expect(preview.newCategoryCount, 0);
 
       final result = await service.apply(
         preview: preview,

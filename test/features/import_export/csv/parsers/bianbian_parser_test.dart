@@ -16,9 +16,8 @@ void main() {
     expect(mapping['category'], 6);
     final row = parser.parseRow(rows[1], mapping);
     expect(row, isNotNull);
-    // Task 12 之前 BackupImportCsvRow 还没有 primaryCategoryName 字段;
-    // 仅验证 categoryName / accountName 等已存在字段。
-    expect(row!.categoryName, '早餐');
+    expect(row!.primaryCategoryName, '饮食');
+    expect(row.categoryName, '早餐');
     expect(row.accountName, '现金');
   });
 
@@ -33,7 +32,8 @@ void main() {
     expect(mapping['category'], 5);
     final row = parser.parseRow(rows[1], mapping);
     expect(row, isNotNull);
-    expect(row!.categoryName, '早餐');
+    expect(row!.primaryCategoryName, isNull);
+    expect(row.categoryName, '早餐');
   });
 
   test('非本 App header 不匹配', () {

@@ -299,7 +299,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
     final theme = Theme.of(context);
     final preview = _preview!;
     final isCsv = preview.fileType == BackupImportFileType.csv;
-    final isThirdParty = preview.thirdPartyTemplateId != null;
+    final isThirdParty = preview.parserId != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -319,7 +319,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                   _SummaryRow(
                     icon: Icons.auto_awesome,
                     label: context.l10n.importRecognizedAs,
-                    value: preview.thirdPartyTemplateName!,
+                    value: preview.parserDisplayName!,
                   ),
                 _SummaryRow(
                   icon: Icons.menu_book_outlined,
@@ -331,11 +331,11 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                   label: context.l10n.importTxCount,
                   value: '${preview.transactionCount}',
                 ),
-                if (isThirdParty && preview.unmappedCategoryCount > 0)
+                if (isThirdParty && preview.newCategoryCount > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      context.l10n.importUnmappedCategoryTip(preview.unmappedCategoryCount),
+                      context.l10n.importUnmappedCategoryTip(preview.newCategoryCount),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.tertiary,
                       ),

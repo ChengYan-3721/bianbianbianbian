@@ -101,6 +101,7 @@ class QianjiBillParser extends GenericBillParser {
       type = 'expense'; // 6 列格式无独立类型列,兜底支出
     }
 
+    final primary = getBy('primary_category');
     final category = getBy('category');
 
     final accountFrom = getBy('account') ?? getBy('from_account');
@@ -112,7 +113,7 @@ class QianjiBillParser extends GenericBillParser {
       type: type,
       amount: amount.abs(),
       currency: 'CNY',
-      // primaryCategoryName: primary,  // TODO Task 12 解开
+      primaryCategoryName: primary,
       categoryName: category,
       accountName: accountFrom,
       toAccountName: type == 'transfer' ? accountTo : null,

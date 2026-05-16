@@ -67,6 +67,7 @@ class BackupImportCsvRow {
     required this.type,
     required this.amount,
     required this.currency,
+    this.primaryCategoryName,   // ← 新增(Step 13.5)
     this.categoryName,
     this.accountName,
     this.toAccountName,
@@ -82,6 +83,12 @@ class BackupImportCsvRow {
   final String type;
   final double amount;
   final String currency;
+
+  /// 一级分类中文标签(如「饮食」);Step 13.5 引入。
+  /// 仅本 App 10 列 / 钱迹 8 列 / Generic 命中「一级分类|父分类|主分类」列时非 null。
+  /// 微信 / 支付宝 / 旧 9 列 = null,apply 时挂到 `parent_key='other'`。
+  final String? primaryCategoryName;
+
   final String? categoryName;
   final String? accountName;
   final String? toAccountName;
@@ -136,9 +143,12 @@ class BackupImportPreview {
     this.csvRows,
     this.exportedAt,
     this.sourceDeviceId,
-    this.thirdPartyTemplateId,
-    this.thirdPartyTemplateName,
-    this.unmappedCategoryCount = 0,
+    this.parserId,
+    this.parserDisplayName,
+    this.newCategoryCount = 0,
+    this.newAccountCount = 0,
+    this.columnMapping,
+    this.csvHeader,
   });
 
   final BackupImportFileType fileType;
@@ -146,32 +156,42 @@ class BackupImportPreview {
   /// 备份内含账本数。CSV 路径下统计**唯一 ledgerLabel** 的数量。
   final int ledgerCount;
 
-  /// 备份内含流水总数（不限单账本）。
+  /// 备份内含流水总数(不限单账本)。
   final int transactionCount;
 
   /// 最多 20 行示例——UI 渲染表格用。
   final List<BackupImportPreviewRow> sampleRows;
 
-  /// JSON / `.bbbak` 路径下持有的全量快照；CSV 路径下为 null。
+  /// JSON / `.bbbak` 路径下持有的全量快照;CSV 路径下为 null。
   final MultiLedgerSnapshot? snapshot;
 
-  /// CSV 路径下持有的全量解析行；JSON / `.bbbak` 路径下为 null。
+  /// CSV 路径下持有的全量解析行;JSON / `.bbbak` 路径下为 null。
   final List<BackupImportCsvRow>? csvRows;
 
-  /// 备份导出时的时间戳（仅 JSON / `.bbbak` 有；CSV 无元数据）。
+  /// 备份导出时的时间戳(仅 JSON / `.bbbak` 有;CSV 无元数据)。
   final DateTime? exportedAt;
 
-  /// 备份导出设备的 device_id（同上）。
+  /// 备份导出设备的 device_id(同上)。
   final String? sourceDeviceId;
 
-  /// 命中的三方模板 id（如 `wechat_bill`），仅 CSV 路径且命中模板时非空。
-  final String? thirdPartyTemplateId;
+  /// 命中 parser 的 id(`'bianbian' / 'wechat_bill' / 'alipay_bill' / 'qianji' /
+  /// 'generic' / 'custom'`);null = JSON / .bbbak 路径(Step 13.5)。
+  final String? parserId;
 
-  /// 三方模板用户可见名（如「微信账单」）；UI 显示用。
-  final String? thirdPartyTemplateName;
+  /// 命中 parser 的用户可见名称(如「微信账单」)(Step 13.5)。
+  final String? parserDisplayName;
 
-  /// 三方模板路径下，关键词→分类映射未命中归"其他"的行数；UI 用作提示。
-  final int unmappedCategoryCount;
+  /// 本次 apply 将新建的二级分类数(去重 by name 后)(Step 13.5)。
+  final int newCategoryCount;
+
+  /// 本次 apply 将新建的账户数(去重 by name 后)(Step 13.5)。
+  final int newAccountCount;
+
+  /// 命中 parser 输出的列名 → 列索引映射;UI 「高级映射」用(Step 13.5)。
+  final Map<String, int>? columnMapping;
+
+  /// 原始 CSV header 行;UI 「高级映射」展示列名用(Step 13.5)。
+  final List<String>? csvHeader;
 }
 
 /// 导入应用结果——给 UI 显示「成功消息：写入 X 条流水，跳过 Y 条」。
@@ -184,6 +204,8 @@ class BackupImportResult {
     this.transactionsWritten = 0,
     this.transactionsSkipped = 0,
     this.budgetsWritten = 0,
+    this.categoriesCreated = 0,   // ← 新增(Step 13.5)
+    this.accountsCreated = 0,     // ← 新增(Step 13.5)
     this.unresolvedLedgerLabels = const <String>{},
   });
 
@@ -193,6 +215,12 @@ class BackupImportResult {
   final int transactionsWritten;
   final int transactionsSkipped;
   final int budgetsWritten;
+
+  /// CSV 路径下,本次 apply 新建的二级分类数(Step 13.5)。
+  final int categoriesCreated;
+
+  /// CSV 路径下,本次 apply 新建的账户数(Step 13.5)。
+  final int accountsCreated;
 
   /// CSV 路径下，账本名 resolve 失败、走 fallback 的标签集合（提示用户）。
   final Set<String> unresolvedLedgerLabels;
@@ -609,17 +637,13 @@ class BackupImportService {
   /// 字段语义：
   /// - `ledgerCount` 强制为 1：模板把所有流水写到 `displayName` 这个虚拟账本名，
   ///   apply 阶段会 unresolved → fallback 到当前账本。
-  /// - `unmappedCategoryCount`：关键词命中"其他"的行数（提示用户精度）。
+  /// - `parserId` / `parserDisplayName`：三方模板的 id / displayName(Step 13.5)。
   BackupImportPreview _previewFromThirdPartyMatch(ThirdPartyMatch match) {
     final csvRows = match.rows;
     final amountFmt = NumberFormat('0.00');
     final dateFmt = DateFormat('yyyy-MM-dd HH:mm');
-    var unmapped = 0;
     final samples = <BackupImportPreviewRow>[];
     for (final r in csvRows) {
-      if (r.categoryName == kFallbackCategoryName) {
-        unmapped++;
-      }
       if (samples.length < 20) {
         samples.add(BackupImportPreviewRow(
           ledgerLabel: r.ledgerLabel,
@@ -640,9 +664,8 @@ class BackupImportService {
       transactionCount: csvRows.length,
       sampleRows: List.unmodifiable(samples),
       csvRows: List.unmodifiable(csvRows),
-      thirdPartyTemplateId: match.template.id,
-      thirdPartyTemplateName: match.template.displayName,
-      unmappedCategoryCount: unmapped,
+      parserId: match.template.id,
+      parserDisplayName: match.template.displayName,
     );
   }
 

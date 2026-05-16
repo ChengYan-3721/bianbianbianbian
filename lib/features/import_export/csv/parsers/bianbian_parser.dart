@@ -110,7 +110,7 @@ class BianbianBillParser extends GenericBillParser {
       type: type,
       amount: amount.abs(),
       currency: currency,
-      // primaryCategoryName: getBy('primary_category'),  // TODO Task 12 解开
+      primaryCategoryName: getBy('primary_category'),
       categoryName: getBy('category'),
       accountName: getBy('account'),
       toAccountName: getBy('to_account'),

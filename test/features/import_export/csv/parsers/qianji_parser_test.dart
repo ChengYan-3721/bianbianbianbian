@@ -36,8 +36,8 @@ void main() {
     final mapping = parser.mapColumns(rows[0]);
     final row = parser.parseRow(rows[1], mapping);
     expect(row, isNotNull);
-    // Task 12 之前 BackupImportCsvRow 还没有 primaryCategoryName 字段
-    expect(row!.categoryName, '午餐');
+    expect(row!.primaryCategoryName, '饮食');
+    expect(row.categoryName, '午餐');
     expect(row.accountName, '现金');
     expect(row.ledgerLabel, '钱迹');
   });

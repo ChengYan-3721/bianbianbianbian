@@ -97,7 +97,7 @@ class GenericBillParser extends BillParser {
       type: type,
       amount: amount.abs(),
       currency: getBy('currency') ?? 'CNY',
-      // primaryCategoryName: getBy('primary_category'),  // TODO Task 12 解开
+      primaryCategoryName: getBy('primary_category'),
       categoryName: getBy('category'),
       accountName: getBy('account') ?? getBy('from_account'),
       toAccountName: getBy('to_account'),
