@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'parent_key_labels.dart';
+
 // i18n-exempt: Chinese text parsing keywords - algorithm logic, not UI text.
 
 /// 中文快速记账文本的本地解析结果。
@@ -75,21 +77,9 @@ class QuickTextParser {
 
   final DateTime Function() _clock;
 
-  /// 一级分类标签，与 `budget_providers.dart::kParentKeyLabels` 保持同义。
-  /// 此处特意复制一份而非 import 上层 feature——`core/util` 不允许反向依赖。
-  static const Map<String, String> _parentKeyLabels = {
-    'income': '收入',
-    'food': '饮食',
-    'shopping': '购物',
-    'transport': '出行',
-    'education': '教育',
-    'entertainment': '娱乐',
-    'social': '人情',
-    'housing': '住房',
-    'medical': '医药',
-    'investment': '投资',
-    'other': '其他',
-  };
+  /// 一级分类标签,与 [kParentKeyToLabel] 同源。
+  /// 此处特意通过 import 引用而非 inline——避免双副本飘移(Step 13.5)。
+  static const Map<String, String> _parentKeyLabels = kParentKeyToLabel;
 
   /// 关键词 → parent_key 词典。匹配时按 [_sortedKeywords] 长词优先扫描，
   /// 避免 "午饭" 被泛 "饭" 截断。
