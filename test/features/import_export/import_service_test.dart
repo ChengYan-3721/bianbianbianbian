@@ -932,7 +932,7 @@ void main() {
     });
   });
 
-  group('SVG 图标 JSON round-trip（Step 14.x）', () {
+  group('SVG 图标 JSON round-trip（Step 13.6）', () {
     test('export → import 后 DB 三类实体 SVG 列与原值一致', () async {
       const ledgerSvg = '<svg viewBox="0 0 24 24" id="ledger"/>';
       const catSvg = '<svg viewBox="0 0 24 24" id="cat"/>';
