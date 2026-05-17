@@ -4139,3 +4139,36 @@ Navigator operation requested with a context that does not include a Navigator.
 **`AboutPage._confirmRevoke` 不受影响**——`AboutPage` 通过 GoRoute 进入，处于 router Navigator 内，`showDialog` 正常工作。两处保持不同实现是有意为之：dialog（gate 之外）vs about（gate 之内 + router 之内）。
 
 验证：`flutter analyze` → No issues found；`flutter test` → 772/772 通过；手工 `flutter run` 后用户验证"不同意 → 二次确认 → 退出/再次阅读"路径正常。
+
+---
+
+## ✅ Step 13.6 · 自定义 SVG 图标的备份导入导出 / 云同步支持（2026-05-17）
+
+**背景**
+
+前序提交里给 `category` / `account` / `ledger` 三张表加了 `icon_svg` / `cover_svg` 列（drift table + entity `toJson`/`fromJson` + `==` / `hashCode` / `copyWith` + `entity_mappers.dart` 双向映射），让用户能在编辑页选 SVG 图标。本步把"图标随备份与云同步走"的不变量用测试钉死。
+
+**改动范围**
+
+- **生产代码：0 行**——entity `toJson`/`fromJson` + mapper 已让 JSON / `.bbbak` 导入导出与 `LedgerSnapshotSerializer` 自动把 SVG 字段当普通字段处理；CSV 导出走固定 10 列白名单（`_backupCsvHeader`，不含 SVG），符合需求；CSV 导入按列名解析，亦不读 SVG。整条链路在 entity 层扩展时已天然支持。
+- **测试代码：3 个文件，9 个新用例**：
+  - `test/domain/entity/entities_test.dart` +43 行（commit `71102fa`）：在 `group('Ledger', ...)` / `group('Category', ...)` / `group('Account', ...)` 各加一条 `fromJson(toJson(x)) == x （含 ...Svg）` 用例，验证 SVG 字段 round-trip + snake_case JSON key 写出。
+  - `test/features/sync/snapshot_serializer_test.dart` 新建 +150 行（commits `730fd71` + `40cec63` + `726279b`）：
+    - 4 条 `LedgerSnapshot SVG round-trip` 用例（ledger.coverSvg / category.iconSvg / account.iconSvg / `MultiLedgerSnapshot` 包一层）。用 `decoded.toJson() == snap.toJson()` 比较，因为 `LedgerSnapshot` 没覆盖 `==`（文件顶部注释明示，防止后续重构引回 identity-equality bug）。
+    - 4 条 `LedgerSnapshotSerializer.fingerprint 对 SVG 变化敏感` 用例：三个 SVG 字段各一条 mutation 测试 + 一条 identity control，锁住"任一 SVG 改动 → 指纹变化 → 触发 push"的契约。
+  - `test/features/import_export/import_service_test.dart` +137 行（commit `a3f0895`）：新增 helper `_ledgerWithSvg` / `_catWithSvg` / `_accWithSvg` 以及一个 `group('SVG 图标 JSON round-trip（Step 14.x）', ...)`，含正反两条用例：① `export → import` 后直接拉 DB 行验证三类实体的 `iconSvg`/`coverSvg` 与原值一致（绕过 mapper 读，确保 mapper 写路径正确）；② null 控制实验——SVG 字段为 null 时 DB 列仍为 null。
+
+**验证**
+
+- `flutter test test/domain/entity/entities_test.dart` → 21/21 通过（原 18 + 新 3）。
+- `flutter test test/features/sync/snapshot_serializer_test.dart` → 8/8 通过（新文件）。
+- `flutter test test/features/import_export/import_service_test.dart` → 32/32 通过（原 30 + 新 2）。
+
+**给后续开发者的备忘**
+
+- **未写 DB 迁移代码**：按设计文档 `docs/superpowers/specs/2026-05-17-svg-icon-backup-sync-design.md` §4 的决策，`schemaVersion` 保持 12 不变。理由：本步假定尚未发布到真实用户（项目仍在 Phase 13/14 dev），已装老版本的 dev 设备需手动清库（`adb uninstall` 或删 `bbb.db`）。若未来在发布前发现需兼容老库，单独起 spec 加 v12→v13 migration——届时纯加列、风险极低。
+- **CSV 故意不带 SVG**：`encodeBackupCsv` 是固定 10 列白名单，不引用 `iconSvg`/`coverSvg`。这是产品决策："CSV 是 Excel 友好的轻量视图，二进制/长字符串不归它管"。导入侧 `BillParser` 系列亦按列名解析，无 SVG 列。
+- **JSON / `.bbbak` 通路同源**：`.bbbak` 是 JSON 字节流经 `BbbakCodec.encode` 加密后的包装，解密后就是 JSON。所以一旦 JSON round-trip 测试通过，`.bbbak` 自动可信——没单独写 `.bbbak` SVG 用例是有意的（避免重复覆盖）。
+- **`LedgerSnapshot` 没覆盖 `==`**：用 `decoded.toJson() == snap.toJson()` 而不是 `expect(decoded, snap)`。这一点已在 `snapshot_serializer_test.dart` 的 group 注释里说明。想换回直接 `==` 必须先给 `LedgerSnapshot` 加 `==` / `hashCode`（属于产线代码改动，超出本步 scope）。
+- **fingerprint stable map 含 ledger / categories / accounts**：见 `lib/features/sync/snapshot_serializer.dart:117-126`。本步用 3 条 mutation 测试锁住其中三个键的 SVG 敏感性；尚未单独测试"`exported_at` / `device_id` 不进入 stable map"——若后续重构 fingerprint 时需要更强保护，可补一条 negative 测试。
+- **相关 spec & plan**：`docs/superpowers/specs/2026-05-17-svg-icon-backup-sync-design.md` + `docs/superpowers/plans/2026-05-17-svg-icon-backup-sync.md`。
