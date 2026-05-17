@@ -16,6 +16,7 @@ import 'csv/parsers/generic_parser.dart' show GenericBillParser;
 import '../../data/repository/entity_mappers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
+import '../../domain/entity/ledger.dart';
 import '../../domain/entity/transaction_entry.dart';
 import 'bbbak_codec.dart';
 import 'export_service.dart';
@@ -287,6 +288,7 @@ class BackupImportService {
     String? password,
     int? bbbakIterations,
     Map<String, int>? overrideColumnMapping,
+    AppDatabase? db,
   }) async {
     switch (fileType) {
       case BackupImportFileType.bbbak:
@@ -305,7 +307,11 @@ class BackupImportService {
       case BackupImportFileType.json:
         return _previewJsonBytes(bytes, BackupImportFileType.json);
       case BackupImportFileType.csv:
-        return _previewCsvBytes(bytes, overrideColumnMapping: overrideColumnMapping);
+        return _previewCsvBytes(
+          bytes,
+          overrideColumnMapping: overrideColumnMapping,
+          db: db,
+        );
     }
   }
 
@@ -570,10 +576,11 @@ class BackupImportService {
   // ── CSV 路径 ───────────────────────────────────────────────────────────
 
     // i18n-exempt: needs refactoring for l10n
-    BackupImportPreview _previewCsvBytes(
+    Future<BackupImportPreview> _previewCsvBytes(
     Uint8List bytes, {
     Map<String, int>? overrideColumnMapping,
-  }) {
+    AppDatabase? db,
+  }) async {
     final text = decodeCsvBytes(bytes);
     final stripped = stripUtf8Bom(text);
     final rows = parseCsvRows(stripped);
@@ -616,13 +623,13 @@ class BackupImportService {
       }
     }
 
-    // 统计 CSV 内 unique 分类 / 账户 name(上限值,Apply 时再减去复用)
-    final uniqueCategoryNames = <String>{
+    // 统计 CSV 内 unique 分类 / 账户 name
+    final csvUniqueCategoryNames = <String>{
       for (final r in csvRows)
         if (r.categoryName != null && r.categoryName!.isNotEmpty)
           r.categoryName!,
     };
-    final uniqueAccountNames = <String>{
+    final csvUniqueAccountNames = <String>{
       for (final r in csvRows) ...[
         if (r.accountName != null && r.accountName!.isNotEmpty)
           r.accountName!,
@@ -630,6 +637,32 @@ class BackupImportService {
           r.toAccountName!,
       ],
     };
+    // 调用方传 db 时,对比 DB 算「本地真不存在(含软删)」的数量——与
+    // _applyCsv 的 categoriesCreated/accountsCreated 语义对齐;不传 db 时
+    // 回退到 CSV unique 总数(测试/历史兼容)。
+    final int newCategoryCount;
+    final int newAccountCount;
+    if (db != null) {
+      final existingCategoryRows = await db.select(db.categoryTable).get();
+      final existingActiveCategoryNames = <String>{
+        for (final c in existingCategoryRows)
+          if (c.deletedAt == null) c.name,
+      };
+      final existingAccountRows = await db.select(db.accountTable).get();
+      final existingActiveAccountNames = <String>{
+        for (final a in existingAccountRows)
+          if (a.deletedAt == null) a.name,
+      };
+      newCategoryCount = csvUniqueCategoryNames
+          .where((n) => !existingActiveCategoryNames.contains(n))
+          .length;
+      newAccountCount = csvUniqueAccountNames
+          .where((n) => !existingActiveAccountNames.contains(n))
+          .length;
+    } else {
+      newCategoryCount = csvUniqueCategoryNames.length;
+      newAccountCount = csvUniqueAccountNames.length;
+    }
 
     // 准备 20 行 sample
     final amountFmt = NumberFormat('0.00');
@@ -662,8 +695,8 @@ class BackupImportService {
       parserDisplayName: overrideColumnMapping != null
           ? '自定义映射'
           : effectiveParser.displayName,
-      newCategoryCount: uniqueCategoryNames.length,
-      newAccountCount: uniqueAccountNames.length,
+      newCategoryCount: newCategoryCount,
+      newAccountCount: newAccountCount,
       columnMapping: Map.unmodifiable(effectiveMapping),
       csvHeader: List.unmodifiable(header),
     );
@@ -675,7 +708,7 @@ class BackupImportService {
     required String currentDeviceId,
     required String fallbackLedgerId,
   }) async {
-    final ledgers = await db.ledgerDao.listActive();
+    var ledgers = await db.ledgerDao.listActive();
     // 预拉 categories / accounts 含软删行(复活路径需要)
     final allCategoriesRows = await db.select(db.categoryTable).get();
     final allAccountsRows = await db.select(db.accountTable).get();
@@ -686,12 +719,33 @@ class BackupImportService {
       for (final a in allAccountsRows) a.name: a,
     };
 
-    // ── 第一遍:收集需要新建 / 复活的分类 / 账户 ──────────────────────
+    // ── 第一遍:收集需要新建 / 复活的账本 / 分类 / 账户 ──────────────────────
+    final newLedgerSpecs = <_NewLedgerSpec>{};
     final newCategorySpecs = <_NewCategorySpec>{};
     final newAccountSpecs = <_NewAccountSpec>{};
+    final ledgerSeen = <String>{};
     final categorySeen = <String>{};
     final accountSeen = <String>{};
     for (final r in rows) {
+      // 收集账本
+      final ledgerLabel = r.ledgerLabel;
+      if (ledgerLabel.isNotEmpty && !ledgerSeen.contains(ledgerLabel)) {
+        ledgerSeen.add(ledgerLabel);
+        final ledgerName = stripLedgerEmoji(ledgerLabel);
+        var found = false;
+        for (final l in ledgers) {
+          if (l.name == ledgerName) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          // 只有在账本标签非空且本地不存在时才创建
+          newLedgerSpecs.add(_NewLedgerSpec(name: ledgerName));
+        }
+      }
+
+      // 收集分类
       final cat = r.categoryName;
       if (cat != null && cat.isNotEmpty && !categorySeen.contains(cat)) {
         categorySeen.add(cat);
@@ -705,6 +759,8 @@ class BackupImportService {
           ));
         }
       }
+
+      // 收集账户
       for (final acc in [r.accountName, r.toAccountName]) {
         if (acc == null || acc.isEmpty || accountSeen.contains(acc)) continue;
         accountSeen.add(acc);
@@ -719,6 +775,7 @@ class BackupImportService {
     }
 
     final unresolvedLabels = <String>{};
+    var ledgersCreated = 0;
     var transactionsWritten = 0;
     var categoriesCreated = 0;
     var accountsCreated = 0;
@@ -726,6 +783,34 @@ class BackupImportService {
     final nowMs = now.millisecondsSinceEpoch;
 
     await db.transaction(() async {
+      // ── 新建账本 ──
+      for (final spec in newLedgerSpecs) {
+        final ledgerId = _uuid.v4();
+        final newLedger = Ledger(
+          id: ledgerId,
+          name: spec.name,
+          coverEmoji: null,
+          defaultCurrency: 'CNY',
+          archived: false,
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
+          deviceId: currentDeviceId,
+        );
+        await db.into(db.ledgerTable).insert(ledgerToCompanion(newLedger));
+        // 写 sync_op
+        await db.syncOpDao.enqueue(
+          entity: 'ledger',
+          entityId: ledgerId,
+          op: 'upsert',
+          payload: jsonEncode(newLedger.toJson()),
+          enqueuedAt: nowMs,
+        );
+        ledgersCreated++;
+      }
+      // 刷新账本列表
+      ledgers = await db.ledgerDao.listActive();
+
       // ── 新建 / 复活分类 ──
       for (final spec in newCategorySpecs) {
         String entityId;
@@ -813,18 +898,26 @@ class BackupImportService {
 
       // ── 第二遍:写流水(刷新后的缓存 resolve id)──
       String? resolveLedgerId(String label) {
+        // 如果标签为空，返回 null（将使用 fallback）
+        if (label.trim().isEmpty) return null;
+
         final name = stripLedgerEmoji(label);
         for (final l in ledgers) {
           if (l.name == name) return l.id;
         }
+        // 理论上不应该走到这里，因为第一遍已经创建了所有账本
         return null;
       }
 
       for (final row in rows) {
         var ledgerId = resolveLedgerId(row.ledgerLabel);
         if (ledgerId == null) {
+          // 账本标签为空或解析失败，使用 fallback
           ledgerId = fallbackLedgerId;
-          unresolvedLabels.add(row.ledgerLabel);
+          if (row.ledgerLabel.trim().isNotEmpty) {
+            // 只有非空标签解析失败时才记录为 unresolved
+            unresolvedLabels.add(row.ledgerLabel);
+          }
         }
         String? categoryId;
         if (row.categoryName != null) {
@@ -862,6 +955,7 @@ class BackupImportService {
     });
 
     return BackupImportResult(
+      ledgersWritten: ledgersCreated,
       transactionsWritten: transactionsWritten,
       categoriesCreated: categoriesCreated,
       accountsCreated: accountsCreated,
@@ -955,7 +1049,17 @@ class BackupImportService {
       // 尝试兼容
     }
     try {
+      return DateFormat('yyyy/MM/dd HH:mm').parseStrict(s);
+    } on FormatException {
+      // 尝试兼容
+    }
+    try {
       return DateFormat('yyyy-MM-dd').parseStrict(s);
+    } on FormatException {
+      // 尝试兼容
+    }
+    try {
+      return DateFormat('yyyy/MM/dd').parseStrict(s);
     } on FormatException {
       throw FormatException('日期格式不识别（期望 yyyy-MM-dd HH:mm）：$s');
     }
@@ -991,6 +1095,18 @@ class BackupImportService {
         return type;
     }
   }
+}
+
+/// CSV apply 第一遍扫描时收集的"待新建账本"规格。
+class _NewLedgerSpec {
+  _NewLedgerSpec({required this.name});
+  final String name;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _NewLedgerSpec && other.name == name;
+  @override
+  int get hashCode => name.hashCode;
 }
 
 /// CSV apply 第一遍扫描时收集的"待新建二级分类"规格。
@@ -1033,7 +1149,8 @@ const List<String> _kBackupCsvHeader = <String>[
   '类型',
   '金额',
   '币种',
-  '分类',
+  '一级分类',
+  '二级分类',
   '账户',
   '转入账户',
   '备注',

@@ -25,7 +25,14 @@
       "Bash(python -c ' *)",
       "Bash(dart --version)",
       "Bash(grep -v '//')",
-      "Bash(grep -v '^\\\\s*//')"
+      "Bash(grep -v '^\\\\s*//')",
+      "Bash(grep -v \"^$\")",
+      "Bash(dart -e ' *)",
+      "Bash(dart analyze *)",
+      "Bash(cd \"D:\\\\\\\\Projects\\\\\\\\bianbianbianbian\")",
+      "Bash(python *)",
+      "Bash(node *)",
+      "Bash(git rm *)"
     ]
   }
 }

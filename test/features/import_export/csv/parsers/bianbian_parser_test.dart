@@ -6,7 +6,7 @@ void main() {
 
   test('10 列严匹配 — parseRow 返回非空', () {
     final rows = [
-      ['账本', '日期', '类型', '金额', '币种', '一级分类', '分类', '账户', '转入账户', '备注'],
+      ['账本', '日期', '类型', '金额', '币种', '一级分类', '二级分类', '账户', '转入账户', '备注'],
       ['📒 生活', '2026-01-01 12:00', '支出', '10.00', 'CNY', '饮食', '早餐', '现金', '', '吃饭'],
     ];
     expect(parser.validateBillType(rows), true);
@@ -19,21 +19,6 @@ void main() {
     expect(row!.primaryCategoryName, '饮食');
     expect(row.categoryName, '早餐');
     expect(row.accountName, '现金');
-  });
-
-  test('旧 9 列兼容(无一级分类列)', () {
-    final rows = [
-      ['账本', '日期', '类型', '金额', '币种', '分类', '账户', '转入账户', '备注'],
-      ['生活', '2026-01-01 12:00', '支出', '10.00', 'CNY', '早餐', '现金', '', '吃饭'],
-    ];
-    expect(parser.validateBillType(rows), true);
-    final mapping = parser.mapColumns(rows[0]);
-    expect(mapping['primary_category'], isNull); // 9 列无 primary_category
-    expect(mapping['category'], 5);
-    final row = parser.parseRow(rows[1], mapping);
-    expect(row, isNotNull);
-    expect(row!.primaryCategoryName, isNull);
-    expect(row.categoryName, '早餐');
   });
 
   test('非本 App header 不匹配', () {

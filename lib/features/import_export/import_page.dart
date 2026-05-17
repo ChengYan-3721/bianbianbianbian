@@ -9,6 +9,8 @@ import '../../core/l10n/l10n_ext.dart';
 import '../../core/crypto/bianbian_crypto.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart';
+import '../ledger/ledger_list_page.dart';
+import '../ledger/ledger_providers.dart';
 import 'bbbak_codec.dart';
 import 'import_service.dart';
 
@@ -280,6 +282,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
         bytes: bytes,
         fileType: type,
         password: password,
+        db: ref.read(local.appDatabaseProvider),
       );
       setState(() {
         _preview = preview;
@@ -306,120 +309,130 @@ class _ImportPageState extends ConsumerState<ImportPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
+        Expanded(
+          child: SingleChildScrollView(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _SummaryRow(
-                  icon: Icons.description_outlined,
-                  label: context.l10n.importFileLabel,
-                  value: '${_pickedFile?.name ?? ""}'
-                      ' · ${_typeLabel(preview.fileType)}',
-                ),
-                if (isThirdParty)
-                  _SummaryRow(
-                    icon: Icons.auto_awesome,
-                    label: context.l10n.importRecognizedAs,
-                    value: preview.parserDisplayName!,
-                  ),
-                _SummaryRow(
-                  icon: Icons.menu_book_outlined,
-                  label: context.l10n.importLedgerCount,
-                  value: '${preview.ledgerCount}',
-                ),
-                _SummaryRow(
-                  icon: Icons.list_alt,
-                  label: context.l10n.importTxCount,
-                  value: '${preview.transactionCount}',
-                ),
-                if (isThirdParty &&
-                    (preview.newCategoryCount > 0 ||
-                        preview.newAccountCount > 0))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '检测到 ${preview.newCategoryCount} 个本地不存在的分类 + '
-                      '${preview.newAccountCount} 个本地不存在的账户,导入时会自动创建。'
-                      '分类按「一级分类」列归类,无法判断的归到「其他」;'
-                      '账户以 type=其他 创建。',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.tertiary,
-                      ),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SummaryRow(
+                          icon: Icons.description_outlined,
+                          label: context.l10n.importFileLabel,
+                          value: '${_pickedFile?.name ?? ""}'
+                              ' · ${_typeLabel(preview.fileType)}',
+                        ),
+                        if (isThirdParty)
+                          _SummaryRow(
+                            icon: Icons.auto_awesome,
+                            label: context.l10n.importRecognizedAs,
+                            value: preview.parserDisplayName!,
+                          ),
+                        _SummaryRow(
+                          icon: Icons.menu_book_outlined,
+                          label: context.l10n.importLedgerCount,
+                          value: '${preview.ledgerCount}',
+                        ),
+                        _SummaryRow(
+                          icon: Icons.list_alt,
+                          label: context.l10n.importTxCount,
+                          value: '${preview.transactionCount}',
+                        ),
+                        if (isThirdParty &&
+                            (preview.newCategoryCount > 0 ||
+                                preview.newAccountCount > 0))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              '检测到 ${preview.newCategoryCount} 个本地不存在的分类 + '
+                              '${preview.newAccountCount} 个本地不存在的账户,导入时会自动创建。'
+                              '分类按「一级分类」列归类,无法判断的归到「其他」;'
+                              '账户以 type=其他 创建。',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.tertiary,
+                              ),
+                            ),
+                          ),
+                        if (preview.exportedAt != null)
+                          _SummaryRow(
+                            icon: Icons.schedule,
+                            label: context.l10n.importExportTime,
+                            value: preview.exportedAt!.toLocal().toString(),
+                          ),
+                        if (preview.sourceDeviceId != null)
+                          _SummaryRow(
+                            icon: Icons.devices_other,
+                            label: context.l10n.importSourceDevice,
+                            value: preview.sourceDeviceId!,
+                          ),
+                      ],
                     ),
                   ),
-                if (preview.exportedAt != null)
-                  _SummaryRow(
-                    icon: Icons.schedule,
-                    label: context.l10n.importExportTime,
-                    value: preview.exportedAt!.toLocal().toString(),
+                ),
+                const SizedBox(height: 12),
+                if (isCsv && preview.csvHeader != null)
+                  _buildAdvancedMappingTile(context, preview),
+                Text(context.l10n.importSampleRows(preview.sampleRows.length), style: theme.textTheme.titleSmall),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 240,
+                  child: Card(
+                    child: preview.sampleRows.isEmpty
+                        ? Center(child: Text(context.l10n.importNoTxInBackup))
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(8),
+                            itemCount: preview.sampleRows.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1, thickness: 0.5),
+                            itemBuilder: (context, i) =>
+                                _PreviewRowTile(row: preview.sampleRows[i]),
+                          ),
                   ),
-                if (preview.sourceDeviceId != null)
-                  _SummaryRow(
-                    icon: Icons.devices_other,
-                    label: context.l10n.importSourceDevice,
-                    value: preview.sourceDeviceId!,
+                ),
+                const SizedBox(height: 12),
+                Text(context.l10n.importDedupStrategy, style: theme.textTheme.titleSmall),
+                const SizedBox(height: 4),
+                if (isCsv)
+                  Text(
+                    isThirdParty
+                        ? context.l10n.importCsvThirdPartyDesc
+                        : context.l10n.importCsvNoIdDesc,
+                    style: theme.textTheme.bodySmall,
+                  )
+                else
+                  Column(
+                    children: [
+                      _StrategyTile(
+                        value: BackupDedupeStrategy.skip,
+                        groupValue: _strategy,
+                        title: context.l10n.importDedupSkip,
+                        subtitle: context.l10n.importDedupSkipDesc,
+                        onChanged: (v) => setState(() => _strategy = v!),
+                      ),
+                      _StrategyTile(
+                        value: BackupDedupeStrategy.overwrite,
+                        groupValue: _strategy,
+                        title: context.l10n.importDedupOverwrite,
+                        subtitle: context.l10n.importDedupOverwriteDesc,
+                        onChanged: (v) => setState(() => _strategy = v!),
+                      ),
+                      _StrategyTile(
+                        value: BackupDedupeStrategy.asNew,
+                        groupValue: _strategy,
+                        title: context.l10n.importDedupAllNew,
+                        subtitle: context.l10n.importDedupAllNewDesc,
+                        onChanged: (v) => setState(() => _strategy = v!),
+                      ),
+                    ],
                   ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        if (isCsv && preview.csvHeader != null)
-          _buildAdvancedMappingTile(context, preview),
-        Text(context.l10n.importSampleRows(preview.sampleRows.length), style: theme.textTheme.titleSmall),
-        const SizedBox(height: 8),
-        Expanded(
-          child: Card(
-            child: preview.sampleRows.isEmpty
-                ? Center(child: Text(context.l10n.importNoTxInBackup))
-                : ListView.separated(
-                    padding: const EdgeInsets.all(8),
-                    itemCount: preview.sampleRows.length,
-                    separatorBuilder: (_, _) =>
-                        const Divider(height: 1, thickness: 0.5),
-                    itemBuilder: (context, i) =>
-                        _PreviewRowTile(row: preview.sampleRows[i]),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(context.l10n.importDedupStrategy, style: theme.textTheme.titleSmall),
-        const SizedBox(height: 4),
-        if (isCsv)
-          Text(
-            isThirdParty
-                ? context.l10n.importCsvThirdPartyDesc
-                : context.l10n.importCsvNoIdDesc,
-            style: theme.textTheme.bodySmall,
-          )
-        else
-          Column(
-            children: [
-              _StrategyTile(
-                value: BackupDedupeStrategy.skip,
-                groupValue: _strategy,
-                title: context.l10n.importDedupSkip,
-                subtitle: context.l10n.importDedupSkipDesc,
-                onChanged: (v) => setState(() => _strategy = v!),
-              ),
-              _StrategyTile(
-                value: BackupDedupeStrategy.overwrite,
-                groupValue: _strategy,
-                title: context.l10n.importDedupOverwrite,
-                subtitle: context.l10n.importDedupOverwriteDesc,
-                onChanged: (v) => setState(() => _strategy = v!),
-              ),
-              _StrategyTile(
-                value: BackupDedupeStrategy.asNew,
-                groupValue: _strategy,
-                title: context.l10n.importDedupAllNew,
-                subtitle: context.l10n.importDedupAllNewDesc,
-                onChanged: (v) => setState(() => _strategy = v!),
-              ),
-            ],
-          ),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -480,6 +493,9 @@ class _ImportPageState extends ConsumerState<ImportPage> {
     // 仅在 mounted 时调用——cleanup 时该 ref 已 disposed。
     if (!mounted) return;
     ref.invalidate(currentLedgerIdProvider);
+    // 导入可能创建新账本，需要刷新账本列表和流水计数
+    ref.invalidate(ledgerGroupsProvider);
+    ref.invalidate(ledgerTxCountsProvider);
   }
 
   // ─── Stage 4: done ────────────────────────────────────────────────────
@@ -487,6 +503,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   Widget _buildDone(BuildContext context) {
     final theme = Theme.of(context);
     final r = _result!;
+    final isCsvImport = _preview?.fileType == BackupImportFileType.csv;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -526,12 +543,16 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                 ),
                 _SummaryRow(
                   icon: Icons.category_outlined,
-                  label: context.l10n.importCategoryUpsert(r.categoriesWritten),
+                  label: isCsvImport
+                      ? context.l10n.importCategoryCreated(r.categoriesCreated)
+                      : context.l10n.importCategoryUpsert(r.categoriesWritten),
                   value: '',
                 ),
                 _SummaryRow(
                   icon: Icons.account_balance_wallet_outlined,
-                  label: context.l10n.importAccountUpsert(r.accountsWritten),
+                  label: isCsvImport
+                      ? context.l10n.importAccountCreated(r.accountsCreated)
+                      : context.l10n.importAccountUpsert(r.accountsWritten),
                   value: '',
                 ),
                 _SummaryRow(
@@ -706,23 +727,24 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   }
 
   List<DropdownMenuItem<String?>> _fieldKeyOptions() {
-    const fieldKeys = [
-      'date',
-      'type',
-      'amount',
-      'currency',
-      'primary_category',
-      'category',
-      'account',
-      'from_account',
-      'to_account',
-      'note',
-      'status',
+    const fieldKeyLabels = <(String, String)>[
+      ('ledger', '账本'),
+      ('date', '日期'),
+      ('type', '类型(收支)'),
+      ('amount', '金额'),
+      ('currency', '币种'),
+      ('primary_category', '一级分类'),
+      ('category', '二级分类'),
+      ('account', '账户'),
+      ('from_account', '转出账户'),
+      ('to_account', '转入账户'),
+      ('note', '备注'),
+      ('status', '状态'),
     ];
     return [
       const DropdownMenuItem<String?>(value: null, child: Text('(忽略)')),
-      for (final k in fieldKeys)
-        DropdownMenuItem<String?>(value: k, child: Text(k)),
+      for (final (key, label) in fieldKeyLabels)
+        DropdownMenuItem<String?>(value: key, child: Text(label)),
     ];
   }
 
@@ -738,6 +760,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
         bytes: bytes,
         fileType: BackupImportFileType.csv,
         overrideColumnMapping: mapping,
+        db: ref.read(local.appDatabaseProvider),
       );
       setState(() {
         _preview = preview;
@@ -836,28 +859,36 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.tertiary,
+    );
+    final hasValue = value.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Icon(icon, size: 18, color: theme.colorScheme.tertiary),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.tertiary,
+          if (hasValue) ...[
+            SizedBox(
+              width: 80,
+              child: Text(label, style: labelStyle),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                style: theme.textTheme.bodyMedium,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.bodyMedium,
-              overflow: TextOverflow.ellipsis,
+          ] else
+            Expanded(
+              child: Text(
+                label,
+                style: labelStyle,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
         ],
       ),
     );

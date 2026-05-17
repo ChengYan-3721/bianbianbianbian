@@ -538,7 +538,7 @@ void main() {
 
   group('CSV 10-col preview (Step 13.5)', () {
     test('本 App 10 列 CSV → parserId=bianbian', () async {
-      final csv = '﻿账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注\n'
+      final csv = '﻿账本,日期,类型,金额,币种,一级分类,二级分类,账户,转入账户,备注\n'
           '生活,2026-01-01 12:00,支出,10.00,CNY,饮食,早餐,现金,,午饭\n';
       final service = BackupImportService();
       final preview = await service.preview(
@@ -553,7 +553,7 @@ void main() {
       expect(preview.columnMapping, isNotNull);
     });
 
-    test('旧 9 列 CSV → 仍走 bianbian(向后兼容)', () async {
+    test('旧 9 列 CSV → 走 generic(向后兼容)', () async {
       final csv = '﻿账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
           '生活,2026-01-01 12:00,支出,10.00,CNY,早餐,现金,,午饭\n';
       final service = BackupImportService();
@@ -561,8 +561,9 @@ void main() {
         bytes: Uint8List.fromList(utf8.encode(csv)),
         fileType: BackupImportFileType.csv,
       );
-      expect(preview.parserId, 'bianbian');
+      expect(preview.parserId, 'generic');
       expect(preview.csvRows!.first.primaryCategoryName, isNull);
+      expect(preview.csvRows!.first.ledgerLabel, '生活');  // 账本列被正确解析
     });
   });
 
@@ -621,7 +622,9 @@ void main() {
         fallbackLedgerId: 'L2',
       );
       expect(result.transactionsWritten, 2);
-      expect(result.unresolvedLedgerLabels, contains('不存在的账本'));
+      // 账本不存在时会自动创建，不再记录为 unresolved
+      expect(result.unresolvedLedgerLabels, isEmpty);
+      expect(result.ledgersWritten, 1);  // 不存在的账本 auto-created
       expect(result.categoriesCreated, 1);  // 不存在的分类 auto-created
       expect(result.accountsCreated, 1);    // 不存在的账户 auto-created
       final rows = await db.select(db.transactionEntryTable).get();
@@ -632,9 +635,9 @@ void main() {
       expect(r1.categoryId, 'cat-1');
       expect(r1.accountId, 'acc-1');
       expect(r1.deviceId, 'imp-dev');
-      // 第二行落在 L2 fallback / 分类 + 账户被 auto-created
+      // 第二行落在新创建的账本 / 分类 + 账户被 auto-created
       final r2 = rows.firstWhere((r) => r.amount == 8.0);
-      expect(r2.ledgerId, 'L2');
+      expect(r2.ledgerId, isNot('L2'));  // 不是 fallback，而是新创建的账本
       expect(r2.categoryId, isNotNull);  // 自动创建，非 null
       expect(r2.accountId, isNotNull);   // 自动创建，非 null
     });

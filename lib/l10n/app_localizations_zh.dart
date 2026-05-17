@@ -1506,17 +1506,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String importLedgerUpsert(int count) {
-    return '账本 $count 条 upsert';
+    return '账本 $count 条新增/更新';
   }
 
   @override
   String importCategoryUpsert(int count) {
-    return '分类 $count 条 upsert';
+    return '分类 $count 条新增/更新';
   }
 
   @override
   String importAccountUpsert(int count) {
-    return '账户 $count 条 upsert';
+    return '账户 $count 条新增/更新';
+  }
+
+  @override
+  String importCategoryCreated(int count) {
+    return '新增分类 $count 条';
+  }
+
+  @override
+  String importAccountCreated(int count) {
+    return '新增账户 $count 条';
   }
 
   @override
@@ -1526,7 +1536,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String importBudgetUpsert(int count) {
-    return '预算 $count 条 upsert';
+    return '预算 $count 条新增/更新';
   }
 
   @override

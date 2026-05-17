@@ -194,7 +194,7 @@ void main() {
       expect(csv.startsWith('\uFEFF'), isTrue);
       final header = csv.split('\n').first;
       expect(header,
-          '\uFEFF账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注');
+          '\uFEFF账本,日期,类型,金额,币种,一级分类,二级分类,账户,转入账户,备注');
     });
 
     test('writes ledger label with cover emoji + name', () {

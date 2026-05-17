@@ -892,7 +892,7 @@
       }
     }
   },
-  "importLedgerUpsert": "账本 {count} 条 upsert",
+  "importLedgerUpsert": "账本 {count} 条新增/更新",
   "@importLedgerUpsert": {
     "placeholders": {
       "count": {
@@ -900,7 +900,7 @@
       }
     }
   },
-  "importCategoryUpsert": "分类 {count} 条 upsert",
+  "importCategoryUpsert": "分类 {count} 条新增/更新",
   "@importCategoryUpsert": {
     "placeholders": {
       "count": {
@@ -908,8 +908,24 @@
       }
     }
   },
-  "importAccountUpsert": "账户 {count} 条 upsert",
+  "importAccountUpsert": "账户 {count} 条新增/更新",
   "@importAccountUpsert": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importCategoryCreated": "新增分类 {count} 条",
+  "@importCategoryCreated": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "importAccountCreated": "新增账户 {count} 条",
+  "@importAccountCreated": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -927,7 +943,7 @@
       }
     }
   },
-  "importBudgetUpsert": "预算 {count} 条 upsert",
+  "importBudgetUpsert": "预算 {count} 条新增/更新",
   "@importBudgetUpsert": {
     "placeholders": {
       "count": {

@@ -2641,19 +2641,19 @@ abstract class AppLocalizations {
   /// No description provided for @importCsvDesc.
   ///
   /// In zh, this message translates to:
-  /// **'CSV：本 App 导出的表格（按账本名匹配）'**
+  /// **'CSV：本 App 导出的表格（10 列，含一级分类）'**
   String get importCsvDesc;
 
   /// No description provided for @importThirdPartyDesc.
   ///
   /// In zh, this message translates to:
-  /// **'第三方账单：钱迹 / 微信 / 支付宝 CSV（自动识别）'**
+  /// **'第三方账单：微信 / 支付宝 / 钱迹 + 任意带中文表头 CSV（自动识别）'**
   String get importThirdPartyDesc;
 
   /// No description provided for @importThirdPartyTip.
   ///
   /// In zh, this message translates to:
-  /// **'提示：第三方账单会被识别为单一账本，自动归入当前账本；分类按关键词推测，不能命中的归到「其他」。'**
+  /// **'提示：不存在的分类 / 账户会自动创建。分类按「一级分类」列归类，无法判断的归到「其他」；账户以 type=其他 创建。'**
   String get importThirdPartyTip;
 
   /// No description provided for @importSelectFile.
@@ -2749,7 +2749,7 @@ abstract class AppLocalizations {
   /// No description provided for @importUnmappedCategoryTip.
   ///
   /// In zh, this message translates to:
-  /// **'其中 {count} 条按关键词未匹配到本地分类，已归入「其他」。'**
+  /// **'其中 {count} 个分类本地不存在，导入时会自动创建；无法判断「一级分类」的归到「其他」。'**
   String importUnmappedCategoryTip(int count);
 
   /// No description provided for @importExportTime.
@@ -2845,20 +2845,32 @@ abstract class AppLocalizations {
   /// No description provided for @importLedgerUpsert.
   ///
   /// In zh, this message translates to:
-  /// **'账本 {count} 条 upsert'**
+  /// **'账本 {count} 条新增/更新'**
   String importLedgerUpsert(int count);
 
   /// No description provided for @importCategoryUpsert.
   ///
   /// In zh, this message translates to:
-  /// **'分类 {count} 条 upsert'**
+  /// **'分类 {count} 条新增/更新'**
   String importCategoryUpsert(int count);
 
   /// No description provided for @importAccountUpsert.
   ///
   /// In zh, this message translates to:
-  /// **'账户 {count} 条 upsert'**
+  /// **'账户 {count} 条新增/更新'**
   String importAccountUpsert(int count);
+
+  /// No description provided for @importCategoryCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增分类 {count} 条'**
+  String importCategoryCreated(int count);
+
+  /// No description provided for @importAccountCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增账户 {count} 条'**
+  String importAccountCreated(int count);
 
   /// No description provided for @importTxWrite.
   ///
@@ -2869,7 +2881,7 @@ abstract class AppLocalizations {
   /// No description provided for @importBudgetUpsert.
   ///
   /// In zh, this message translates to:
-  /// **'预算 {count} 条 upsert'**
+  /// **'预算 {count} 条新增/更新'**
   String importBudgetUpsert(int count);
 
   /// No description provided for @importLedgerNotMatched.
@@ -4247,13 +4259,13 @@ abstract class AppLocalizations {
   /// No description provided for @importCsvThirdPartyDesc.
   ///
   /// In zh, this message translates to:
-  /// **'第三方账单不含本 App 的 ID，会作为「全部新记录」导入；账本归入当前账本，账户列若与现有账户同名会被关联，否则置空。'**
+  /// **'CSV 不含本 App 的 ID，作为「全部新记录」导入；账本归入当前账本；分类与账户列若与本地已有同名则关联，否则自动新建。'**
   String get importCsvThirdPartyDesc;
 
   /// No description provided for @importCsvNoIdDesc.
   ///
   /// In zh, this message translates to:
-  /// **'CSV 文件不含 ID，只能作为「全部新记录」导入；账本/分类/账户按名称匹配，匹配不到时归到当前账本，分类/账户列空。'**
+  /// **'CSV 不含本 App 的 ID，作为「全部新记录」导入；账本归入当前账本；分类与账户列若与本地已有同名则关联，否则自动新建。'**
   String get importCsvNoIdDesc;
 
   /// No description provided for @pinUnlockSubtitle.

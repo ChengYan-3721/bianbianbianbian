@@ -91,8 +91,11 @@ class GenericBillParser extends BillParser {
     final type = _typeFromAnyLabel(typeRaw);
     if (type == null) return null;
 
+    // 如果 CSV 中有账本列，使用其值；否则使用 displayName
+    final ledgerLabel = getBy('ledger') ?? displayName;
+
     return BackupImportCsvRow(
-      ledgerLabel: displayName,
+      ledgerLabel: ledgerLabel,
       occurredAt: occurredAt,
       type: type,
       amount: amount.abs(),
@@ -171,6 +174,9 @@ class GenericBillParser extends BillParser {
 
     // 中文(顺序敏感子串匹配)
     // 优先识别复合词,再处理短词
+    if (_containsAny(s, ['账本'])) {
+      return 'ledger';
+    }
     if (_containsAny(s, ['一级分类', '父分类', '主分类'])) {
       return 'primary_category';
     }
@@ -211,7 +217,7 @@ class GenericBillParser extends BillParser {
 
     // 明确忽略
     if (_containsAny(s, ['账目编号', '编号', '单号', '流水号', '交易号',
-        '相关图片', '图片', '交易单号', '订单号', '账本'])) {
+        '相关图片', '图片', '交易单号', '订单号'])) {
       return null;
     }
 

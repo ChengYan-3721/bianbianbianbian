@@ -1,10 +1,9 @@
 import '../../import_service.dart' show BackupImportCsvRow;
 import 'generic_parser.dart';
 
-/// 本 App 自有 CSV 格式(10 列严匹配 + 旧 9 列向后兼容)。
+/// 本 App 自有 CSV 格式(10 列严匹配)。
 ///
-/// 10 列:`账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注`(Step 13.5)
-/// 9  列:`账本,日期,类型,金额,币种,分类,账户,转入账户,备注`           (Step 13.1)
+/// 10 列:`账本,日期,类型,金额,币种,一级分类,二级分类,账户,转入账户,备注`(Step 13.5)
 class BianbianBillParser extends GenericBillParser {
   const BianbianBillParser();
 
@@ -16,11 +15,7 @@ class BianbianBillParser extends GenericBillParser {
   String get displayName => '本 App';
 
   static const List<String> _header10 = [
-    '账本', '日期', '类型', '金额', '币种', '一级分类', '分类',
-    '账户', '转入账户', '备注',
-  ];
-  static const List<String> _header9 = [
-    '账本', '日期', '类型', '金额', '币种', '分类',
+    '账本', '日期', '类型', '金额', '币种', '一级分类', '二级分类',
     '账户', '转入账户', '备注',
   ];
 
@@ -28,7 +23,7 @@ class BianbianBillParser extends GenericBillParser {
   bool validateBillType(List<List<String>> rows) {
     if (rows.isEmpty) return false;
     final h = rows.first.map((c) => c.trim()).toList();
-    return _matches(h, _header10) || _matches(h, _header9);
+    return _matches(h, _header10);
   }
 
   static bool _matches(List<String> actual, List<String> expected) {
@@ -57,19 +52,6 @@ class BianbianBillParser extends GenericBillParser {
         'account': 7,
         'to_account': 8,
         'note': 9,
-      };
-    }
-    if (_matches(h, _header9)) {
-      return {
-        'ledger': 0,
-        'date': 1,
-        'type': 2,
-        'amount': 3,
-        'currency': 4,
-        'category': 5,
-        'account': 6,
-        'to_account': 7,
-        'note': 8,
       };
     }
     return {};

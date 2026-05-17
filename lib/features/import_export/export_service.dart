@@ -102,7 +102,7 @@ const _csvBom = '\uFEFF';
 /// ② 用户合并多份备份到同一文件时不至于丢失账本边界。这与 `stats_export_service`
 /// 的 8 列 CSV 故意不同——那个是 ledger-scoped 的统计视图导出,本文件是跨账本备份。
 ///
-/// Step 13.5 新增「一级分类」列(位于「分类」之前),写入 parent_key 对应中文标签。
+/// Step 13.5 新增「一级分类」列(位于「二级分类」之前),写入 parent_key 对应中文标签。
 // i18n-exempt: CSV column header for V1 Chinese format
 const List<String> _backupCsvHeader = <String>[
   '账本',
@@ -111,7 +111,7 @@ const List<String> _backupCsvHeader = <String>[
   '金额',
   '币种',
   '一级分类',
-  '分类',
+  '二级分类',
   '账户',
   '转入账户',
   '备注',

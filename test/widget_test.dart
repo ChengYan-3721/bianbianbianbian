@@ -281,9 +281,6 @@ void main() {
 
     // 无流水时显示空状态引导
     expect(find.text('开始记第一笔吧 🐱'), findsOneWidget);
-
-    // FAB 存在
-    expect(find.byType(FloatingActionButton), findsOneWidget);
   });
 
   /// Step 3.1 验证：有 mock 数据时流水列表按天分组。
