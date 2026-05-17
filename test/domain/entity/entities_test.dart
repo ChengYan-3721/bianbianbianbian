@@ -53,6 +53,21 @@ void main() {
       expect(renamed.archived, full.archived);
       expect(renamed.createdAt, full.createdAt);
     });
+
+    test('fromJson(toJson(x)) == x （含 coverSvg）', () {
+      final withSvg = Ledger(
+        id: 'ledger-svg',
+        name: '家庭',
+        coverEmoji: '🏠',
+        coverSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+            '<path d="M3 12l9-9 9 9"/></svg>',
+        createdAt: DateTime.utc(2026, 4, 20),
+        updatedAt: DateTime.utc(2026, 4, 20),
+        deviceId: 'device-a',
+      );
+      expect(Ledger.fromJson(withSvg.toJson()), withSvg);
+      expect(withSvg.toJson()['cover_svg'], isNotNull);
+    });
   });
 
   group('Category', () {
@@ -91,6 +106,20 @@ void main() {
       expect(moved.sortOrder, 10);
       expect(moved.parentKey, 'food');
       expect(moved.parentKey, full.parentKey);
+    });
+
+    test('fromJson(toJson(x)) == x （含 iconSvg）', () {
+      final withSvg = Category(
+        id: 'cat-svg',
+        parentKey: 'food',
+        name: '咖啡',
+        icon: '☕',
+        iconSvg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>',
+        updatedAt: DateTime.utc(2026, 4, 21),
+        deviceId: 'device-a',
+      );
+      expect(Category.fromJson(withSvg.toJson()), withSvg);
+      expect(withSvg.toJson()['icon_svg'], isNotNull);
     });
   });
 
@@ -154,6 +183,20 @@ void main() {
       expect(Account.fromJson(partial.toJson()), partial);
       expect(partial.billingDay, 10);
       expect(partial.repaymentDay, isNull);
+    });
+
+    test('fromJson(toJson(x)) == x （含 iconSvg）', () {
+      final withSvg = Account(
+        id: 'acc-svg',
+        name: '支付宝',
+        type: 'third_party',
+        icon: '💰',
+        iconSvg: '<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>',
+        updatedAt: DateTime.utc(2026, 4, 21),
+        deviceId: 'device-a',
+      );
+      expect(Account.fromJson(withSvg.toJson()), withSvg);
+      expect(withSvg.toJson()['icon_svg'], isNotNull);
     });
   });
 
