@@ -3072,7 +3072,7 @@ V1 选择**省略** plan 提到的 `Stream<AttachmentUploadProgress>` 与 `_Sync
 
 - `flutter analyze lib test` → No issues found.
 - `flutter test test/features/import_export/`:`csv/` 子目录约 40 用例 + import_service 30 用例 + export_service 23 用例 + bbbak_codec 若干用例,全部通过。
-- `flutter test`(全量回归)→ Task 22 实测后回填。
+- `flutter test`(全量回归)→ **798 通过 / 1 失败**(失败为 `widget_test.dart`「记账 Tab 无数据时显示空状态引导」FAB 断言失败,经回滚到 13.5 之前确认是**预存失败**,与 CSV 重构无关,不在本 Phase 范畴。本 Phase 净增约 +24 用例)。
 - **用户本机端到端验证(待用户执行,5 项)**:
   1. 微信账单 CSV → 识别为「微信账单」+ 状态过滤生效 + 大量新分类挂到 other。
   2. 支付宝账单 CSV → 识别为「支付宝账单」+ 账户=支付宝。
