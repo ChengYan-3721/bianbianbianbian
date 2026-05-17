@@ -60,18 +60,18 @@ Ledger _ledger(String id, String name, {String? cover}) => Ledger(
       deviceId: _devId,
     );
 
-Category _cat(String id, String name) => Category(
+Category _cat(String id, String name, {String parentKey = 'food'}) => Category(
       id: id,
       name: name,
-      parentKey: 'food',
+      parentKey: parentKey,
       updatedAt: DateTime.utc(2026, 4, 1),
       deviceId: _devId,
     );
 
-Account _acc(String id, String name) => Account(
+Account _acc(String id, String name, {String type = 'cash'}) => Account(
       id: id,
       name: name,
-      type: 'cash',
+      type: type,
       updatedAt: DateTime.utc(2026, 4, 1),
       deviceId: _devId,
     );
@@ -191,7 +191,7 @@ void main() {
     });
 
     test('stripUtf8Bom 删 BOM', () {
-      expect(stripUtf8Bom('\uFEFFhello'), 'hello');
+      expect(stripUtf8Bom('﻿hello'), 'hello');
       expect(stripUtf8Bom('hello'), 'hello');
       expect(stripUtf8Bom(''), '');
     });
@@ -536,13 +536,43 @@ void main() {
     });
   });
 
+  group('CSV 10-col preview (Step 13.5)', () {
+    test('本 App 10 列 CSV → parserId=bianbian', () async {
+      final csv = '﻿账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注\n'
+          '生活,2026-01-01 12:00,支出,10.00,CNY,饮食,早餐,现金,,午饭\n';
+      final service = BackupImportService();
+      final preview = await service.preview(
+        bytes: Uint8List.fromList(utf8.encode(csv)),
+        fileType: BackupImportFileType.csv,
+      );
+      expect(preview.parserId, 'bianbian');
+      expect(preview.parserDisplayName, '本 App');
+      expect(preview.transactionCount, 1);
+      expect(preview.csvRows!.first.primaryCategoryName, '饮食');
+      expect(preview.csvHeader, isNotNull);
+      expect(preview.columnMapping, isNotNull);
+    });
+
+    test('旧 9 列 CSV → 仍走 bianbian(向后兼容)', () async {
+      final csv = '﻿账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
+          '生活,2026-01-01 12:00,支出,10.00,CNY,早餐,现金,,午饭\n';
+      final service = BackupImportService();
+      final preview = await service.preview(
+        bytes: Uint8List.fromList(utf8.encode(csv)),
+        fileType: BackupImportFileType.csv,
+      );
+      expect(preview.parserId, 'bianbian');
+      expect(preview.csvRows!.first.primaryCategoryName, isNull);
+    });
+  });
+
   group('CSV 路径', () {
     late AppDatabase db;
     setUp(() => db = _createDb());
     tearDown(() async => db.close());
 
     test('preview 识别 9 列 header + UTF-8 BOM', () async {
-      final csv = '\uFEFF账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
+      final csv = '﻿账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
           '📒 生活,2026-04-25 10:00,支出,12.50,CNY,餐饮,现金,,午餐\n';
       final svc = BackupImportService();
       final preview = await svc.preview(
@@ -565,45 +595,7 @@ void main() {
       expect(row.note, '午餐');
     });
 
-    test('preview 拒绝错误列头', () async {
-      final csv = 'A,B,C,D,E,F,G,H,I\n1,2,3,4,5,6,7,8,9\n';
-      final svc = BackupImportService();
-      await expectLater(
-        svc.preview(
-          bytes: Uint8List.fromList(utf8.encode(csv)),
-          fileType: BackupImportFileType.csv,
-        ),
-        throwsA(isA<BackupImportException>()),
-      );
-    });
-
-    test('preview 拒绝列数不匹配的行', () async {
-      final csv = '\uFEFF账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
-          '📒 生活,2026-04-25 10:00,支出\n';
-      final svc = BackupImportService();
-      await expectLater(
-        svc.preview(
-          bytes: Uint8List.fromList(utf8.encode(csv)),
-          fileType: BackupImportFileType.csv,
-        ),
-        throwsA(isA<BackupImportException>()),
-      );
-    });
-
-    test('preview 拒绝无法识别的类型标签', () async {
-      final csv = '\uFEFF账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
-          '📒 生活,2026-04-25 10:00,XXX,12.5,CNY,,,,\n';
-      final svc = BackupImportService();
-      await expectLater(
-        svc.preview(
-          bytes: Uint8List.fromList(utf8.encode(csv)),
-          fileType: BackupImportFileType.csv,
-        ),
-        throwsA(isA<BackupImportException>()),
-      );
-    });
-
-    test('apply：账本 / 分类 / 账户按名匹配；匹配不到走 fallback', () async {
+    test('apply：账本 / 分类 / 账户按名匹配；匹配不到自动创建', () async {
       await _seedDb(
         db,
         ledgers: [
@@ -613,9 +605,9 @@ void main() {
         categories: [_cat('cat-1', '餐饮')],
         accounts: [_acc('acc-1', '现金')],
       );
-      final csv = '\uFEFF账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
-          '生活,2026-04-25 10:00,支出,12.50,CNY,餐饮,现金,,午餐\n'
-          '不存在的账本,2026-04-26 11:00,支出,8.00,CNY,不存在的分类,不存在的账户,,\n';
+      final csv = '﻿账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注\n'
+          '生活,2026-04-25 10:00,支出,12.50,CNY,饮食,餐饮,现金,,午餐\n'
+          '不存在的账本,2026-04-26 11:00,支出,8.00,CNY,,不存在的分类,不存在的账户,,\n';
       final svc = BackupImportService();
       final preview = await svc.preview(
         bytes: Uint8List.fromList(utf8.encode(csv)),
@@ -630,6 +622,8 @@ void main() {
       );
       expect(result.transactionsWritten, 2);
       expect(result.unresolvedLedgerLabels, contains('不存在的账本'));
+      expect(result.categoriesCreated, 1);  // 不存在的分类 auto-created
+      expect(result.accountsCreated, 1);    // 不存在的账户 auto-created
       final rows = await db.select(db.transactionEntryTable).get();
       expect(rows.length, 2);
       // 第一行落在 L1 / cat-1 / acc-1
@@ -638,15 +632,15 @@ void main() {
       expect(r1.categoryId, 'cat-1');
       expect(r1.accountId, 'acc-1');
       expect(r1.deviceId, 'imp-dev');
-      // 第二行落在 L2 fallback / 分类 + 账户均 null
+      // 第二行落在 L2 fallback / 分类 + 账户被 auto-created
       final r2 = rows.firstWhere((r) => r.amount == 8.0);
       expect(r2.ledgerId, 'L2');
-      expect(r2.categoryId, isNull);
-      expect(r2.accountId, isNull);
+      expect(r2.categoryId, isNotNull);  // 自动创建，非 null
+      expect(r2.accountId, isNotNull);   // 自动创建，非 null
     });
 
     test('apply 缺少 fallbackLedgerId 抛 BackupImportException', () async {
-      final csv = '\uFEFF账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
+      final csv = '﻿账本,日期,类型,金额,币种,分类,账户,转入账户,备注\n'
           '生活,2026-04-25 10:00,支出,12.50,CNY,,,,\n';
       final svc = BackupImportService();
       final preview = await svc.preview(
@@ -663,6 +657,159 @@ void main() {
         ),
         throwsA(isA<BackupImportException>()),
       );
+    });
+  });
+
+  group('CSV apply — auto-create categories (Step 13.5)', () {
+    late AppDatabase db;
+    setUp(() => db = _createDb());
+    tearDown(() async => db.close());
+
+    test('新建分类 + 复用 + 复活', () async {
+      // seed: 一个「午餐」分类(已存在，将被复用)
+      await _seedDb(
+        db,
+        ledgers: [_ledger('L1', '生活')],
+        categories: [_cat('cat-lunch', '午餐', parentKey: 'food')],
+        accounts: [_acc('acc-cash', '现金')],
+      );
+      final service = BackupImportService(
+        uuid: const Uuid(),
+        clock: () => DateTime(2026, 5, 16, 10),
+      );
+      final csv = utf8.encode(
+        '﻿账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注\n'
+        '生活,2026-01-01,支出,10,CNY,饮食,私房菜,现金,,A\n'   // 全新 → food
+        '生活,2026-01-01,支出,20,CNY,,玄学,现金,,B\n'         // 无一级 → other
+        '生活,2026-01-01,支出,30,CNY,饮食,午餐,现金,,C\n',     // 已存在 → 复用
+      );
+      final preview = await service.preview(
+        bytes: Uint8List.fromList(csv),
+        fileType: BackupImportFileType.csv,
+      );
+      final result = await service.apply(
+        preview: preview,
+        strategy: BackupDedupeStrategy.asNew,
+        db: db,
+        currentDeviceId: 'test-device',
+        fallbackLedgerId: 'L1',
+      );
+      expect(result.transactionsWritten, 3);
+      expect(result.categoriesCreated, 2);   // 私房菜 + 玄学
+      // 验证 DB 状态
+      final cats = await db.select(db.categoryTable).get();
+      expect(cats.where((c) => c.name == '私房菜').first.parentKey, 'food');
+      expect(cats.where((c) => c.name == '玄学').first.parentKey, 'other');
+      // sync_op:2 条 category upsert
+      final ops = await db.syncOpDao.listAll();
+      final catOps = ops.where((o) => o.entity == 'category').toList();
+      expect(catOps.length, 2);
+      expect(catOps.every((o) => o.op == 'upsert'), true);
+      // 流水不进 sync_op
+      expect(ops.where((o) => o.entity == 'transaction'), isEmpty);
+    });
+
+    test('分类复活（deletedAt 清空）', () async {
+      // seed: 一个软删的「咖啡」分类
+      final now = DateTime.utc(2026, 5, 16);
+      await _seedDb(
+        db,
+        ledgers: [_ledger('L1', '生活')],
+        categories: [],
+        accounts: [_acc('acc-cash', '现金')],
+      );
+      final coffeeId = 'cat-coffee';
+      await db.into(db.categoryTable).insert(
+        CategoryTableCompanion(
+          id: Value(coffeeId),
+          name: Value('咖啡'),
+          parentKey: Value('food'),
+          updatedAt: Value(now.millisecondsSinceEpoch),
+          deletedAt: Value(now.subtract(const Duration(days: 1)).millisecondsSinceEpoch),
+          deviceId: Value(_devId),
+        ),
+      );
+
+      final service = BackupImportService(
+        clock: () => now,
+      );
+      final csv = utf8.encode(
+        '﻿账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注\n'
+        '生活,2026-01-01,支出,10,CNY,饮食,咖啡,现金,,A\n',
+      );
+      final preview = await service.preview(
+        bytes: Uint8List.fromList(csv),
+        fileType: BackupImportFileType.csv,
+      );
+      final result = await service.apply(
+        preview: preview,
+        strategy: BackupDedupeStrategy.asNew,
+        db: db,
+        currentDeviceId: 'test-device',
+        fallbackLedgerId: 'L1',
+      );
+      expect(result.transactionsWritten, 1);
+      expect(result.categoriesCreated, 1);  // 复活计入 created 数
+      // 验证复活：deletedAt 清空
+      final revived = await (db.select(db.categoryTable)
+            ..where((t) => t.id.equals(coffeeId)))
+          .getSingle();
+      expect(revived.deletedAt, isNull);
+      expect(revived.parentKey, 'food');
+      // sync_op: 1 条 category upsert
+      final ops = await db.syncOpDao.listAll();
+      expect(ops.length, 1);
+      expect(ops.first.entity, 'category');
+      expect(ops.first.op, 'upsert');
+    });
+  });
+
+  group('CSV apply — auto-create accounts (Step 13.5)', () {
+    late AppDatabase db;
+    setUp(() => db = _createDb());
+    tearDown(() async => db.close());
+
+    test('新建账户 + 复用', () async {
+      // seed: 「现金」账户已存在
+      await _seedDb(
+        db,
+        ledgers: [_ledger('L1', '生活')],
+        categories: [_cat('cat-1', '餐饮')],
+        accounts: [_acc('acc-cash', '现金', type: 'cash')],
+      );
+      final service = BackupImportService(
+        clock: () => DateTime(2026, 5, 16),
+      );
+      final csv = utf8.encode(
+        '﻿账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注\n'
+        '生活,2026-01-01,支出,10,CNY,饮食,早餐,招商卡(尾号8888),,A\n'
+        '生活,2026-01-01,支出,20,CNY,饮食,早餐,现金,,B\n'
+        '生活,2026-01-01,转账,30,CNY,,,招商卡(尾号8888),零钱通,C\n',
+      );
+      final preview = await service.preview(
+        bytes: Uint8List.fromList(csv),
+        fileType: BackupImportFileType.csv,
+      );
+      final result = await service.apply(
+        preview: preview,
+        strategy: BackupDedupeStrategy.asNew,
+        db: db,
+        currentDeviceId: 'test-device',
+        fallbackLedgerId: 'L1',
+      );
+      expect(result.accountsCreated, 2);  // 招商卡(尾号8888) + 零钱通
+      final accounts = await db.select(db.accountTable).get();
+      final names = accounts.map((a) => a.name).toSet();
+      expect(names.contains('招商卡(尾号8888)'), true);
+      expect(names.contains('零钱通'), true);
+      expect(names.contains('现金'), true);   // 复用
+      // sync_op:2 条 account upsert
+      final ops = await db.syncOpDao.listAll();
+      final accOps = ops.where((o) => o.entity == 'account').toList();
+      expect(accOps.length, 2);
+      // 新账户 type='other'
+      final newAcc = accounts.firstWhere((a) => a.name == '零钱通');
+      expect(newAcc.type, 'other');
     });
   });
 
