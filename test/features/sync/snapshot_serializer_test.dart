@@ -60,6 +60,8 @@ LedgerSnapshot _snapshot({
     );
 
 void main() {
+  // LedgerSnapshot 没有覆盖 ==，比较 toJson() 的 Map 结构而非实例本身。
+  // 想换回 expect(decoded, snap) 须先给 LedgerSnapshot 加 == / hashCode。
   group('LedgerSnapshot SVG round-trip', () {
     test('toJson / fromJson 保留 ledger.coverSvg', () {
       const svg = '<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>';
