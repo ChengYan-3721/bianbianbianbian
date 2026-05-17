@@ -4151,12 +4151,12 @@ Navigator operation requested with a context that does not include a Navigator.
 **改动范围**
 
 - **生产代码：0 行**——entity `toJson`/`fromJson` + mapper 已让 JSON / `.bbbak` 导入导出与 `LedgerSnapshotSerializer` 自动把 SVG 字段当普通字段处理；CSV 导出走固定 10 列白名单（`_backupCsvHeader`，不含 SVG），符合需求；CSV 导入按列名解析，亦不读 SVG。整条链路在 entity 层扩展时已天然支持。
-- **测试代码：3 个文件，9 个新用例**：
+- **测试代码：3 个文件，13 个新用例**：
   - `test/domain/entity/entities_test.dart` +43 行（commit `71102fa`）：在 `group('Ledger', ...)` / `group('Category', ...)` / `group('Account', ...)` 各加一条 `fromJson(toJson(x)) == x （含 ...Svg）` 用例，验证 SVG 字段 round-trip + snake_case JSON key 写出。
   - `test/features/sync/snapshot_serializer_test.dart` 新建 +150 行（commits `730fd71` + `40cec63` + `726279b`）：
     - 4 条 `LedgerSnapshot SVG round-trip` 用例（ledger.coverSvg / category.iconSvg / account.iconSvg / `MultiLedgerSnapshot` 包一层）。用 `decoded.toJson() == snap.toJson()` 比较，因为 `LedgerSnapshot` 没覆盖 `==`（文件顶部注释明示，防止后续重构引回 identity-equality bug）。
     - 4 条 `LedgerSnapshotSerializer.fingerprint 对 SVG 变化敏感` 用例：三个 SVG 字段各一条 mutation 测试 + 一条 identity control，锁住"任一 SVG 改动 → 指纹变化 → 触发 push"的契约。
-  - `test/features/import_export/import_service_test.dart` +137 行（commit `a3f0895`）：新增 helper `_ledgerWithSvg` / `_catWithSvg` / `_accWithSvg` 以及一个 `group('SVG 图标 JSON round-trip（Step 14.x）', ...)`，含正反两条用例：① `export → import` 后直接拉 DB 行验证三类实体的 `iconSvg`/`coverSvg` 与原值一致（绕过 mapper 读，确保 mapper 写路径正确）；② null 控制实验——SVG 字段为 null 时 DB 列仍为 null。
+  - `test/features/import_export/import_service_test.dart` +137 行（commit `a3f0895`）：新增 helper `_ledgerWithSvg` / `_catWithSvg` / `_accWithSvg` 以及一个 `group('SVG 图标 JSON round-trip（Step 13.6）', ...)`，含正反两条用例：① `export → import` 后直接拉 DB 行验证三类实体的 `iconSvg`/`coverSvg` 与原值一致（绕过 mapper 读，确保 mapper 写路径正确）；② null 控制实验——SVG 字段为 null 时 DB 列仍为 null。
 
 **验证**
 
