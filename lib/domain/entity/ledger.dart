@@ -20,7 +20,7 @@
 ///
 /// ## JSON 格式
 /// 键名走 snake_case（与设计文档 §7.1 DDL + Supabase 列名一致）：
-/// `id / name / cover_emoji / default_currency / archived / created_at /
+/// `id / name / cover_emoji / cover_svg / default_currency / archived / created_at /
 /// updated_at / deleted_at / device_id`。时间戳统一用 ISO 8601 字符串，
 /// 便于 Phase 10 Supabase 同步直接透传。
 class Ledger {
@@ -28,6 +28,7 @@ class Ledger {
     required this.id,
     required this.name,
     this.coverEmoji,
+    this.coverSvg,
     this.defaultCurrency = 'CNY',
     this.archived = false,
     required this.createdAt,
@@ -39,6 +40,7 @@ class Ledger {
   final String id;
   final String name;
   final String? coverEmoji;
+  final String? coverSvg;
   final String defaultCurrency;
   final bool archived;
   final DateTime createdAt;
@@ -50,6 +52,7 @@ class Ledger {
     String? id,
     String? name,
     String? coverEmoji,
+    String? coverSvg,
     String? defaultCurrency,
     bool? archived,
     DateTime? createdAt,
@@ -61,6 +64,7 @@ class Ledger {
       id: id ?? this.id,
       name: name ?? this.name,
       coverEmoji: coverEmoji ?? this.coverEmoji,
+      coverSvg: coverSvg ?? this.coverSvg,
       defaultCurrency: defaultCurrency ?? this.defaultCurrency,
       archived: archived ?? this.archived,
       createdAt: createdAt ?? this.createdAt,
@@ -74,6 +78,7 @@ class Ledger {
         'id': id,
         'name': name,
         'cover_emoji': coverEmoji,
+        'cover_svg': coverSvg,
         'default_currency': defaultCurrency,
         'archived': archived,
         'created_at': createdAt.toIso8601String(),
@@ -86,6 +91,7 @@ class Ledger {
         id: json['id'] as String,
         name: json['name'] as String,
         coverEmoji: json['cover_emoji'] as String?,
+        coverSvg: json['cover_svg'] as String?,
         defaultCurrency: (json['default_currency'] as String?) ?? 'CNY',
         archived: (json['archived'] as bool?) ?? false,
         createdAt: DateTime.parse(json['created_at'] as String),
@@ -103,6 +109,7 @@ class Ledger {
         other.id == id &&
         other.name == name &&
         other.coverEmoji == coverEmoji &&
+        other.coverSvg == coverSvg &&
         other.defaultCurrency == defaultCurrency &&
         other.archived == archived &&
         other.createdAt == createdAt &&
@@ -116,6 +123,7 @@ class Ledger {
         id,
         name,
         coverEmoji,
+        coverSvg,
         defaultCurrency,
         archived,
         createdAt,
@@ -126,7 +134,7 @@ class Ledger {
 
   @override
   String toString() => 'Ledger(id: $id, name: $name, '
-      'coverEmoji: $coverEmoji, defaultCurrency: $defaultCurrency, '
+      'coverEmoji: $coverEmoji, coverSvg: $coverSvg, defaultCurrency: $defaultCurrency, '
       'archived: $archived, createdAt: $createdAt, updatedAt: $updatedAt, '
       'deletedAt: $deletedAt, deviceId: $deviceId)';
 }

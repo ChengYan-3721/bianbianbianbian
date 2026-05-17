@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
 import '../settings/settings_providers.dart';
@@ -85,7 +86,7 @@ class _FavoriteReorderPageState extends ConsumerState<FavoriteReorderPage> {
                   c.icon, c.parentKey, c.name, iconPack);
               return ListTile(
                 key: ValueKey(c.id),
-                leading: Text(icon, style: const TextStyle(fontSize: 20)),
+                leading: SvgOrEmojiIcon(svgString: c.iconSvg, emoji: icon, size: 20),
                 title: Text(c.name),
                 trailing: ReorderableDragStartListener(
                   index: index,

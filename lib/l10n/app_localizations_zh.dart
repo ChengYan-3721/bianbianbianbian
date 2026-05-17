@@ -585,6 +585,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get recordMonthThisMonth => '本月';
+
+  @override
   String recordMonthMonth(int month) {
     return '$month 月';
   }
@@ -654,6 +657,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get categoryIconEmojiHint => '例如 🍔、🚗、🎁';
+
+  @override
+  String get categoryIconSvg => 'SVG 图标（可选）';
+
+  @override
+  String get categoryIconSvgHint => '粘贴 SVG 代码，例如 <svg>...</svg>';
 
   @override
   String get categoryDuplicateName => '该一级分类下已存在同名分类';
@@ -853,6 +862,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ledgerCoverEmojiHint => '例如 📒、💼、✈️';
 
   @override
+  String get ledgerCoverSvg => '封面 SVG（可选）';
+
+  @override
+  String get ledgerCoverSvgHint => '粘贴 SVG 代码，例如 <svg>...</svg>';
+
+  @override
   String get ledgerDefaultCurrency => '默认币种';
 
   @override
@@ -1006,6 +1021,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountIconEmojiHint => '例如 💰、💳、🏦';
+
+  @override
+  String get accountIconSvg => 'SVG 图标（可选）';
+
+  @override
+  String get accountIconSvgHint => '粘贴 SVG 代码，例如 <svg>...</svg>';
 
   @override
   String get accountInitialBalance => '初始余额';
@@ -2544,4 +2565,57 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get termsOfServiceVersionValue => '1.0（2026-05-14 生效）';
+
+  @override
+  String importCsvNewItemsDetected(int categoryCount, int accountCount) {
+    return '检测到 $categoryCount 个本地不存在的分类 + $accountCount 个本地不存在的账户，导入时会自动创建。分类按「一级分类」列归类，无法判断的归到「其他」；账户以 type=其他 创建。';
+  }
+
+  @override
+  String get importAdvancedMapping => '高级映射（调整列 → 字段）';
+
+  @override
+  String get importAdvancedMappingHint => '解析后列 → 字段映射；改完点「重新预览」生效';
+
+  @override
+  String get importRepreview => '重新预览';
+
+  @override
+  String get importMappingIgnore => '（忽略）';
+
+  @override
+  String get importMappingFieldLedger => '账本';
+
+  @override
+  String get importMappingFieldDate => '日期';
+
+  @override
+  String get importMappingFieldType => '类型（收支）';
+
+  @override
+  String get importMappingFieldAmount => '金额';
+
+  @override
+  String get importMappingFieldCurrency => '币种';
+
+  @override
+  String get importMappingFieldPrimaryCategory => '一级分类';
+
+  @override
+  String get importMappingFieldCategory => '二级分类';
+
+  @override
+  String get importMappingFieldAccount => '账户';
+
+  @override
+  String get importMappingFieldFromAccount => '转出账户';
+
+  @override
+  String get importMappingFieldToAccount => '转入账户';
+
+  @override
+  String get importMappingFieldNote => '备注';
+
+  @override
+  String get importMappingFieldStatus => '状态';
 }

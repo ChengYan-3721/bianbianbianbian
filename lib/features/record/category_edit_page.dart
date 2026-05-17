@@ -14,9 +14,10 @@ import 'record_providers.dart';
 /// 表单字段：
 /// - 名称（必填，trim 后不为空）
 /// - 图标 emoji（可选）
+/// - SVG 图标（可选）
 ///
 /// 新建模式：取 parentKey 下最大 sortOrder + 1。
-/// 编辑模式：保持 id、parentKey、sortOrder、isFavorite 等字段不变，仅更新 name/icon。
+/// 编辑模式：保持 id、parentKey、sortOrder、isFavorite 等字段不变，仅更新 name/icon/iconSvg。
 class CategoryEditPage extends ConsumerStatefulWidget {
   const CategoryEditPage({
     super.key,
@@ -39,6 +40,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _iconController;
+  late final TextEditingController _iconSvgController;
   bool _saving = false;
 
   bool get _isEditing => widget.initialCategory != null;
@@ -57,12 +59,16 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
     _iconController = TextEditingController(
       text: _isEditing ? (widget.initialCategory!.icon ?? '') : '',
     );
+    _iconSvgController = TextEditingController(
+      text: _isEditing ? (widget.initialCategory!.iconSvg ?? '') : '',
+    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _iconController.dispose();
+    _iconSvgController.dispose();
     super.dispose();
   }
 
@@ -113,6 +119,16 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
                   border: const OutlineInputBorder(),
                 ),
               ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _iconSvgController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: context.l10n.categoryIconSvg,
+                  hintText: context.l10n.categoryIconSvgHint,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
             ],
           ),
         ),
@@ -128,6 +144,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
     try {
       final repo = await ref.read(categoryRepositoryProvider.future);
       final iconText = _iconController.text.trim();
+      final iconSvgText = _iconSvgController.text.trim();
       final newName = _nameController.text.trim();
       final parentKey =
           _isEditing ? widget.initialCategory!.parentKey : widget.parentKey!;
@@ -152,6 +169,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
         final updated = widget.initialCategory!.copyWith(
           name: newName,
           icon: iconText.isEmpty ? null : iconText,
+          iconSvg: iconSvgText.isEmpty ? null : iconSvgText,
           updatedAt: DateTime.now(),
         );
         await repo.save(updated);
@@ -164,6 +182,7 @@ class _CategoryEditPageState extends ConsumerState<CategoryEditPage> {
           id: const Uuid().v4(),
           name: newName,
           icon: iconText.isEmpty ? null : iconText,
+          iconSvg: iconSvgText.isEmpty ? null : iconSvgText,
           parentKey: parentKey,
           sortOrder: maxSort + 1,
           isFavorite: false,

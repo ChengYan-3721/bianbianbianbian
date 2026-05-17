@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/local/attachment_meta_codec.dart';
 import '../../data/repository/providers.dart' show transactionRepositoryProvider;
 import '../../domain/entity/attachment_meta.dart';
@@ -58,6 +59,7 @@ class RecordDetailSheet extends ConsumerWidget {
         : (c != null
             ? resolveCategoryIcon(c.icon, c.parentKey, c.name, iconPack)
             : (tx.type == 'income' ? '💰' : '💸'));
+    final iconSvg = tx.type == 'transfer' ? null : c?.iconSvg;
     final name = tx.type == 'transfer' ? context.l10n.txTypeTransfer : (c?.name ?? context.l10n.txTypeUncategorized);
     final attachments = _decodeAttachmentMetas();
     final date =
@@ -81,7 +83,7 @@ class RecordDetailSheet extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Text(icon, style: const TextStyle(fontSize: 22)),
+                SvgOrEmojiIcon(svgString: iconSvg, emoji: icon, size: 22),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(

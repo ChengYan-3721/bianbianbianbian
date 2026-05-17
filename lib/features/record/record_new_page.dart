@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
@@ -535,7 +536,11 @@ class _CategoryGrid extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(resolveCategoryIcon(cat.icon, cat.parentKey, cat.name, iconPack), style: const TextStyle(fontSize: 20)),
+                    SvgOrEmojiIcon(
+                      svgString: cat.iconSvg,
+                      emoji: resolveCategoryIcon(cat.icon, cat.parentKey, cat.name, iconPack),
+                      size: 20,
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       cat.name,
@@ -813,7 +818,11 @@ class _WalletPillButton extends ConsumerWidget {
               children: [
                 for (final a in accounts)
                   ListTile(
-                    leading: Text(a.icon ?? '💳'),
+                    leading: SvgOrEmojiIcon(
+                      svgString: a.iconSvg,
+                      emoji: a.icon ?? '💳',
+                      size: 20,
+                    ),
                     title: Text(a.name),
                     onTap: () {
                       onSelected(a.id);

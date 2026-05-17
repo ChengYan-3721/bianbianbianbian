@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/l10n/l10n_ext.dart';
 
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
@@ -366,6 +367,7 @@ class _TrashCategoriesTab extends ConsumerWidget {
           itemBuilder: (context, i) {
             final c = visible[i];
             return _TrashRow(
+              svgString: c.iconSvg,
               icon: resolveCategoryIcon(
                   c.icon, c.parentKey, c.name, ref.watch(currentIconPackProvider), '🏷️'),
               title: c.name,
@@ -445,6 +447,7 @@ class _TrashAccountsTab extends ConsumerWidget {
           itemBuilder: (context, i) {
             final a = visible[i];
             return _TrashRow(
+              svgString: a.iconSvg,
               icon: a.icon ?? '💳',
               title: a.name,
               subtitle: _accountTypeLabel(context, a.type),
@@ -537,6 +540,7 @@ class _TrashLedgersTab extends ConsumerWidget {
           itemBuilder: (context, i) {
             final l = visible[i];
             return _TrashRow(
+              svgString: l.coverSvg,
               icon: l.coverEmoji ?? '📒',
               title: l.name,
               subtitle: context.l10n.trashLedgerSubtitle,
@@ -610,6 +614,7 @@ class _TrashLedgersTab extends ConsumerWidget {
 
 class _TrashRow extends StatelessWidget {
   const _TrashRow({
+    this.svgString,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -618,6 +623,7 @@ class _TrashRow extends StatelessWidget {
     required this.onPurge,
   });
 
+  final String? svgString;
   final String icon;
   final String title;
   final String subtitle;
@@ -631,7 +637,7 @@ class _TrashRow extends StatelessWidget {
         trashDaysLeft(deletedAt: deletedAt, now: DateTime.now());
     final color = Theme.of(context).colorScheme;
     return ListTile(
-      leading: Text(icon, style: const TextStyle(fontSize: 28)),
+      leading: SvgOrEmojiIcon(svgString: svgString, emoji: icon, size: 28),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

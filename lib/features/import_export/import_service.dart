@@ -692,6 +692,7 @@ class BackupImportService {
       parserId: overrideColumnMapping != null
           ? 'custom'
           : effectiveParser.id,
+      // i18n-exempt: service-layer parser display name, resolved in UI layer
       parserDisplayName: overrideColumnMapping != null
           ? '自定义映射'
           : effectiveParser.displayName,

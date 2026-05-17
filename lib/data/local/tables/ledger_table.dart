@@ -15,6 +15,9 @@ class LedgerTable extends Table {
 
   TextColumn get coverEmoji => text().nullable().named('cover_emoji')();
 
+  /// SVG 封面图标代码。
+  TextColumn get coverSvg => text().nullable().named('cover_svg')();
+
   TextColumn get defaultCurrency => text()
       .named('default_currency')
       .nullable()

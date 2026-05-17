@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/quick_text_parser.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/transaction_entry.dart';
@@ -593,9 +594,10 @@ class _QuickConfirmCardState extends ConsumerState<QuickConfirmCard> {
                     child: selectedCat != null
                         ? Row(
                             children: [
-                              Text(
-                                selectedCat.icon ?? '🏷️',
-                                style: const TextStyle(fontSize: 18),
+                              SvgOrEmojiIcon(
+                                svgString: selectedCat.iconSvg,
+                                emoji: selectedCat.icon ?? '🏷️',
+                                size: 18,
                               ),
                               const SizedBox(width: 6),
                               Expanded(
@@ -788,9 +790,10 @@ class _CategoryPickerList extends StatelessWidget {
                 for (final c in grouped[pk]!)
                   ListTile(
                     key: Key('quick_confirm_picker_${c.id}'),
-                    leading: Text(
-                      c.icon ?? '🏷️',
-                      style: const TextStyle(fontSize: 22),
+                    leading: SvgOrEmojiIcon(
+                      svgString: c.iconSvg,
+                      emoji: c.icon ?? '🏷️',
+                      size: 22,
                     ),
                     title: Text(c.name),
                     trailing: c.id == selectedId

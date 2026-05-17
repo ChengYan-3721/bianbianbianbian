@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../domain/entity/category.dart';
 import '../../domain/entity/transaction_entry.dart';
 import 'category_manage_page.dart' show CategoryManagePage;
@@ -612,6 +613,7 @@ class _ResultTile extends ConsumerWidget {
     final iconText = isTransfer
         ? '🔁'
         : (cat?.icon ?? (isExpense ? '💸' : '💰'));
+    final iconSvg = isTransfer ? null : cat?.iconSvg;
     final name = isTransfer ? context.l10n.txTypeTransfer : (cat?.name ?? context.l10n.txTypeUncategorized);
 
     final acc = tx.accountId == null ? null : data.accountById[tx.accountId!];
@@ -631,7 +633,7 @@ class _ResultTile extends ConsumerWidget {
       contentPadding: const EdgeInsets.symmetric(horizontal: 8),
       leading: CircleAvatar(
         backgroundColor: amountColor.withAlpha(36),
-        child: Text(iconText, style: const TextStyle(fontSize: 16)),
+        child: SvgOrEmojiIcon(svgString: iconSvg, emoji: iconText, size: 16),
       ),
       title: Text(name),
       subtitle: Text(

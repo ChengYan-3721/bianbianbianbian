@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/l10n_ext.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
 import 'category_manage_page.dart';
@@ -108,7 +109,7 @@ class _CategoryReorderPageState extends ConsumerState<CategoryReorderPage> {
                 ),
                 title: Row(
                   children: [
-                    Text(c.icon ?? '📁', style: const TextStyle(fontSize: 20)),
+                    SvgOrEmojiIcon(svgString: c.iconSvg, emoji: c.icon ?? '📁', size: 20),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

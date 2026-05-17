@@ -20,6 +20,7 @@ class Account {
     required this.name,
     required this.type,
     this.icon,
+    this.iconSvg,
     this.color,
     this.initialBalance = 0.0,
     this.includeInTotal = true,
@@ -35,6 +36,7 @@ class Account {
   final String name;
   final String type;
   final String? icon;
+  final String? iconSvg;
   final String? color;
   final double initialBalance;
   final bool includeInTotal;
@@ -50,6 +52,7 @@ class Account {
     String? name,
     String? type,
     String? icon,
+    String? iconSvg,
     String? color,
     double? initialBalance,
     bool? includeInTotal,
@@ -65,6 +68,7 @@ class Account {
       name: name ?? this.name,
       type: type ?? this.type,
       icon: icon ?? this.icon,
+      iconSvg: iconSvg ?? this.iconSvg,
       color: color ?? this.color,
       initialBalance: initialBalance ?? this.initialBalance,
       includeInTotal: includeInTotal ?? this.includeInTotal,
@@ -82,6 +86,7 @@ class Account {
         'name': name,
         'type': type,
         'icon': icon,
+        'icon_svg': iconSvg,
         'color': color,
         'initial_balance': initialBalance,
         'include_in_total': includeInTotal,
@@ -98,6 +103,7 @@ class Account {
         name: json['name'] as String,
         type: json['type'] as String,
         icon: json['icon'] as String?,
+        iconSvg: json['icon_svg'] as String?,
         color: json['color'] as String?,
         initialBalance:
             (json['initial_balance'] as num?)?.toDouble() ?? 0.0,
@@ -120,6 +126,7 @@ class Account {
         other.name == name &&
         other.type == type &&
         other.icon == icon &&
+        other.iconSvg == iconSvg &&
         other.color == color &&
         other.initialBalance == initialBalance &&
         other.includeInTotal == includeInTotal &&
@@ -137,6 +144,7 @@ class Account {
         name,
         type,
         icon,
+        iconSvg,
         color,
         initialBalance,
         includeInTotal,
@@ -151,7 +159,7 @@ class Account {
   @override
   String toString() => 'Account(id: $id, name: $name, type: $type, '
       'initialBalance: $initialBalance, includeInTotal: $includeInTotal, '
-      'currency: $currency, icon: $icon, color: $color, '
+      'currency: $currency, icon: $icon, iconSvg: $iconSvg, color: $color, '
       'billingDay: $billingDay, repaymentDay: $repaymentDay, '
       'updatedAt: $updatedAt, deletedAt: $deletedAt, deviceId: $deviceId)';
 }

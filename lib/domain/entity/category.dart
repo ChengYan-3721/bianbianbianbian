@@ -7,6 +7,7 @@ class Category {
     required this.id,
     required this.name,
     this.icon,
+    this.iconSvg,
     this.color,
     required this.parentKey,
     this.sortOrder = 0,
@@ -19,6 +20,7 @@ class Category {
   final String id;
   final String name;
   final String? icon;
+  final String? iconSvg;
   final String? color;
   final String parentKey;
   final int sortOrder;
@@ -31,6 +33,7 @@ class Category {
     String? id,
     String? name,
     String? icon,
+    String? iconSvg,
     String? color,
     String? parentKey,
     int? sortOrder,
@@ -43,6 +46,7 @@ class Category {
       id: id ?? this.id,
       name: name ?? this.name,
       icon: icon ?? this.icon,
+      iconSvg: iconSvg ?? this.iconSvg,
       color: color ?? this.color,
       parentKey: parentKey ?? this.parentKey,
       sortOrder: sortOrder ?? this.sortOrder,
@@ -57,6 +61,7 @@ class Category {
         'id': id,
         'name': name,
         'icon': icon,
+        'icon_svg': iconSvg,
         'color': color,
         'parent_key': parentKey,
         'sort_order': sortOrder,
@@ -70,6 +75,7 @@ class Category {
         id: json['id'] as String,
         name: json['name'] as String,
         icon: json['icon'] as String?,
+        iconSvg: json['icon_svg'] as String?,
         color: json['color'] as String?,
         parentKey: json['parent_key'] as String,
         sortOrder: (json['sort_order'] as int?) ?? 0,
@@ -88,6 +94,7 @@ class Category {
         other.id == id &&
         other.name == name &&
         other.icon == icon &&
+        other.iconSvg == iconSvg &&
         other.color == color &&
         other.parentKey == parentKey &&
         other.sortOrder == sortOrder &&
@@ -102,6 +109,7 @@ class Category {
         id,
         name,
         icon,
+        iconSvg,
         color,
         parentKey,
         sortOrder,
@@ -114,6 +122,6 @@ class Category {
   @override
   String toString() => 'Category(id: $id, name: $name, '
       'parentKey: $parentKey, sortOrder: $sortOrder, isFavorite: $isFavorite, '
-      'icon: $icon, color: $color, updatedAt: $updatedAt, '
+      'icon: $icon, iconSvg: $iconSvg, color: $color, updatedAt: $updatedAt, '
       'deletedAt: $deletedAt, deviceId: $deviceId)';
 }

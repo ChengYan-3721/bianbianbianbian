@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/category.dart';
 import '../settings/settings_providers.dart';
@@ -367,7 +368,7 @@ class _CategoryRow extends ConsumerWidget {
     final icon = resolveCategoryIcon(
         category.icon, category.parentKey, category.name, iconPack);
     return ListTile(
-      leading: Text(icon, style: const TextStyle(fontSize: 20)),
+      leading: SvgOrEmojiIcon(svgString: category.iconSvg, emoji: icon, size: 20),
       title: Text(category.name),
       trailing: IconButton(
         tooltip: category.isFavorite ? context.l10n.categoryUncollect : context.l10n.categoryCollect,

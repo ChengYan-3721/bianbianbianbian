@@ -84,6 +84,15 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
     Navigator.of(context).pop(DateTime(_selectedYear, _selectedMonth));
   }
 
+  void _jumpToThisMonth() {
+    final now = DateTime.now();
+    setState(() {
+      _displayYear = now.year;
+      _selectedYear = now.year;
+      _selectedMonth = now.month;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -146,6 +155,14 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
         ),
       ),
       actions: [
+        TextButton(
+          key: const Key('month_picker_this_month'),
+          onPressed: _jumpToThisMonth,
+          style: TextButton.styleFrom(
+            foregroundColor: colors.primary,
+          ),
+          child: Text(context.l10n.recordMonthThisMonth),
+        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           style: TextButton.styleFrom(

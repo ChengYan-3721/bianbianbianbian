@@ -22,6 +22,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _iconController = TextEditingController();
+  final _iconSvgController = TextEditingController();
   final _initialBalanceController = TextEditingController();
   final _billingDayController = TextEditingController();
   final _repaymentDayController = TextEditingController();
@@ -64,6 +65,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
     _initialized = true;
     _nameController.text = acc.name;
     _iconController.text = acc.icon ?? '';
+    _iconSvgController.text = acc.iconSvg ?? '';
     _initialBalanceController.text = acc.initialBalance == 0
         ? ''
         : acc.initialBalance.toStringAsFixed(2);
@@ -78,6 +80,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
   void dispose() {
     _nameController.dispose();
     _iconController.dispose();
+    _iconSvgController.dispose();
     _initialBalanceController.dispose();
     _billingDayController.dispose();
     _repaymentDayController.dispose();
@@ -166,6 +169,16 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                     decoration: InputDecoration(
                       labelText: l10n.accountIconEmoji,
                       hintText: l10n.accountIconEmojiHint,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _iconSvgController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: l10n.accountIconSvg,
+                      hintText: l10n.accountIconSvgHint,
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -296,7 +309,9 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
           ? 0.0
           : double.parse(_initialBalanceController.text.trim());
       final iconText = _iconController.text.trim();
+      final iconSvgText = _iconSvgController.text.trim();
       final iconValue = iconText.isEmpty ? null : iconText;
+      final iconSvgValue = iconSvgText.isEmpty ? null : iconSvgText;
       final name = _nameController.text.trim();
 
       final billingDay = _type == 'credit'
@@ -321,6 +336,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
           name: name,
           type: _type,
           icon: iconValue,
+          iconSvg: iconSvgValue,
           color: existing.color,
           initialBalance: balance,
           includeInTotal: _includeInTotal,
@@ -337,6 +353,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
           name: name,
           type: _type,
           icon: iconValue,
+          iconSvg: iconSvgValue,
           initialBalance: balance,
           includeInTotal: _includeInTotal,
           currency: _currency,

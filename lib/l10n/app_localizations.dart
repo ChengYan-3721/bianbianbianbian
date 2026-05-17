@@ -1174,6 +1174,12 @@ abstract class AppLocalizations {
   /// **'{year} 年'**
   String recordMonthYear(int year);
 
+  /// No description provided for @recordMonthThisMonth.
+  ///
+  /// In zh, this message translates to:
+  /// **'本月'**
+  String get recordMonthThisMonth;
+
   /// No description provided for @recordMonthMonth.
   ///
   /// In zh, this message translates to:
@@ -1299,6 +1305,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'例如 🍔、🚗、🎁'**
   String get categoryIconEmojiHint;
+
+  /// No description provided for @categoryIconSvg.
+  ///
+  /// In zh, this message translates to:
+  /// **'SVG 图标（可选）'**
+  String get categoryIconSvg;
+
+  /// No description provided for @categoryIconSvgHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴 SVG 代码，例如 <svg>...</svg>'**
+  String get categoryIconSvgHint;
 
   /// No description provided for @categoryDuplicateName.
   ///
@@ -1666,6 +1684,18 @@ abstract class AppLocalizations {
   /// **'例如 📒、💼、✈️'**
   String get ledgerCoverEmojiHint;
 
+  /// No description provided for @ledgerCoverSvg.
+  ///
+  /// In zh, this message translates to:
+  /// **'封面 SVG（可选）'**
+  String get ledgerCoverSvg;
+
+  /// No description provided for @ledgerCoverSvgHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴 SVG 代码，例如 <svg>...</svg>'**
+  String get ledgerCoverSvgHint;
+
   /// No description provided for @ledgerDefaultCurrency.
   ///
   /// In zh, this message translates to:
@@ -1947,6 +1977,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'例如 💰、💳、🏦'**
   String get accountIconEmojiHint;
+
+  /// No description provided for @accountIconSvg.
+  ///
+  /// In zh, this message translates to:
+  /// **'SVG 图标（可选）'**
+  String get accountIconSvg;
+
+  /// No description provided for @accountIconSvgHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'粘贴 SVG 代码，例如 <svg>...</svg>'**
+  String get accountIconSvgHint;
 
   /// No description provided for @accountInitialBalance.
   ///
@@ -4627,6 +4669,108 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'1.0（2026-05-14 生效）'**
   String get termsOfServiceVersionValue;
+
+  /// No description provided for @importCsvNewItemsDetected.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到 {categoryCount} 个本地不存在的分类 + {accountCount} 个本地不存在的账户，导入时会自动创建。分类按「一级分类」列归类，无法判断的归到「其他」；账户以 type=其他 创建。'**
+  String importCsvNewItemsDetected(int categoryCount, int accountCount);
+
+  /// No description provided for @importAdvancedMapping.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级映射（调整列 → 字段）'**
+  String get importAdvancedMapping;
+
+  /// No description provided for @importAdvancedMappingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'解析后列 → 字段映射；改完点「重新预览」生效'**
+  String get importAdvancedMappingHint;
+
+  /// No description provided for @importRepreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新预览'**
+  String get importRepreview;
+
+  /// No description provided for @importMappingIgnore.
+  ///
+  /// In zh, this message translates to:
+  /// **'（忽略）'**
+  String get importMappingIgnore;
+
+  /// No description provided for @importMappingFieldLedger.
+  ///
+  /// In zh, this message translates to:
+  /// **'账本'**
+  String get importMappingFieldLedger;
+
+  /// No description provided for @importMappingFieldDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'日期'**
+  String get importMappingFieldDate;
+
+  /// No description provided for @importMappingFieldType.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型（收支）'**
+  String get importMappingFieldType;
+
+  /// No description provided for @importMappingFieldAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额'**
+  String get importMappingFieldAmount;
+
+  /// No description provided for @importMappingFieldCurrency.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种'**
+  String get importMappingFieldCurrency;
+
+  /// No description provided for @importMappingFieldPrimaryCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'一级分类'**
+  String get importMappingFieldPrimaryCategory;
+
+  /// No description provided for @importMappingFieldCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'二级分类'**
+  String get importMappingFieldCategory;
+
+  /// No description provided for @importMappingFieldAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户'**
+  String get importMappingFieldAccount;
+
+  /// No description provided for @importMappingFieldFromAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'转出账户'**
+  String get importMappingFieldFromAccount;
+
+  /// No description provided for @importMappingFieldToAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'转入账户'**
+  String get importMappingFieldToAccount;
+
+  /// No description provided for @importMappingFieldNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'备注'**
+  String get importMappingFieldNote;
+
+  /// No description provided for @importMappingFieldStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态'**
+  String get importMappingFieldStatus;
 }
 
 class _AppLocalizationsDelegate

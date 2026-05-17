@@ -22,6 +22,9 @@ class AccountTable extends Table {
 
   TextColumn get icon => text().nullable()();
 
+  /// SVG 图标代码。
+  TextColumn get iconSvg => text().nullable().named('icon_svg')();
+
   TextColumn get color => text().nullable()();
 
   RealColumn get initialBalance => real()

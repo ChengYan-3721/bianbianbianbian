@@ -1227,6 +1227,17 @@ class $LedgerTableTable extends LedgerTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _coverSvgMeta = const VerificationMeta(
+    'coverSvg',
+  );
+  @override
+  late final GeneratedColumn<String> coverSvg = GeneratedColumn<String>(
+    'cover_svg',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _defaultCurrencyMeta = const VerificationMeta(
     'defaultCurrency',
   );
@@ -1300,6 +1311,7 @@ class $LedgerTableTable extends LedgerTable
     id,
     name,
     coverEmoji,
+    coverSvg,
     defaultCurrency,
     archived,
     createdAt,
@@ -1336,6 +1348,12 @@ class $LedgerTableTable extends LedgerTable
       context.handle(
         _coverEmojiMeta,
         coverEmoji.isAcceptableOrUnknown(data['cover_emoji']!, _coverEmojiMeta),
+      );
+    }
+    if (data.containsKey('cover_svg')) {
+      context.handle(
+        _coverSvgMeta,
+        coverSvg.isAcceptableOrUnknown(data['cover_svg']!, _coverSvgMeta),
       );
     }
     if (data.containsKey('default_currency')) {
@@ -1404,6 +1422,10 @@ class $LedgerTableTable extends LedgerTable
         DriftSqlType.string,
         data['${effectivePrefix}cover_emoji'],
       ),
+      coverSvg: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cover_svg'],
+      ),
       defaultCurrency: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_currency'],
@@ -1441,6 +1463,9 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
   final String id;
   final String name;
   final String? coverEmoji;
+
+  /// SVG 封面图标代码。
+  final String? coverSvg;
   final String? defaultCurrency;
   final int? archived;
   final int createdAt;
@@ -1451,6 +1476,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
     required this.id,
     required this.name,
     this.coverEmoji,
+    this.coverSvg,
     this.defaultCurrency,
     this.archived,
     required this.createdAt,
@@ -1465,6 +1491,9 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || coverEmoji != null) {
       map['cover_emoji'] = Variable<String>(coverEmoji);
+    }
+    if (!nullToAbsent || coverSvg != null) {
+      map['cover_svg'] = Variable<String>(coverSvg);
     }
     if (!nullToAbsent || defaultCurrency != null) {
       map['default_currency'] = Variable<String>(defaultCurrency);
@@ -1488,6 +1517,9 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
       coverEmoji: coverEmoji == null && nullToAbsent
           ? const Value.absent()
           : Value(coverEmoji),
+      coverSvg: coverSvg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(coverSvg),
       defaultCurrency: defaultCurrency == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultCurrency),
@@ -1512,6 +1544,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       coverEmoji: serializer.fromJson<String?>(json['coverEmoji']),
+      coverSvg: serializer.fromJson<String?>(json['coverSvg']),
       defaultCurrency: serializer.fromJson<String?>(json['defaultCurrency']),
       archived: serializer.fromJson<int?>(json['archived']),
       createdAt: serializer.fromJson<int>(json['createdAt']),
@@ -1527,6 +1560,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'coverEmoji': serializer.toJson<String?>(coverEmoji),
+      'coverSvg': serializer.toJson<String?>(coverSvg),
       'defaultCurrency': serializer.toJson<String?>(defaultCurrency),
       'archived': serializer.toJson<int?>(archived),
       'createdAt': serializer.toJson<int>(createdAt),
@@ -1540,6 +1574,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
     String? id,
     String? name,
     Value<String?> coverEmoji = const Value.absent(),
+    Value<String?> coverSvg = const Value.absent(),
     Value<String?> defaultCurrency = const Value.absent(),
     Value<int?> archived = const Value.absent(),
     int? createdAt,
@@ -1550,6 +1585,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
     id: id ?? this.id,
     name: name ?? this.name,
     coverEmoji: coverEmoji.present ? coverEmoji.value : this.coverEmoji,
+    coverSvg: coverSvg.present ? coverSvg.value : this.coverSvg,
     defaultCurrency: defaultCurrency.present
         ? defaultCurrency.value
         : this.defaultCurrency,
@@ -1566,6 +1602,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
       coverEmoji: data.coverEmoji.present
           ? data.coverEmoji.value
           : this.coverEmoji,
+      coverSvg: data.coverSvg.present ? data.coverSvg.value : this.coverSvg,
       defaultCurrency: data.defaultCurrency.present
           ? data.defaultCurrency.value
           : this.defaultCurrency,
@@ -1583,6 +1620,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('coverEmoji: $coverEmoji, ')
+          ..write('coverSvg: $coverSvg, ')
           ..write('defaultCurrency: $defaultCurrency, ')
           ..write('archived: $archived, ')
           ..write('createdAt: $createdAt, ')
@@ -1598,6 +1636,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
     id,
     name,
     coverEmoji,
+    coverSvg,
     defaultCurrency,
     archived,
     createdAt,
@@ -1612,6 +1651,7 @@ class LedgerEntry extends DataClass implements Insertable<LedgerEntry> {
           other.id == this.id &&
           other.name == this.name &&
           other.coverEmoji == this.coverEmoji &&
+          other.coverSvg == this.coverSvg &&
           other.defaultCurrency == this.defaultCurrency &&
           other.archived == this.archived &&
           other.createdAt == this.createdAt &&
@@ -1624,6 +1664,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
   final Value<String> id;
   final Value<String> name;
   final Value<String?> coverEmoji;
+  final Value<String?> coverSvg;
   final Value<String?> defaultCurrency;
   final Value<int?> archived;
   final Value<int> createdAt;
@@ -1635,6 +1676,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.coverEmoji = const Value.absent(),
+    this.coverSvg = const Value.absent(),
     this.defaultCurrency = const Value.absent(),
     this.archived = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1647,6 +1689,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
     required String id,
     required String name,
     this.coverEmoji = const Value.absent(),
+    this.coverSvg = const Value.absent(),
     this.defaultCurrency = const Value.absent(),
     this.archived = const Value.absent(),
     required int createdAt,
@@ -1663,6 +1706,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? coverEmoji,
+    Expression<String>? coverSvg,
     Expression<String>? defaultCurrency,
     Expression<int>? archived,
     Expression<int>? createdAt,
@@ -1675,6 +1719,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (coverEmoji != null) 'cover_emoji': coverEmoji,
+      if (coverSvg != null) 'cover_svg': coverSvg,
       if (defaultCurrency != null) 'default_currency': defaultCurrency,
       if (archived != null) 'archived': archived,
       if (createdAt != null) 'created_at': createdAt,
@@ -1689,6 +1734,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
     Value<String>? id,
     Value<String>? name,
     Value<String?>? coverEmoji,
+    Value<String?>? coverSvg,
     Value<String?>? defaultCurrency,
     Value<int?>? archived,
     Value<int>? createdAt,
@@ -1701,6 +1747,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
       id: id ?? this.id,
       name: name ?? this.name,
       coverEmoji: coverEmoji ?? this.coverEmoji,
+      coverSvg: coverSvg ?? this.coverSvg,
       defaultCurrency: defaultCurrency ?? this.defaultCurrency,
       archived: archived ?? this.archived,
       createdAt: createdAt ?? this.createdAt,
@@ -1722,6 +1769,9 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
     }
     if (coverEmoji.present) {
       map['cover_emoji'] = Variable<String>(coverEmoji.value);
+    }
+    if (coverSvg.present) {
+      map['cover_svg'] = Variable<String>(coverSvg.value);
     }
     if (defaultCurrency.present) {
       map['default_currency'] = Variable<String>(defaultCurrency.value);
@@ -1753,6 +1803,7 @@ class LedgerTableCompanion extends UpdateCompanion<LedgerEntry> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('coverEmoji: $coverEmoji, ')
+          ..write('coverSvg: $coverSvg, ')
           ..write('defaultCurrency: $defaultCurrency, ')
           ..write('archived: $archived, ')
           ..write('createdAt: $createdAt, ')
@@ -1793,6 +1844,17 @@ class $CategoryTableTable extends CategoryTable
   @override
   late final GeneratedColumn<String> icon = GeneratedColumn<String>(
     'icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _iconSvgMeta = const VerificationMeta(
+    'iconSvg',
+  );
+  @override
+  late final GeneratedColumn<String> iconSvg = GeneratedColumn<String>(
+    'icon_svg',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -1880,6 +1942,7 @@ class $CategoryTableTable extends CategoryTable
     id,
     name,
     icon,
+    iconSvg,
     color,
     parentKey,
     sortOrder,
@@ -1917,6 +1980,12 @@ class $CategoryTableTable extends CategoryTable
       context.handle(
         _iconMeta,
         icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
+      );
+    }
+    if (data.containsKey('icon_svg')) {
+      context.handle(
+        _iconSvgMeta,
+        iconSvg.isAcceptableOrUnknown(data['icon_svg']!, _iconSvgMeta),
       );
     }
     if (data.containsKey('color')) {
@@ -1988,6 +2057,10 @@ class $CategoryTableTable extends CategoryTable
         DriftSqlType.string,
         data['${effectivePrefix}icon'],
       ),
+      iconSvg: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_svg'],
+      ),
       color: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}color'],
@@ -2034,6 +2107,9 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
   /// 图标（emoji 或资源 key）。
   final String? icon;
 
+  /// SVG 图标代码。
+  final String? iconSvg;
+
   /// 颜色（hex）。
   final String? color;
 
@@ -2054,6 +2130,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
     required this.id,
     required this.name,
     this.icon,
+    this.iconSvg,
     this.color,
     required this.parentKey,
     required this.sortOrder,
@@ -2069,6 +2146,9 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || icon != null) {
       map['icon'] = Variable<String>(icon);
+    }
+    if (!nullToAbsent || iconSvg != null) {
+      map['icon_svg'] = Variable<String>(iconSvg);
     }
     if (!nullToAbsent || color != null) {
       map['color'] = Variable<String>(color);
@@ -2089,6 +2169,9 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
       id: Value(id),
       name: Value(name),
       icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
+      iconSvg: iconSvg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(iconSvg),
       color: color == null && nullToAbsent
           ? const Value.absent()
           : Value(color),
@@ -2112,6 +2195,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       icon: serializer.fromJson<String?>(json['icon']),
+      iconSvg: serializer.fromJson<String?>(json['iconSvg']),
       color: serializer.fromJson<String?>(json['color']),
       parentKey: serializer.fromJson<String>(json['parentKey']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
@@ -2128,6 +2212,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'icon': serializer.toJson<String?>(icon),
+      'iconSvg': serializer.toJson<String?>(iconSvg),
       'color': serializer.toJson<String?>(color),
       'parentKey': serializer.toJson<String>(parentKey),
       'sortOrder': serializer.toJson<int>(sortOrder),
@@ -2142,6 +2227,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
     String? id,
     String? name,
     Value<String?> icon = const Value.absent(),
+    Value<String?> iconSvg = const Value.absent(),
     Value<String?> color = const Value.absent(),
     String? parentKey,
     int? sortOrder,
@@ -2153,6 +2239,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
     id: id ?? this.id,
     name: name ?? this.name,
     icon: icon.present ? icon.value : this.icon,
+    iconSvg: iconSvg.present ? iconSvg.value : this.iconSvg,
     color: color.present ? color.value : this.color,
     parentKey: parentKey ?? this.parentKey,
     sortOrder: sortOrder ?? this.sortOrder,
@@ -2166,6 +2253,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       icon: data.icon.present ? data.icon.value : this.icon,
+      iconSvg: data.iconSvg.present ? data.iconSvg.value : this.iconSvg,
       color: data.color.present ? data.color.value : this.color,
       parentKey: data.parentKey.present ? data.parentKey.value : this.parentKey,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
@@ -2184,6 +2272,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('icon: $icon, ')
+          ..write('iconSvg: $iconSvg, ')
           ..write('color: $color, ')
           ..write('parentKey: $parentKey, ')
           ..write('sortOrder: $sortOrder, ')
@@ -2200,6 +2289,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
     id,
     name,
     icon,
+    iconSvg,
     color,
     parentKey,
     sortOrder,
@@ -2215,6 +2305,7 @@ class CategoryEntry extends DataClass implements Insertable<CategoryEntry> {
           other.id == this.id &&
           other.name == this.name &&
           other.icon == this.icon &&
+          other.iconSvg == this.iconSvg &&
           other.color == this.color &&
           other.parentKey == this.parentKey &&
           other.sortOrder == this.sortOrder &&
@@ -2228,6 +2319,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
   final Value<String> id;
   final Value<String> name;
   final Value<String?> icon;
+  final Value<String?> iconSvg;
   final Value<String?> color;
   final Value<String> parentKey;
   final Value<int> sortOrder;
@@ -2240,6 +2332,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.icon = const Value.absent(),
+    this.iconSvg = const Value.absent(),
     this.color = const Value.absent(),
     this.parentKey = const Value.absent(),
     this.sortOrder = const Value.absent(),
@@ -2253,6 +2346,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
     required String id,
     required String name,
     this.icon = const Value.absent(),
+    this.iconSvg = const Value.absent(),
     this.color = const Value.absent(),
     required String parentKey,
     this.sortOrder = const Value.absent(),
@@ -2270,6 +2364,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? icon,
+    Expression<String>? iconSvg,
     Expression<String>? color,
     Expression<String>? parentKey,
     Expression<int>? sortOrder,
@@ -2283,6 +2378,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (icon != null) 'icon': icon,
+      if (iconSvg != null) 'icon_svg': iconSvg,
       if (color != null) 'color': color,
       if (parentKey != null) 'parent_key': parentKey,
       if (sortOrder != null) 'sort_order': sortOrder,
@@ -2298,6 +2394,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
     Value<String>? id,
     Value<String>? name,
     Value<String?>? icon,
+    Value<String?>? iconSvg,
     Value<String?>? color,
     Value<String>? parentKey,
     Value<int>? sortOrder,
@@ -2311,6 +2408,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
       id: id ?? this.id,
       name: name ?? this.name,
       icon: icon ?? this.icon,
+      iconSvg: iconSvg ?? this.iconSvg,
       color: color ?? this.color,
       parentKey: parentKey ?? this.parentKey,
       sortOrder: sortOrder ?? this.sortOrder,
@@ -2333,6 +2431,9 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
     }
     if (icon.present) {
       map['icon'] = Variable<String>(icon.value);
+    }
+    if (iconSvg.present) {
+      map['icon_svg'] = Variable<String>(iconSvg.value);
     }
     if (color.present) {
       map['color'] = Variable<String>(color.value);
@@ -2367,6 +2468,7 @@ class CategoryTableCompanion extends UpdateCompanion<CategoryEntry> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('icon: $icon, ')
+          ..write('iconSvg: $iconSvg, ')
           ..write('color: $color, ')
           ..write('parentKey: $parentKey, ')
           ..write('sortOrder: $sortOrder, ')
@@ -2417,6 +2519,17 @@ class $AccountTableTable extends AccountTable
   @override
   late final GeneratedColumn<String> icon = GeneratedColumn<String>(
     'icon',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _iconSvgMeta = const VerificationMeta(
+    'iconSvg',
+  );
+  @override
+  late final GeneratedColumn<String> iconSvg = GeneratedColumn<String>(
+    'icon_svg',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -2528,6 +2641,7 @@ class $AccountTableTable extends AccountTable
     name,
     type,
     icon,
+    iconSvg,
     color,
     initialBalance,
     includeInTotal,
@@ -2575,6 +2689,12 @@ class $AccountTableTable extends AccountTable
       context.handle(
         _iconMeta,
         icon.isAcceptableOrUnknown(data['icon']!, _iconMeta),
+      );
+    }
+    if (data.containsKey('icon_svg')) {
+      context.handle(
+        _iconSvgMeta,
+        iconSvg.isAcceptableOrUnknown(data['icon_svg']!, _iconSvgMeta),
       );
     }
     if (data.containsKey('color')) {
@@ -2669,6 +2789,10 @@ class $AccountTableTable extends AccountTable
         DriftSqlType.string,
         data['${effectivePrefix}icon'],
       ),
+      iconSvg: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}icon_svg'],
+      ),
       color: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}color'],
@@ -2719,6 +2843,9 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
   final String name;
   final String type;
   final String? icon;
+
+  /// SVG 图标代码。
+  final String? iconSvg;
   final String? color;
   final double? initialBalance;
   final int? includeInTotal;
@@ -2737,6 +2864,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     required this.name,
     required this.type,
     this.icon,
+    this.iconSvg,
     this.color,
     this.initialBalance,
     this.includeInTotal,
@@ -2755,6 +2883,9 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     map['type'] = Variable<String>(type);
     if (!nullToAbsent || icon != null) {
       map['icon'] = Variable<String>(icon);
+    }
+    if (!nullToAbsent || iconSvg != null) {
+      map['icon_svg'] = Variable<String>(iconSvg);
     }
     if (!nullToAbsent || color != null) {
       map['color'] = Variable<String>(color);
@@ -2788,6 +2919,9 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       name: Value(name),
       type: Value(type),
       icon: icon == null && nullToAbsent ? const Value.absent() : Value(icon),
+      iconSvg: iconSvg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(iconSvg),
       color: color == null && nullToAbsent
           ? const Value.absent()
           : Value(color),
@@ -2824,6 +2958,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       name: serializer.fromJson<String>(json['name']),
       type: serializer.fromJson<String>(json['type']),
       icon: serializer.fromJson<String?>(json['icon']),
+      iconSvg: serializer.fromJson<String?>(json['iconSvg']),
       color: serializer.fromJson<String?>(json['color']),
       initialBalance: serializer.fromJson<double?>(json['initialBalance']),
       includeInTotal: serializer.fromJson<int?>(json['includeInTotal']),
@@ -2843,6 +2978,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       'name': serializer.toJson<String>(name),
       'type': serializer.toJson<String>(type),
       'icon': serializer.toJson<String?>(icon),
+      'iconSvg': serializer.toJson<String?>(iconSvg),
       'color': serializer.toJson<String?>(color),
       'initialBalance': serializer.toJson<double?>(initialBalance),
       'includeInTotal': serializer.toJson<int?>(includeInTotal),
@@ -2860,6 +2996,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     String? name,
     String? type,
     Value<String?> icon = const Value.absent(),
+    Value<String?> iconSvg = const Value.absent(),
     Value<String?> color = const Value.absent(),
     Value<double?> initialBalance = const Value.absent(),
     Value<int?> includeInTotal = const Value.absent(),
@@ -2874,6 +3011,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     name: name ?? this.name,
     type: type ?? this.type,
     icon: icon.present ? icon.value : this.icon,
+    iconSvg: iconSvg.present ? iconSvg.value : this.iconSvg,
     color: color.present ? color.value : this.color,
     initialBalance: initialBalance.present
         ? initialBalance.value
@@ -2894,6 +3032,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       name: data.name.present ? data.name.value : this.name,
       type: data.type.present ? data.type.value : this.type,
       icon: data.icon.present ? data.icon.value : this.icon,
+      iconSvg: data.iconSvg.present ? data.iconSvg.value : this.iconSvg,
       color: data.color.present ? data.color.value : this.color,
       initialBalance: data.initialBalance.present
           ? data.initialBalance.value
@@ -2921,6 +3060,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           ..write('name: $name, ')
           ..write('type: $type, ')
           ..write('icon: $icon, ')
+          ..write('iconSvg: $iconSvg, ')
           ..write('color: $color, ')
           ..write('initialBalance: $initialBalance, ')
           ..write('includeInTotal: $includeInTotal, ')
@@ -2940,6 +3080,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     name,
     type,
     icon,
+    iconSvg,
     color,
     initialBalance,
     includeInTotal,
@@ -2958,6 +3099,7 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           other.name == this.name &&
           other.type == this.type &&
           other.icon == this.icon &&
+          other.iconSvg == this.iconSvg &&
           other.color == this.color &&
           other.initialBalance == this.initialBalance &&
           other.includeInTotal == this.includeInTotal &&
@@ -2974,6 +3116,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
   final Value<String> name;
   final Value<String> type;
   final Value<String?> icon;
+  final Value<String?> iconSvg;
   final Value<String?> color;
   final Value<double?> initialBalance;
   final Value<int?> includeInTotal;
@@ -2989,6 +3132,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     this.name = const Value.absent(),
     this.type = const Value.absent(),
     this.icon = const Value.absent(),
+    this.iconSvg = const Value.absent(),
     this.color = const Value.absent(),
     this.initialBalance = const Value.absent(),
     this.includeInTotal = const Value.absent(),
@@ -3005,6 +3149,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     required String name,
     required String type,
     this.icon = const Value.absent(),
+    this.iconSvg = const Value.absent(),
     this.color = const Value.absent(),
     this.initialBalance = const Value.absent(),
     this.includeInTotal = const Value.absent(),
@@ -3025,6 +3170,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     Expression<String>? name,
     Expression<String>? type,
     Expression<String>? icon,
+    Expression<String>? iconSvg,
     Expression<String>? color,
     Expression<double>? initialBalance,
     Expression<int>? includeInTotal,
@@ -3041,6 +3187,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
       if (name != null) 'name': name,
       if (type != null) 'type': type,
       if (icon != null) 'icon': icon,
+      if (iconSvg != null) 'icon_svg': iconSvg,
       if (color != null) 'color': color,
       if (initialBalance != null) 'initial_balance': initialBalance,
       if (includeInTotal != null) 'include_in_total': includeInTotal,
@@ -3059,6 +3206,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     Value<String>? name,
     Value<String>? type,
     Value<String?>? icon,
+    Value<String?>? iconSvg,
     Value<String?>? color,
     Value<double?>? initialBalance,
     Value<int?>? includeInTotal,
@@ -3075,6 +3223,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
       name: name ?? this.name,
       type: type ?? this.type,
       icon: icon ?? this.icon,
+      iconSvg: iconSvg ?? this.iconSvg,
       color: color ?? this.color,
       initialBalance: initialBalance ?? this.initialBalance,
       includeInTotal: includeInTotal ?? this.includeInTotal,
@@ -3102,6 +3251,9 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     }
     if (icon.present) {
       map['icon'] = Variable<String>(icon.value);
+    }
+    if (iconSvg.present) {
+      map['icon_svg'] = Variable<String>(iconSvg.value);
     }
     if (color.present) {
       map['color'] = Variable<String>(color.value);
@@ -3143,6 +3295,7 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
           ..write('name: $name, ')
           ..write('type: $type, ')
           ..write('icon: $icon, ')
+          ..write('iconSvg: $iconSvg, ')
           ..write('color: $color, ')
           ..write('initialBalance: $initialBalance, ')
           ..write('includeInTotal: $includeInTotal, ')
@@ -6210,6 +6363,7 @@ typedef $$LedgerTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<String?> coverEmoji,
+      Value<String?> coverSvg,
       Value<String?> defaultCurrency,
       Value<int?> archived,
       required int createdAt,
@@ -6223,6 +6377,7 @@ typedef $$LedgerTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String?> coverEmoji,
+      Value<String?> coverSvg,
       Value<String?> defaultCurrency,
       Value<int?> archived,
       Value<int> createdAt,
@@ -6286,6 +6441,11 @@ class $$LedgerTableTableFilterComposer
 
   ColumnFilters<String> get coverEmoji => $composableBuilder(
     column: $table.coverEmoji,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get coverSvg => $composableBuilder(
+    column: $table.coverSvg,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6370,6 +6530,11 @@ class $$LedgerTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get coverSvg => $composableBuilder(
+    column: $table.coverSvg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get defaultCurrency => $composableBuilder(
     column: $table.defaultCurrency,
     builder: (column) => ColumnOrderings(column),
@@ -6420,6 +6585,9 @@ class $$LedgerTableTableAnnotationComposer
     column: $table.coverEmoji,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get coverSvg =>
+      $composableBuilder(column: $table.coverSvg, builder: (column) => column);
 
   GeneratedColumn<String> get defaultCurrency => $composableBuilder(
     column: $table.defaultCurrency,
@@ -6499,6 +6667,7 @@ class $$LedgerTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> coverEmoji = const Value.absent(),
+                Value<String?> coverSvg = const Value.absent(),
                 Value<String?> defaultCurrency = const Value.absent(),
                 Value<int?> archived = const Value.absent(),
                 Value<int> createdAt = const Value.absent(),
@@ -6510,6 +6679,7 @@ class $$LedgerTableTableTableManager
                 id: id,
                 name: name,
                 coverEmoji: coverEmoji,
+                coverSvg: coverSvg,
                 defaultCurrency: defaultCurrency,
                 archived: archived,
                 createdAt: createdAt,
@@ -6523,6 +6693,7 @@ class $$LedgerTableTableTableManager
                 required String id,
                 required String name,
                 Value<String?> coverEmoji = const Value.absent(),
+                Value<String?> coverSvg = const Value.absent(),
                 Value<String?> defaultCurrency = const Value.absent(),
                 Value<int?> archived = const Value.absent(),
                 required int createdAt,
@@ -6534,6 +6705,7 @@ class $$LedgerTableTableTableManager
                 id: id,
                 name: name,
                 coverEmoji: coverEmoji,
+                coverSvg: coverSvg,
                 defaultCurrency: defaultCurrency,
                 archived: archived,
                 createdAt: createdAt,
@@ -6605,6 +6777,7 @@ typedef $$CategoryTableTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<String?> icon,
+      Value<String?> iconSvg,
       Value<String?> color,
       required String parentKey,
       Value<int> sortOrder,
@@ -6619,6 +6792,7 @@ typedef $$CategoryTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String?> icon,
+      Value<String?> iconSvg,
       Value<String?> color,
       Value<String> parentKey,
       Value<int> sortOrder,
@@ -6650,6 +6824,11 @@ class $$CategoryTableTableFilterComposer
 
   ColumnFilters<String> get icon => $composableBuilder(
     column: $table.icon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconSvg => $composableBuilder(
+    column: $table.iconSvg,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6713,6 +6892,11 @@ class $$CategoryTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get iconSvg => $composableBuilder(
+    column: $table.iconSvg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get color => $composableBuilder(
     column: $table.color,
     builder: (column) => ColumnOrderings(column),
@@ -6766,6 +6950,9 @@ class $$CategoryTableTableAnnotationComposer
 
   GeneratedColumn<String> get icon =>
       $composableBuilder(column: $table.icon, builder: (column) => column);
+
+  GeneratedColumn<String> get iconSvg =>
+      $composableBuilder(column: $table.iconSvg, builder: (column) => column);
 
   GeneratedColumn<String> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
@@ -6825,6 +7012,7 @@ class $$CategoryTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> icon = const Value.absent(),
+                Value<String?> iconSvg = const Value.absent(),
                 Value<String?> color = const Value.absent(),
                 Value<String> parentKey = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
@@ -6837,6 +7025,7 @@ class $$CategoryTableTableTableManager
                 id: id,
                 name: name,
                 icon: icon,
+                iconSvg: iconSvg,
                 color: color,
                 parentKey: parentKey,
                 sortOrder: sortOrder,
@@ -6851,6 +7040,7 @@ class $$CategoryTableTableTableManager
                 required String id,
                 required String name,
                 Value<String?> icon = const Value.absent(),
+                Value<String?> iconSvg = const Value.absent(),
                 Value<String?> color = const Value.absent(),
                 required String parentKey,
                 Value<int> sortOrder = const Value.absent(),
@@ -6863,6 +7053,7 @@ class $$CategoryTableTableTableManager
                 id: id,
                 name: name,
                 icon: icon,
+                iconSvg: iconSvg,
                 color: color,
                 parentKey: parentKey,
                 sortOrder: sortOrder,
@@ -6903,6 +7094,7 @@ typedef $$AccountTableTableCreateCompanionBuilder =
       required String name,
       required String type,
       Value<String?> icon,
+      Value<String?> iconSvg,
       Value<String?> color,
       Value<double?> initialBalance,
       Value<int?> includeInTotal,
@@ -6920,6 +7112,7 @@ typedef $$AccountTableTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> type,
       Value<String?> icon,
+      Value<String?> iconSvg,
       Value<String?> color,
       Value<double?> initialBalance,
       Value<int?> includeInTotal,
@@ -6958,6 +7151,11 @@ class $$AccountTableTableFilterComposer
 
   ColumnFilters<String> get icon => $composableBuilder(
     column: $table.icon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get iconSvg => $composableBuilder(
+    column: $table.iconSvg,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7036,6 +7234,11 @@ class $$AccountTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get iconSvg => $composableBuilder(
+    column: $table.iconSvg,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get color => $composableBuilder(
     column: $table.color,
     builder: (column) => ColumnOrderings(column),
@@ -7102,6 +7305,9 @@ class $$AccountTableTableAnnotationComposer
 
   GeneratedColumn<String> get icon =>
       $composableBuilder(column: $table.icon, builder: (column) => column);
+
+  GeneratedColumn<String> get iconSvg =>
+      $composableBuilder(column: $table.iconSvg, builder: (column) => column);
 
   GeneratedColumn<String> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
@@ -7174,6 +7380,7 @@ class $$AccountTableTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<String?> icon = const Value.absent(),
+                Value<String?> iconSvg = const Value.absent(),
                 Value<String?> color = const Value.absent(),
                 Value<double?> initialBalance = const Value.absent(),
                 Value<int?> includeInTotal = const Value.absent(),
@@ -7189,6 +7396,7 @@ class $$AccountTableTableTableManager
                 name: name,
                 type: type,
                 icon: icon,
+                iconSvg: iconSvg,
                 color: color,
                 initialBalance: initialBalance,
                 includeInTotal: includeInTotal,
@@ -7206,6 +7414,7 @@ class $$AccountTableTableTableManager
                 required String name,
                 required String type,
                 Value<String?> icon = const Value.absent(),
+                Value<String?> iconSvg = const Value.absent(),
                 Value<String?> color = const Value.absent(),
                 Value<double?> initialBalance = const Value.absent(),
                 Value<int?> includeInTotal = const Value.absent(),
@@ -7221,6 +7430,7 @@ class $$AccountTableTableTableManager
                 name: name,
                 type: type,
                 icon: icon,
+                iconSvg: iconSvg,
                 color: color,
                 initialBalance: initialBalance,
                 includeInTotal: includeInTotal,

@@ -348,10 +348,10 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              '检测到 ${preview.newCategoryCount} 个本地不存在的分类 + '
-                              '${preview.newAccountCount} 个本地不存在的账户,导入时会自动创建。'
-                              '分类按「一级分类」列归类,无法判断的归到「其他」;'
-                              '账户以 type=其他 创建。',
+                              context.l10n.importCsvNewItemsDetected(
+                                preview.newCategoryCount,
+                                preview.newAccountCount,
+                              ),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.tertiary,
                               ),
@@ -655,9 +655,9 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-        title: const Text('高级映射(调整列 → 字段)'),
+        title: Text(context.l10n.importAdvancedMapping),
         subtitle: Text(
-          '解析后列 → 字段映射;改完点「重新预览」生效',
+          context.l10n.importAdvancedMappingHint,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.outline,
           ),
@@ -707,7 +707,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                   alignment: Alignment.centerRight,
                   child: FilledButton.tonal(
                     onPressed: _userMapping == null ? null : _rePreview,
-                    child: const Text('重新预览'),
+                    child: Text(context.l10n.importRepreview),
                   ),
                 ),
               ],
@@ -727,22 +727,23 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   }
 
   List<DropdownMenuItem<String?>> _fieldKeyOptions() {
-    const fieldKeyLabels = <(String, String)>[
-      ('ledger', '账本'),
-      ('date', '日期'),
-      ('type', '类型(收支)'),
-      ('amount', '金额'),
-      ('currency', '币种'),
-      ('primary_category', '一级分类'),
-      ('category', '二级分类'),
-      ('account', '账户'),
-      ('from_account', '转出账户'),
-      ('to_account', '转入账户'),
-      ('note', '备注'),
-      ('status', '状态'),
+    final l10n = context.l10n;
+    final fieldKeyLabels = <(String, String)>[
+      ('ledger', l10n.importMappingFieldLedger),
+      ('date', l10n.importMappingFieldDate),
+      ('type', l10n.importMappingFieldType),
+      ('amount', l10n.importMappingFieldAmount),
+      ('currency', l10n.importMappingFieldCurrency),
+      ('primary_category', l10n.importMappingFieldPrimaryCategory),
+      ('category', l10n.importMappingFieldCategory),
+      ('account', l10n.importMappingFieldAccount),
+      ('from_account', l10n.importMappingFieldFromAccount),
+      ('to_account', l10n.importMappingFieldToAccount),
+      ('note', l10n.importMappingFieldNote),
+      ('status', l10n.importMappingFieldStatus),
     ];
     return [
-      const DropdownMenuItem<String?>(value: null, child: Text('(忽略)')),
+      DropdownMenuItem<String?>(value: null, child: Text(l10n.importMappingIgnore)),
       for (final (key, label) in fieldKeyLabels)
         DropdownMenuItem<String?>(value: key, child: Text(label)),
     ];

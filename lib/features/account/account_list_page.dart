@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../app/app_theme.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../domain/entity/account.dart';
 import 'account_balance.dart';
 import 'account_providers.dart';
@@ -279,9 +280,10 @@ class _AccountCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              Text(
-                account.icon ?? '💳',
-                style: const TextStyle(fontSize: 28),
+              SvgOrEmojiIcon(
+                svgString: account.iconSvg,
+                emoji: account.icon ?? '💳',
+                size: 28,
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -20,6 +20,9 @@ class CategoryTable extends Table {
   /// 图标（emoji 或资源 key）。
   TextColumn get icon => text().nullable()();
 
+  /// SVG 图标代码。
+  TextColumn get iconSvg => text().nullable().named('icon_svg')();
+
   /// 颜色（hex）。
   TextColumn get color => text().nullable()();
 

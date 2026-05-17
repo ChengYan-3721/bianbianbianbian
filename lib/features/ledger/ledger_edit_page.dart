@@ -24,6 +24,7 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
 
   final _nameController = TextEditingController();
   final _emojiController = TextEditingController();
+  final _svgController = TextEditingController();
   String _defaultCurrency = 'CNY';
   bool _archived = false;
 
@@ -43,6 +44,7 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
   void dispose() {
     _nameController.dispose();
     _emojiController.dispose();
+    _svgController.dispose();
     super.dispose();
   }
 
@@ -79,6 +81,7 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
           if (ledger != null) {
             _nameController.text = ledger.name;
             _emojiController.text = ledger.coverEmoji ?? '';
+            _svgController.text = ledger.coverSvg ?? '';
             _defaultCurrency = ledger.defaultCurrency;
             _archived = ledger.archived;
           }
@@ -109,6 +112,16 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
                     decoration: InputDecoration(
                       labelText: context.l10n.ledgerCoverEmoji,
                       hintText: context.l10n.ledgerCoverEmojiHint,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _svgController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: context.l10n.ledgerCoverSvg,
+                      hintText: context.l10n.ledgerCoverSvgHint,
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -175,6 +188,9 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
         coverEmoji: _emojiController.text.trim().isEmpty
             ? null
             : _emojiController.text.trim(),
+        coverSvg: _svgController.text.trim().isEmpty
+            ? null
+            : _svgController.text.trim(),
         defaultCurrency: _defaultCurrency,
         archived: _archived,
         updatedAt: now,
@@ -186,6 +202,9 @@ class _LedgerEditPageState extends ConsumerState<LedgerEditPage> {
         coverEmoji: _emojiController.text.trim().isEmpty
             ? null
             : _emojiController.text.trim(),
+        coverSvg: _svgController.text.trim().isEmpty
+            ? null
+            : _svgController.text.trim(),
         defaultCurrency: _defaultCurrency,
         archived: false,
         createdAt: now,

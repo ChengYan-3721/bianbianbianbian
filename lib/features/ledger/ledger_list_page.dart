@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../domain/entity/ledger.dart';
 import 'ledger_providers.dart';
 
@@ -278,7 +279,6 @@ class _LedgerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cardColor = isCurrent ? theme.colorScheme.primary : theme.colorScheme.surface;
-    final textAlpha = dimmed ? 128 : 255;
     // 当前选中卡片使用白色文字，否则使用主题的 onSurface（棕色）
     final textColor = isCurrent ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface;
 
@@ -297,12 +297,10 @@ class _LedgerCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                Text(
-                  ledger.coverEmoji ?? '📒',
-                  style: TextStyle(
-                    fontSize: 36,
-                    color: isCurrent ? theme.colorScheme.onPrimary : Color.fromARGB(textAlpha, 0, 0, 0),
-                  ),
+                SvgOrEmojiIcon(
+                  svgString: ledger.coverSvg,
+                  emoji: ledger.coverEmoji ?? '📒',
+                  size: 36,
                 ),
                 const SizedBox(width: 14),
                 Expanded(

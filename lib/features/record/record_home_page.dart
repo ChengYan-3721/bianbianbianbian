@@ -15,6 +15,7 @@ import 'record_tile_actions.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/providers.dart'
     show
@@ -204,7 +205,11 @@ class _TopBar extends ConsumerWidget {
                         value: l,
                         child: Row(
                           children: [
-                            Text(l.coverEmoji ?? '📒', style: const TextStyle(fontSize: 18)),
+                            SvgOrEmojiIcon(
+                              svgString: l.coverSvg,
+                              emoji: l.coverEmoji ?? '📒',
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(child: Text(l.name)),
                             if (l.id == id) const Icon(Icons.check_circle, size: 18),
@@ -217,7 +222,11 @@ class _TopBar extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                   child: Row(
                     children: [
-                      Text(emoji, style: const TextStyle(fontSize: 22)),
+                      SvgOrEmojiIcon(
+                        svgString: ledger?.coverSvg,
+                        emoji: emoji,
+                        size: 22,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         name,
@@ -1028,6 +1037,7 @@ class _TxTileState extends ConsumerState<_TxTile> {
             ? resolveCategoryIcon(
                 matched.icon, matched.parentKey, matched.name, iconPack)
             : (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
+    final iconSvg = isTransfer ? null : matched?.iconSvg;
     final nameText = isTransfer ? context.l10n.txTypeTransfer : (matched?.name ?? context.l10n.txTypeUncategorized);
     final parentKey = _inferParentKey(matched, tx);
 
@@ -1128,9 +1138,10 @@ class _TxTileState extends ConsumerState<_TxTile> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     alignment: Alignment.center,
-                    child: Text(
-                      iconText,
-                      style: const TextStyle(fontSize: 18),
+                    child: SvgOrEmojiIcon(
+                      svgString: iconSvg,
+                      emoji: iconText,
+                      size: 18,
                     ),
                   ),
                   const SizedBox(width: 10),

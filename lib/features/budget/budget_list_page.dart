@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../app/app_theme.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/budget.dart';
 import '../../domain/entity/category.dart';
@@ -176,15 +177,16 @@ class _BudgetCard extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Text(
-                    resolveCategoryIcon(
+                  SvgOrEmojiIcon(
+                    svgString: category?.iconSvg,
+                    emoji: resolveCategoryIcon(
                       category?.icon,
                       category?.parentKey ?? 'other',
                       category?.name ?? '',
                       ref.watch(currentIconPackProvider),
                       '💰',
                     ),
-                    style: const TextStyle(fontSize: 28),
+                    size: 28,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
