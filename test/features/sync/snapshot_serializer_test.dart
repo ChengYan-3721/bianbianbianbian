@@ -66,7 +66,7 @@ void main() {
       final snap = _snapshot(ledgerCoverSvg: svg);
       final decoded = LedgerSnapshot.fromJson(snap.toJson());
       expect(decoded.ledger.coverSvg, svg);
-      expect(decoded, snap);
+      expect(decoded.toJson(), snap.toJson());
     });
 
     test('toJson / fromJson 保留 category.iconSvg', () {
@@ -74,7 +74,7 @@ void main() {
       final snap = _snapshot(categoryIconSvg: svg);
       final decoded = LedgerSnapshot.fromJson(snap.toJson());
       expect(decoded.categories.single.iconSvg, svg);
-      expect(decoded, snap);
+      expect(decoded.toJson(), snap.toJson());
     });
 
     test('toJson / fromJson 保留 account.iconSvg', () {
@@ -82,7 +82,7 @@ void main() {
       final snap = _snapshot(accountIconSvg: svg);
       final decoded = LedgerSnapshot.fromJson(snap.toJson());
       expect(decoded.accounts.single.iconSvg, svg);
-      expect(decoded, snap);
+      expect(decoded.toJson(), snap.toJson());
     });
 
     test('MultiLedgerSnapshot 包一层后 SVG 仍然 round-trip', () {
