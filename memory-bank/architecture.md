@@ -150,15 +150,19 @@ bianbianbianbian/
 │     │  ├─ pin_unlock_page.dart       PinUnlockPage（subtitle 注入 · allowBiometric 入参："持有人确认"路径传 false · 冷却中输入框 + 按钮置灰 + 1s Timer.periodic 倒计时 setState · Step 14.2 init 阶段自动尝试生物识别一次 + "使用指纹/面容"按钮手动重试 · cancelled 静默降级 · lockedOut/notAvailable/failed 各自文案 · 失败展示"剩余尝试次数 X"或"已进入冷却"· Step 14.3 onUnlocked 可选回调 + showAppBar 入参 · null callback 走 pop(true) 兼容老路径 · 非 null 走 callback 用于 overlay 形态）
 │     │  ├─ app_lock_overlay.dart      Step 14.3 AppLockOverlay（ConsumerWidget；PopScope canPop=false + Material wrapper + PinUnlockPage(allowBiometric=true, showAppBar=false, onUnlocked=guard.unlock)）；不在路由栈，由 BianBianApp.builder 套在 router child 之上
 │     │  └─ app_lock_settings_page.dart 「我的→应用锁」设置页（SwitchListTile 启用开关：关→开 push PinSetupPage / 开→关 push PinUnlockPage 验证（allowBiometric=false）· 修改 PIN 入口（先 unlock allowBiometric=false 再 setup mode=change）· Step 14.2 _BiometricToggle 三态：硬件不支持 / 未录入 / 可用，开启需弹一次系统面板二次确认 + SnackBar 反馈 · Step 14.3 _BackgroundTimeoutTile（仅 enabled 时挂载）4 选项 RadioGroup BottomSheet：立即锁定/1/5/15 分钟 · Step 14.4 _PrivacyModeToggle（独立于 enabled 显示）SwitchListTile · 忘记 PIN AlertDialog 二次确认 · 安全说明区扩展 14.3 + 14.4 文案）
-│     ├─ import_export/         Phase 13 Step 13.1 + 13.2 + 13.3 + 13.4 已完成：CSV / JSON / .bbbak 导出 + 本 App 三种格式导入向导 + 钱迹 / 微信 / 支付宝 CSV 自动识别
-│     │  ├─ export_service.dart    BackupFormat (csv/json/bbbak) / BackupScope / BackupDateRange + MultiLedgerSnapshot 信封 + filterSnapshotByRange + encodeBackupCsv / encodeBackupJson / buildBackupFileName + BackupExportService（writeExportFile / exportCsv / exportJson / exportBbbak / shareFile）
+│     ├─ import_export/         Phase 13 Step 13.1 + 13.2 + 13.3 + 13.4 + 13.5 已完成：CSV / JSON / .bbbak 导出（10 列含一级分类）+ BillParser 注册表(本 App / 微信 / 支付宝 / 钱迹 / Generic)+ 新分类 / 账户自动新建 + sync_op
+│     │  ├─ export_service.dart    BackupFormat (csv/json/bbbak) / BackupScope / BackupDateRange + MultiLedgerSnapshot 信封 + filterSnapshotByRange + encodeBackupCsv / encodeBackupJson / buildBackupFileName + BackupExportService（13.5：CSV 10 列含一级分类）
 │     │  ├─ bbbak_codec.dart       Step 13.2 BbbakCodec（encode/decode/inspect + magic 'BBBK' / version=1 / salt 16B / packed AES-GCM body）+ BbbakFormatException
-│     │  ├─ import_service.dart    Step 13.3 + 13.4 BackupImportService（detectFileType + preview + apply）+ BackupImportFileType / BackupDedupeStrategy (skip/overwrite/asNew) / BackupImportPreview（含 thirdPartyTemplateId/Name/unmappedCategoryCount）/ BackupImportCsvRow / BackupImportPreviewRow / BackupImportResult / BackupImportException + parseCsvRows / stripUtf8Bom / stripLedgerEmoji 工具函数 + 三方模板探测（CSV 路径优先识别）
+│     │  ├─ import_service.dart    Step 13.3 + 13.5 BackupImportService（detectFileType + preview + apply + overrideColumnMapping）+ BackupImportPreview（parserId / parserDisplayName / csvHeader / columnMapping / newCategoryCount / newAccountCount）/ BackupImportCsvRow（primaryCategoryName）/ BackupImportResult（categoriesCreated / accountsCreated）+ _applyCsv 两遍扫描 + 自动新建分类 / 账户 + sync_op enqueue
 │     │  ├─ import_export_page.dart 「我的 → 导入 / 导出」hub 页（导出 + 导入两个入口均可点）
 │     │  ├─ export_page.dart       ExportPage（格式 3 段 CSV/JSON/加密 SegmentedButton + 范围 / 时间区间 + .bbbak 选中时密码二次输入 + 警告横幅 + 导出并分享 FilledButton）
-│     │  ├─ import_page.dart       Step 13.3 + 13.4 ImportPage（_Stage idle/parsing/needPassword/preview/applying/done/error 7 阶段单页线性向导 + FilePicker 文件选择 + 元数据卡（含三方模板"识别为：xxx" + 未映射归"其他"提示）+ 20 行预览 + 3 种 dedupe 策略 RadioTile + 结果统计卡）
-│     │  └─ templates/             Step 13.4 三方账单模板
-│     │     └─ third_party_template.dart  ThirdPartyTemplate 抽象 + WechatBillTemplate / AlipayBillTemplate / QianjiTemplate + kAllThirdPartyTemplates 注册表 + detectThirdPartyTemplate(rows) 主入口 + kKeywordToCategory（~80 条关键词 → 本地二级分类名）+ kFallbackCategoryName='其他' + parseAmount / parseFlexibleDate / mapKeywordToCategory @visibleForTesting 工具
+│     │  ├─ import_page.dart       Step 13.3 + 13.5 ImportPage（7 阶段单页向导 + 「识别为：xxx」一行 + 「新建 N 分类 + M 账户」橙色提示 + 高级映射 ExpansionTile + 「重新预览」按钮）
+│     │  └─ csv/                   Step 13.5 BillParser 抽象 + 注册表
+│     │     ├─ csv_lexer.dart            parseCsvRows / stripUtf8Bom / stripLedgerEmoji（从 import_service.dart 抽出）
+│     │     ├─ csv_text_decoder.dart     decodeCsvBytes（UTF-8 BOM / UTF-16 LE/BE / GBK / latin1 兜底）
+│     │     ├─ bill_parser.dart          BillParser 抽象 + ParseResult
+│     │     ├─ csv_format_detector.dart  kAllParsers 注册表 + detectBillParser
+│     │     └─ parsers/                  GenericBillParser / BianbianBillParser / WechatBillParser / AlipayBillParser / QianjiBillParser
 │     └─ settings/              Step 8.1：多币种开关；Step 8.2：账本默认币种 + 汇率快照 provider；Step 8.3：汇率刷新服务 + 手动覆盖；Step 9.3：AI 增强配置；Step 11.3：附件缓存设置页；Step 15.1：主题切换；Step 15.2：字号调节；Step 15.3：图标包切换；Step 16.1：每日记账提醒
 │        ├─ settings_providers.dart      CurrentThemeKey AsyncNotifier + currentThemeProvider + CurrentFontSizeKey AsyncNotifier + fontSizeScaleFactorProvider + CurrentIconPackKey AsyncNotifier + currentIconPackProvider + ReminderEnabled AsyncNotifier + ReminderTime AsyncNotifier + reminderServiceProvider + MultiCurrencyEnabled + currentLedgerDefaultCurrency + fxRates + fxRateRows + fxRateRefreshService + computeFxRate
 │        ├─ settings_providers.g.dart    riverpod_generator 产物
@@ -2495,3 +2499,104 @@ MaterialApp(
 - **静态**：`flutter analyze`、`flutter test`（756/756）。
 - **代码层 lint**：不存在专门的 a11y lint；靠 review 与 progress.md 决策记录。
 - **运行时**：iOS VoiceOver / Android TalkBack 聚焦关键控件，听播报；模拟器开"Show touch hits"或 a11y inspector 量测触达盒。
+
+## Phase 13.5 架构决策（2026-05-16 · CSV 导入重构 BeeCount 同构）
+
+13.4 的关键词→分类映射方案在实测中暴露三个硬伤:(a) 微信「交易类型」噪音化分类(三百多个 SKU 全建成二级分类);(b) `_RowFromCsv` 解析逻辑黏在 `import_service.dart` 里,5 种来源各加一段 if/else;(c) 不能识别 BeeCount 用户最常导入的「任意带中文表头 CSV」。13.5 推倒重做:引入 BeeCount 同构的 `BillParser` 抽象 + 注册表,导入侧未知二级分类 / 账户自动新建并入 sync_op 队列,导出侧增「一级分类」列让 round-trip 闭环。
+
+### 文件树增量
+
+```
+lib/features/import_export/
+├─ csv/                                ← Step 13.5 新增子目录
+│   ├─ csv_lexer.dart                  ← parseCsvRows / stripUtf8Bom / stripLedgerEmoji(从 import_service.dart 抽出)
+│   ├─ csv_text_decoder.dart           ← UTF-8 BOM / UTF-16 LE/BE / GBK 自动识别(gbk_codec ^0.4.0)
+│   ├─ bill_parser.dart                ← 抽象 BillParser + ParseResult
+│   ├─ csv_format_detector.dart        ← kAllParsers 注册表 + detectBillParser
+│   └─ parsers/
+│       ├─ generic_parser.dart         ← 列名 normalizeToKey 11 字段(顺序敏感)
+│       ├─ bianbian_parser.dart        ← 本 App 10 列 + 旧 9 列向后兼容
+│       ├─ wechat_parser.dart          ← 状态过滤(退款/失败/关闭/未支付) + 「交易类型」→ category
+│       ├─ alipay_parser.dart          ← 状态过滤 + 「类型」→ category;account 固定「支付宝」
+│       └─ qianji_parser.dart          ← 8 列 / 6 列;护栏排除「账本」「币种」列(避本 App 误命中)
+├─ import_service.dart                 ← _previewCsvBytes 改用 detector;_applyCsv 两遍扫描 + 自动新建 + sync_op enqueue
+├─ export_service.dart                 ← _backupCsvHeader 9→10 列;新增「一级分类」列写 parent_key 中文标签
+├─ import_page.dart                    ← 「识别为」一行 + 「新建 N 分类 + M 账户」橙色提示 + 高级映射 ExpansionTile
+└─ ...(templates/third_party_template.dart 已删,替代品在 csv/)
+
+lib/core/util/
+├─ parent_key_labels.dart              ← Step 13.5 新增:parent_key ↔ 中文标签双向 const map(单一真值源,quick_text_parser 也引用)
+```
+
+### 14 条核心决策
+
+1. **BillParser 抽象**(`bill_parser.dart`):4 方法 `validateBillType / findHeaderRow / mapColumns / parseRow`;字段 key 集合 11 个固定常量。任何新 vendor parser 只实现接口 + 在 `kAllParsers` 数组登记。
+2. **完全废弃 13.4 关键词映射**:`templates/third_party_template.dart` 整体删除;`kKeywordToCategory` / `mapKeywordToCategory` / `kFallbackCategoryName` 全部消失。后续新分类不靠猜测,靠**自动新建**。
+3. **新二级分类自动新建**:导入侧第一遍扫描收集 csvRows 中 unique categoryName,与 DB 现有 categories(含软删)比对;不存在或 deletedAt 非空 → 加入 newCategorySpecs,在 transaction 内 insert / 复活(清 deletedAt + 重置 parentKey + 刷新 updatedAt/deviceId)。
+4. **新账户自动新建**:同上 spec,但 type 固定为 'other'。复活路径**不动** type/icon/color,仅清 deletedAt + 刷新 updatedAt/deviceId(保用户原配置)。
+5. **sync_op 入队**:每条新建 / 复活的 category 与 account 写 sync_op upsert(payload = jsonEncode(toCategoryEntity().toJson()))。**transactions 仍不进 sync_op**,继承 13.3 决策——B 设备需重新导入或等 Phase 18.x 流水同步。
+6. **parent_key 解析**:`_resolveParentKeyFromLabel(label)` = `chineseLabelToParentKey(label) ?? 'other'`。null 或未知中文标签全部归到 `other`。
+7. **`parent_key_labels.dart` 单一真值源**:`kParentKeyToLabel` / `kLabelToParentKey` 两个 const Map(11 个固定 parent_key)。export_service 写出时反查,import_service 读入时正查,quick_text_parser 引用同一表。改 11 个 parent_key 集合只改这一个文件。
+8. **导出 9 → 10 列**:`_backupCsvHeader` 中 `'币种'` 后插入 `'一级分类'`,在 `'分类'` 之前。转账行 / 分类映射失败行该列为空字符串。
+9. **状态过滤保留**:WechatBillParser / AlipayBillParser parseRow 内对 `status` 字段(退款 / 失败 / 关闭 / 未支付)返回 null,跳过该行。**不**让用户配置——这些行无金额或重复扣款。
+10. **列重映射策略**(各 vendor parser 的 `mapColumns` 覆写):微信「交易类型」→ category、「收/支」→ type、「支付方式」→ account;支付宝「类型」→ category、「金额」→ amount、固定 account=「支付宝」(parseRow 直接写)。GenericBillParser 是兜底 parser,只按 normalize 后的 key 映射,识别能力最弱但适用面最广。
+11. **高级映射 UI**:`_buildPreview` 内 ExpansionTile(默认收起);用户可调任意「CSV 列 → 字段 key」,点「重新预览」用 GenericBillParser + 自定义 mapping 重跑。`BackupImportService.preview(overrideColumnMapping: ...)` 是入口;parserId 标记为 `'custom'`,parserDisplayName 标记为「自定义映射」。
+12. **向后兼容 9 列**:BianbianBillParser 同时识别 10 列(`_header10`)与旧 9 列(`_header9`),旧版本导出文件仍可导入。`primaryCategoryName` 旧路径返回 null。
+13. **编码自动检测**:`decodeCsvBytes` 6 步 fallback——UTF-16 LE/BE BOM → UTF-8 BOM → UTF-8 全解 → GBK(gbk_codec) → latin1 兜底。中文 CSV 实测三家全部覆盖。
+14. **删除 13.4 关键词模板**:`lib/features/import_export/templates/` 整目录 + 配套测试 (`third_party_template_test.dart`) 一次性删除。无残留引用(grep `third_party_template|detectThirdPartyTemplate|ThirdPartyMatch|kKeywordToCategory|kFallbackCategoryName|mapKeywordToCategory` 仅命中 docs)。
+
+### 导入数据流
+
+```
+file bytes
+  → decodeCsvBytes(6 步编码 fallback) → text
+  → stripUtf8Bom + parseCsvRows(RFC 4180)→ rows
+  → detectBillParser(kAllParsers 顺序遍历)→ BillParser(本 App / 微信 / 支付宝 / 钱迹 / Generic)
+  → parser.findHeaderRow(rows) → headerRowIdx
+  → parser.mapColumns(rows[headerRowIdx]) → Map<fieldKey, colIdx>
+  → for each data row: parser.parseRow(row, mapping) → BackupImportCsvRow?
+  → BackupImportPreview(parserId / parserDisplayName / csvHeader / columnMapping /
+                        newCategoryCount / newAccountCount / sampleRows / csvRows)
+  → user 可选「高级映射」覆盖 → preview(overrideColumnMapping:) 重跑用 GenericBillParser
+  → apply → _applyCsv:
+       第一遍:扫 csvRows 收集 newCategorySpecs / newAccountSpecs(含 revival 检测)
+       db.transaction {
+         create / revive categories + syncOpDao.enqueue 每条
+         create / revive accounts + syncOpDao.enqueue 每条
+         写 transactions(resolve cat/account by 刷新后的缓存;不进 sync_op)
+       }
+  → BackupImportResult(transactionsWritten / categoriesCreated / accountsCreated /
+                       unresolvedLedgerLabels)
+```
+
+### 单元测试策略
+
+- `test/features/import_export/csv/`:每个 parser 独立测试(validateBillType / findHeaderRow / mapColumns / parseRow 全路径),约 40 用例。
+- `test/features/import_export/import_service_test.dart`:新增 CSV 10 列 preview / 旧 9 列兼容 / 自动新建分类 / 复活 / 自动新建账户 / sync_op 写入 / transactions 不进 sync_op 共 5 组用例,删除 13.4 的「拒绝错误列头 / 拒绝列数不匹配 / 拒绝无法识别类型」3 个不再适用的用例,「按名匹配 fallback」用例改写为「auto-create」语义,共 30 个用例通过。
+- `test/features/import_export/export_service_test.dart`:新增「一级分类列写 parent_key 中文标签 / 转账行该列为空 / 未知 parent_key 该列为空」3 个用例;旧 8 个用例的期望字符串全部加一列,23 个用例通过。
+- 整套不依赖 BeeCount 项目(仅参考其 `services/import/` 设计,代码全自写)。
+
+### 与前后阶段衔接
+
+- **承接 13.3**:csv_lexer 直接复用 13.3 的 parseCsvRows / stripUtf8Bom / stripLedgerEmoji,只是抽出到独立文件;BackupImportPreview / BackupImportResult 字段加了 4 个(parserId / parserDisplayName / csvHeader / columnMapping / newCategoryCount / newAccountCount + categoriesCreated / accountsCreated),旧 JSON / .bbbak 路径不受影响。
+- **承接 13.4**:删除 templates/ + 配套测试是 13.4 的终结。所有 13.4 的功能(钱迹 / 微信 / 支付宝识别)由 13.5 的 parser 接管,且能力扩展到「任意带中文表头 CSV」。
+- **衔接 14.x**:无直接耦合。14.x 是「记账 / 统计 / 资产卡片」,与导入路径解耦。
+- **预留 Phase 18.x**:流水不进 sync_op 是当前折中,Phase 18 「完整云端备份」会引入 transaction-level sync_op + 冲突合并,届时 _applyCsv 第二遍内补一行 `db.syncOpDao.enqueue(entity: 'transaction', ...)` 即可。
+
+### 故意不做的事
+
+- **不**支持 XLSX / PDF 导入:Flutter 内现成 lib 都笨重(对 100 行 CSV 来说),用户能拿到 CSV 就够。
+- **不**做流式 / chunk 导入:实测 10000 行 CSV 全量解析 + 写库 < 2 秒,没必要复杂化。
+- **不**做分类映射 UI(让用户选「私房菜 → 食物」):自动建 + 用户事后手工调整 parent_key 已经够用;UI 加进来反而是阻塞用户的「再确认对话框」。
+- **不**做导出加密 CSV:CSV 本身明文,加密需要的人用 .bbbak。
+
+### 已知风险
+
+- **微信分类爆炸**:微信「交易类型」一日交易里可能有 20-50 个不同值(每个 SKU 一个),导入一年账单会建几百个二级分类。**当前接受**——用户后续手工合并 / 删除。如果反馈强烈,Phase 13.6 可加 WechatBillParser 选项「忽略 category 列」(全部归 other)。
+- **账户爆炸**:同理,支付宝 / 微信账单的「支付方式」列也可能产生大量空账户(招商卡 8888 / 招商卡 9999 / ...)。type='other' 是中性默认,用户可在账户页编辑。
+- **跨设备同步流水缺失**:B 设备同步后只看到空分类 / 零余额账户,没有流水。是 Phase 18.x 解决项,**当前接受**。
+- **gbk_codec 依赖**:0.4.x 是当前稳定版,如未来升级到 0.5.x 需检查 `gbk_bytes.decode` 接口签名。
+
+### 实施日期
+
+2026-05-16 — 8 个 Phase / 22 个 task / 单个 master 分支顺次执行;每 task 独立 commit(`Step 13.5(N/22):...`);subagent-driven 工作流(implementer → spec reviewer → code-quality reviewer)在前 15 task 严格执行,后 7 task 因机械性强直接由主 agent 完成。
