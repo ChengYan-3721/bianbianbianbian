@@ -189,12 +189,12 @@ void main() {
   });
 
   group('encodeBackupCsv', () {
-    test('emits UTF-8 BOM and 9-column Chinese header', () {
+    test('emits UTF-8 BOM and 10-column Chinese header', () {
       final csv = encodeBackupCsv(snapshots: const []);
       expect(csv.startsWith('\uFEFF'), isTrue);
       final header = csv.split('\n').first;
       expect(header,
-          '\uFEFF账本,日期,类型,金额,币种,分类,账户,转入账户,备注');
+          '\uFEFF账本,日期,类型,金额,币种,一级分类,分类,账户,转入账户,备注');
     });
 
     test('writes ledger label with cover emoji + name', () {
@@ -221,7 +221,7 @@ void main() {
       expect(lines.length, 2);
       expect(
         lines[1],
-        '📒 生活,2026-04-25 10:00,支出,12.50,CNY,餐饮,现金,,午餐',
+        '📒 生活,2026-04-25 10:00,支出,12.50,CNY,饮食,餐饮,现金,,午餐',
       );
     });
 
@@ -246,7 +246,7 @@ void main() {
       final lines = const LineSplitter().convert(csv);
       expect(
         lines[1],
-        '工作,2026-04-05 09:30,收入,5000.00,CNY,,工行卡,,工资',
+        '工作,2026-04-05 09:30,收入,5000.00,CNY,,,工行卡,,工资',
       );
     });
 
@@ -274,7 +274,7 @@ void main() {
       final lines = const LineSplitter().convert(csv);
       expect(
         lines[1],
-        '📒 生活,2026-04-10 12:00,转账,200.00,CNY,,现金,工行卡,',
+        '📒 生活,2026-04-10 12:00,转账,200.00,CNY,,,现金,工行卡,',
       );
     });
 
@@ -388,7 +388,100 @@ void main() {
         ),
       ]);
       final lines = const LineSplitter().convert(csv);
-      expect(lines[1], '📒 生活,2026-04-01 00:00,支出,3.50,CNY,,,,');
+      expect(lines[1], '📒 生活,2026-04-01 00:00,支出,3.50,CNY,,,,,');
+    });
+
+    // ── Step 13.5 新增:一级分类列 ─────────────────────────────────
+    test('Step 13.5:一级分类列写入 parent_key 中文标签', () {
+      final cat = Category(
+        id: 'c-food',
+        name: '早餐',
+        parentKey: 'food',
+        updatedAt: DateTime.utc(2026, 4, 1),
+        deviceId: 'dev-1',
+      );
+      final csv = encodeBackupCsv(snapshots: [
+        _snap(
+          ledger: _ledger(id: 'L1', name: '生活', cover: '📒'),
+          categories: [cat],
+          accounts: [_acc('a', '现金')],
+          transactions: [
+            _tx(
+              id: 't',
+              ledgerId: 'L1',
+              type: 'expense',
+              amount: 10,
+              occurredAt: DateTime.utc(2026, 4, 1, 12),
+              categoryId: 'c-food',
+              accountId: 'a',
+            ),
+          ],
+        ),
+      ]);
+      final lines = const LineSplitter().convert(csv);
+      final cols = lines[1].split(',');
+      expect(cols.length, 10);
+      expect(cols[5], '饮食'); // food → 饮食
+      expect(cols[6], '早餐');
+    });
+
+    test('Step 13.5:转账行一级分类列为空', () {
+      final csv = encodeBackupCsv(snapshots: [
+        _snap(
+          ledger: _ledger(id: 'L1', name: '生活', cover: '📒'),
+          accounts: [
+            _acc('a', '现金'),
+            _acc('b', '工行卡'),
+          ],
+          transactions: [
+            _tx(
+              id: 't',
+              ledgerId: 'L1',
+              type: 'transfer',
+              amount: 100,
+              occurredAt: DateTime.utc(2026, 4, 1, 12),
+              accountId: 'a',
+              toAccountId: 'b',
+            ),
+          ],
+        ),
+      ]);
+      final lines = const LineSplitter().convert(csv);
+      final cols = lines[1].split(',');
+      expect(cols[5], ''); // 一级分类空
+      expect(cols[6], ''); // 二级分类空
+    });
+
+    test('Step 13.5:未知 parent_key 一级分类列为空', () {
+      final cat = Category(
+        id: 'c-x',
+        name: '未知',
+        parentKey: 'xyz_not_a_key',
+        updatedAt: DateTime.utc(2026, 4, 1),
+        deviceId: 'dev-1',
+      );
+      final csv = encodeBackupCsv(snapshots: [
+        _snap(
+          ledger: _ledger(id: 'L1', name: '生活', cover: '📒'),
+          categories: [cat],
+          accounts: [_acc('a', '现金')],
+          transactions: [
+            _tx(
+              id: 't',
+              ledgerId: 'L1',
+              type: 'expense',
+              amount: 5,
+              occurredAt: DateTime.utc(2026, 4, 1, 12),
+              categoryId: 'c-x',
+              accountId: 'a',
+            ),
+          ],
+        ),
+      ]);
+      final lines = const LineSplitter().convert(csv);
+      final cols = lines[1].split(',');
+      expect(cols[5], ''); // 一级分类映射失败 → 空
+      expect(cols[6], '未知');
     });
   });
 

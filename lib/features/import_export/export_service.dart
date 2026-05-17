@@ -9,13 +9,14 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/util/parent_key_labels.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
 import '../sync/snapshot_serializer.dart';
 import 'bbbak_codec.dart';
 
 /// 导出格式：
-/// - [csv]：Excel 友好，9 列中文表头，体积小，**不**含全量结构（不可 round-trip 完美还原）；
+/// - [csv]:Excel 友好,10 列中文表头,体积小,**不**含全量结构(不可 round-trip 完美还原);
 /// - [json]：结构化全量备份，Step 13.3 可直接导入还原；明文，谁拿到都能读；
 /// - [bbbak]：JSON + AES-256-GCM 加密的二进制包（Step 13.2），密码丢失无法恢复。
 enum BackupFormat { csv, json, bbbak }
@@ -95,11 +96,13 @@ class MultiLedgerSnapshot {
 
 const _csvBom = '\uFEFF';
 
-/// CSV 列头——固定 9 列（账本 + 8 数据字段）。
+/// CSV 列头——固定 10 列(账本 + 9 数据字段)。
 ///
-/// **始终带账本列**——即使单账本导出也带：① 让 Step 13.3 round-trip 能识别归属；
+/// **始终带账本列**——即使单账本导出也带:① 让 Step 13.3 round-trip 能识别归属;
 /// ② 用户合并多份备份到同一文件时不至于丢失账本边界。这与 `stats_export_service`
-/// 的 8 列 CSV 故意不同——那个是 ledger-scoped 的统计视图导出，本文件是跨账本备份。
+/// 的 8 列 CSV 故意不同——那个是 ledger-scoped 的统计视图导出,本文件是跨账本备份。
+///
+/// Step 13.5 新增「一级分类」列(位于「分类」之前),写入 parent_key 对应中文标签。
 // i18n-exempt: CSV column header for V1 Chinese format
 const List<String> _backupCsvHeader = <String>[
   '账本',
@@ -107,6 +110,7 @@ const List<String> _backupCsvHeader = <String>[
   '类型',
   '金额',
   '币种',
+  '一级分类',
   '分类',
   '账户',
   '转入账户',
@@ -194,9 +198,10 @@ String encodeBackupCsv({required List<LedgerSnapshot> snapshots}) {
       ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
 
     for (final tx in entries) {
-      final categoryName = tx.categoryId == null
-          ? ''
-          : (categoryMap[tx.categoryId!]?.name ?? '');
+      final cat = tx.categoryId == null ? null : categoryMap[tx.categoryId!];
+      final categoryName = cat?.name ?? '';
+      final primaryCategoryName =
+          cat == null ? '' : (parentKeyToChineseLabel(cat.parentKey) ?? '');
       final accountName = tx.accountId == null
           ? ''
           : (accountMap[tx.accountId!]?.name ?? '');
@@ -210,6 +215,7 @@ String encodeBackupCsv({required List<LedgerSnapshot> snapshots}) {
         _typeLabel(tx.type),
         amountFmt.format(tx.amount),
         tx.currency,
+        primaryCategoryName,
         categoryName,
         accountName,
         toAccountName,
@@ -263,7 +269,7 @@ typedef BackupShareXFilesFn = Future<ShareResult> Function(
 ///
 /// 与 `stats_export_service.dart` 形态对称，但作用域不同：
 /// - StatsExportService：当前账本 + 区间，CSV 8 列，附带 PNG 截图。
-/// - BackupExportService：可跨账本，CSV 9 列（含账本），同时支持 JSON round-trip。
+/// - BackupExportService:可跨账本,CSV 10 列(含账本 + 一级分类),同时支持 JSON round-trip。
 class BackupExportService {
   BackupExportService({
     BackupDocumentsDirProvider? documentsDirProvider,
