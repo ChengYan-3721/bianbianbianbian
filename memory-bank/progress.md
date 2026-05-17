@@ -3000,6 +3000,99 @@ V1 选择**省略** plan 提到的 `Stream<AttachmentUploadProgress>` 与 `_Sync
 
 
 
+### ✅ Step 13.5 · CSV 导入重构（BeeCount 同构）(2026-05-16)
+
+> **范围**：重构 CSV 导入路径,引入 BeeCount 同构的 `BillParser` 抽象 + 5 具体 parser;
+> 导出 CSV 9→10 列(新增「一级分类」中文标签列);完全废弃 Step 13.4 关键词→分类映射;
+> 本地不存在的二级分类 / 账户自动新建并进 sync_op 队列(transactions 仍不进);
+> 新增「高级映射」UI 让用户手工调整列 → 字段映射。
+
+**改动**
+
+#### 1. `lib/features/import_export/csv/` 新建子目录(BillParser 抽象 + 注册表)
+
+- `csv_lexer.dart`(117 行):从 import_service.dart 抽出 `parseCsvRows` / `stripUtf8Bom` / `stripLedgerEmoji`,无功能变化。
+- `csv_text_decoder.dart`(75 行):`decodeCsvBytes` 6 步 fallback——UTF-16 LE/BE BOM → UTF-8 BOM → UTF-8 全解 → GBK(gbk_codec) → latin1 兜底。
+- `bill_parser.dart`(50 行):`BillParser` 抽象 + `ParseResult`。4 个核心方法 `validateBillType / findHeaderRow / mapColumns / parseRow`;字段 key 集合 11 个固定常量。
+- `csv_format_detector.dart`(35 行):`kAllParsers` 注册表 + `detectBillParser(rows)` 主入口。顺序敏感(本 App → 微信 → 支付宝 → 钱迹 → Generic)。
+- `parsers/generic_parser.dart`:列名 `normalizeToKey` 11 字段;`parseAmount` / `parseFlexibleDate` / `composeNote` @visibleForTesting 工具。
+- `parsers/bianbian_parser.dart`:本 App 10 列严匹配 + 旧 9 列向后兼容(`_header10` / `_header9`)。
+- `parsers/wechat_parser.dart`:状态过滤(退款 / 失败 / 关闭 / 未支付) + `mapColumns` 覆写(「交易类型」→ category,「收/支」→ type,「支付方式」→ account)。
+- `parsers/alipay_parser.dart`:状态过滤 + 「类型」→ category 重映射 + account 固定「支付宝」。
+- `parsers/qianji_parser.dart`:8 列 / 6 列(`ledger` / `currency` 列可选);`findHeaderRow` 护栏排除「账本」「币种」列(避本 App 误命中)。
+
+#### 2. `lib/features/import_export/import_service.dart`(改造)
+
+- `BackupImportCsvRow` 加 `primaryCategoryName` 字段(中文一级分类标签)。
+- `BackupImportPreview` 加 `parserId / parserDisplayName / csvHeader / columnMapping / newCategoryCount / newAccountCount` 6 个新字段;删 `thirdPartyTemplateId / thirdPartyTemplateName / unmappedCategoryCount` 3 个旧字段。
+- `BackupImportResult` 加 `categoriesCreated / accountsCreated` 2 个新字段。
+- `preview()` 加 `overrideColumnMapping` 可选入参(高级映射 UI 用)。
+- `_previewCsvBytes` 改用 `detectBillParser`;override 非空时强制走 `GenericBillParser` + 自定义 mapping(parserId='custom')。
+- `_applyCsv` 两遍扫描重写:
+  1. 第一遍:扫 csvRows 收集 `_NewCategorySpec` / `_NewAccountSpec`(按 name 去重 Set;含 revival 检测——存在但 deletedAt 非空也算待处理)。
+  2. `db.transaction { create/revive categories + sync_op.enqueue(每条 upsert); create/revive accounts + sync_op.enqueue(每条 upsert); 写 transactions(用刷新后的 categoryByName / accountByName 缓存 resolve id;**不**写 sync_op) }`。
+- 删 `_previewFromThirdPartyMatch` / `_isExpectedHeader` 等 13.4 残留方法。
+
+#### 3. `lib/features/import_export/export_service.dart`(改造)
+
+- `_backupCsvHeader` 9 → 10 列,在「币种」与「分类」之间插「一级分类」。
+- `encodeBackupCsv` 循环内 `parentKeyToChineseLabel(cat.parentKey) ?? ''` 写一级分类列;转账行 / categoryId 为 null / 未知 parent_key → 该列写空。
+
+#### 4. `lib/features/import_export/import_page.dart`(改造)
+
+- 删 `_buildPreview` 内 `importUnmappedCategoryTip(count)` 引用(关键词映射已废弃)。
+- 加「检测到 N 个本地不存在的分类 + M 个本地不存在的账户,导入时会自动创建」橙色提示(仅 isThirdParty && (newCat > 0 || newAcc > 0))。
+- 加 `_buildAdvancedMappingTile`:ExpansionTile + 列 / 字段下拉 + 「重新预览」FilledButton.tonal。
+- 加 `_userMapping` 状态字段 + `_currentMappingFor / _fieldKeyOptions / _rePreview` helpers;`_resetToIdle` 同步清空。
+- l10n:`importCsvDesc / importThirdPartyDesc / importThirdPartyTip / importUnmappedCategoryTip / importCsvThirdPartyDesc / importCsvNoIdDesc` 文案全部更新(签名不变)。
+
+#### 5. `lib/core/util/parent_key_labels.dart`(新建,Step 13.5 单一真值源)
+
+- `kParentKeyToLabel` / `kLabelToParentKey` 两个 const Map(11 个固定 parent_key)。
+- `parentKeyToChineseLabel(key)` / `chineseLabelToParentKey(label)` 顶层函数。
+- `quick_text_parser` 改引用本文件(去掉内联硬编码),`export_service` / `import_service` 共用。
+
+#### 6. 测试
+
+- 新增 `test/features/import_export/csv/` 子目录(每个 parser 独立测试,约 40 用例),全部通过。
+- `test/features/import_export/import_service_test.dart`:删除 3 个 13.4 拒绝用例(parser 已不拒绝),重写「按名匹配 fallback」为「auto-create」语义,新增 7 个用例(10 列 preview / 9 列兼容 / 新建分类 / 复活分类 / sync_op category 入队 / transactions 不入队 / 新建账户)。30 个用例通过。
+- `test/features/import_export/export_service_test.dart`:旧 8 个用例期望串加一列,新增 3 个 Step 13.5 用例(parent_key 中文标签 / 转账空 / 未知 parent_key 空)。23 个用例通过。
+- 删除 `test/features/import_export/third_party_template_test.dart`(Step 13.4 关键词映射测试,与 templates/ 整目录一同删除)。
+
+#### 7. 依赖
+
+- `pubspec.yaml`:`gbk_codec: ^0.4.0`(GBK 解码,无传递依赖)。
+
+#### 8. 文档
+
+- `memory-bank/architecture.md`:加 Phase 13.5 段(14 条决策 + 文件树增量 + 数据流图 + 测试策略 + 衔接前后阶段 + 已知风险)。
+- `memory-bank/progress.md`:本段。
+
+**验证**
+
+- `flutter analyze lib test` → No issues found.
+- `flutter test test/features/import_export/`:`csv/` 子目录约 40 用例 + import_service 30 用例 + export_service 23 用例 + bbbak_codec 若干用例,全部通过。
+- `flutter test`(全量回归)→ Task 22 实测后回填。
+- **用户本机端到端验证(待用户执行,5 项)**:
+  1. 微信账单 CSV → 识别为「微信账单」+ 状态过滤生效 + 大量新分类挂到 other。
+  2. 支付宝账单 CSV → 识别为「支付宝账单」+ 账户=支付宝。
+  3. 钱迹 CSV → 识别为「钱迹」+ 一级 / 二级分类正确归类。
+  4. 本 App 10 列 CSV(再导回)→ 识别为「本 App」+ round-trip 完整。
+  5. 「高级映射」展开 → 调列 → 重新预览 → parserDisplayName=「自定义映射」。
+
+**给后续开发者的备忘**
+
+- 微信账单「交易类型」是噪音化分类源——若用户反馈分类爆炸严重,可考虑 13.6 把「忽略 category 列」作为微信 parser 的默认行为。
+- 新建分类 / 账户进 sync_op 但流水不进——B 设备看到空分类 / 零余额账户是已知边界,等 Phase 18.x「完整云端备份」解决。
+- gbk_codec 是新依赖;若未来升级到 0.5.x 注意检查 `gbk_bytes` 接口是否变更。
+- BianbianBillParser 在注册表最前——任何新增的本 App 自有 CSV 变体(如未来 11 列加新字段)必须更新 `_header10` / `_header11` 列表。
+- `normalizeToKey` 顺序敏感——「二级分类」必须放在「分类」之前判定。改动时务必跑 generic_parser_test 验证。
+- `_NewCategorySpec` / `_NewAccountSpec` 用 name-only 去重——同名二级分类在不同 primary 标签下会合并为一条(以首次出现的 primary 为准),这是 spec 设计。若需要更严格,改 equality 包含 parentKey。
+
+---
+
+
+
 ## ✅ Step 14.1 · 应用锁 PIN 设置（2026-05-07）
 
 **改动**
