@@ -53,7 +53,10 @@ class _ImportPageState extends ConsumerState<ImportPage> {
   /// 用户可见错误文本——`_Stage.error` 时显示，其他阶段为 null。
   String? _errorText;
 
-  /// `.bbbak` 密码输入（仅 `_Stage.needPassword` 时使用）。
+  /// 用户在「高级映射」中调整的列 → 字段映射(null = 未改动,走 detector)。
+  Map<String, int>? _userMapping;
+
+  /// `.bbbak` 密码输入(仅 `_Stage.needPassword` 时使用)。
   final TextEditingController _passwordCtrl = TextEditingController();
   bool _passwordObscured = true;
 
@@ -363,6 +366,8 @@ class _ImportPageState extends ConsumerState<ImportPage> {
           ),
         ),
         const SizedBox(height: 12),
+        if (isCsv && preview.csvHeader != null)
+          _buildAdvancedMappingTile(context, preview),
         Text(context.l10n.importSampleRows(preview.sampleRows.length), style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         Expanded(
@@ -620,6 +625,132 @@ class _ImportPageState extends ConsumerState<ImportPage> {
     });
   }
 
+  // ─── 高级映射(Step 13.5) ─────────────────────────────────────────────
+
+  Widget _buildAdvancedMappingTile(
+      BuildContext context, BackupImportPreview preview) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        title: const Text('高级映射(调整列 → 字段)'),
+        subtitle: Text(
+          '解析后列 → 字段映射;改完点「重新预览」生效',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
+          ),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < preview.csvHeader!.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: Text(
+                            preview.csvHeader![i],
+                            style: theme.textTheme.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Text(' → '),
+                        Expanded(
+                          flex: 6,
+                          child: DropdownButton<String?>(
+                            isExpanded: true,
+                            value: _currentMappingFor(preview, i),
+                            items: _fieldKeyOptions(),
+                            onChanged: (key) {
+                              setState(() {
+                                _userMapping ??=
+                                    Map.of(preview.columnMapping ?? const {});
+                                _userMapping!
+                                    .removeWhere((_, idx) => idx == i);
+                                if (key != null) _userMapping![key] = i;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.tonal(
+                    onPressed: _userMapping == null ? null : _rePreview,
+                    child: const Text('重新预览'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _currentMappingFor(BackupImportPreview p, int colIdx) {
+    final m = _userMapping ?? p.columnMapping ?? const <String, int>{};
+    for (final entry in m.entries) {
+      if (entry.value == colIdx) return entry.key;
+    }
+    return null;
+  }
+
+  List<DropdownMenuItem<String?>> _fieldKeyOptions() {
+    const fieldKeys = [
+      'date',
+      'type',
+      'amount',
+      'currency',
+      'primary_category',
+      'category',
+      'account',
+      'from_account',
+      'to_account',
+      'note',
+      'status',
+    ];
+    return [
+      const DropdownMenuItem<String?>(value: null, child: Text('(忽略)')),
+      for (final k in fieldKeys)
+        DropdownMenuItem<String?>(value: k, child: Text(k)),
+    ];
+  }
+
+  Future<void> _rePreview() async {
+    final l10n = context.l10n;
+    final bytes = _bytes;
+    final mapping = _userMapping;
+    if (bytes == null || mapping == null) return;
+    setState(() => _stage = _Stage.parsing);
+    final service = BackupImportService();
+    try {
+      final preview = await service.preview(
+        bytes: bytes,
+        fileType: BackupImportFileType.csv,
+        overrideColumnMapping: mapping,
+      );
+      setState(() {
+        _preview = preview;
+        _userMapping = null;
+        _stage = _Stage.preview;
+      });
+    } on BackupImportException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError(l10n.importParseFailed(e.toString()));
+    }
+  }
+
   void _resetToIdle() {
     _passwordCtrl.clear();
     setState(() {
@@ -631,6 +762,7 @@ class _ImportPageState extends ConsumerState<ImportPage> {
       _result = null;
       _errorText = null;
       _strategy = BackupDedupeStrategy.skip;
+      _userMapping = null;
     });
   }
 
