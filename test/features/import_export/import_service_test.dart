@@ -76,6 +76,41 @@ Account _acc(String id, String name, {String type = 'cash'}) => Account(
       deviceId: _devId,
     );
 
+Ledger _ledgerWithSvg(String id, String name, {required String coverSvg}) =>
+    Ledger(
+      id: id,
+      name: name,
+      coverSvg: coverSvg,
+      createdAt: DateTime.utc(2026, 4, 1),
+      updatedAt: DateTime.utc(2026, 4, 1),
+      deviceId: _devId,
+    );
+
+Category _catWithSvg(
+  String id,
+  String name, {
+  required String iconSvg,
+  String parentKey = 'food',
+}) =>
+    Category(
+      id: id,
+      name: name,
+      parentKey: parentKey,
+      iconSvg: iconSvg,
+      updatedAt: DateTime.utc(2026, 4, 1),
+      deviceId: _devId,
+    );
+
+Account _accWithSvg(String id, String name, {required String iconSvg}) =>
+    Account(
+      id: id,
+      name: name,
+      type: 'cash',
+      iconSvg: iconSvg,
+      updatedAt: DateTime.utc(2026, 4, 1),
+      deviceId: _devId,
+    );
+
 TransactionEntry _tx({
   required String id,
   required String ledgerId,
@@ -894,6 +929,108 @@ void main() {
         ),
         throwsA(isA<BackupImportException>()),
       );
+    });
+  });
+
+  group('SVG 图标 JSON round-trip（Step 14.x）', () {
+    test('export → import 后 DB 三类实体 SVG 列与原值一致', () async {
+      const ledgerSvg = '<svg viewBox="0 0 24 24" id="ledger"/>';
+      const catSvg = '<svg viewBox="0 0 24 24" id="cat"/>';
+      const accSvg = '<svg viewBox="0 0 24 24" id="acc"/>';
+
+      final ledger = _ledgerWithSvg('L-svg', '家庭', coverSvg: ledgerSvg);
+      final category = _catWithSvg('C-svg', '咖啡', iconSvg: catSvg);
+      final account = _accWithSvg('A-svg', '支付宝', iconSvg: accSvg);
+
+      final multi = _multi([
+        _snap(
+          ledger,
+          categories: [category],
+          accounts: [account],
+          transactions: const [],
+        ),
+      ]);
+
+      // 模拟"导出"——直接复用 _jsonBytes（与 BackupExportService.exportJson
+      // 的字节路径同源：jsonEncode(multi.toJson())）
+      final bytes = _jsonBytes(multi);
+
+      // 全新内存 DB（模拟跨设备恢复）
+      final db = _createDb();
+      addTearDown(db.close);
+
+      final svc = BackupImportService(uuid: const Uuid());
+      final preview = await svc.preview(
+        bytes: bytes,
+        fileType: BackupImportFileType.json,
+      );
+      expect(preview.fileType, BackupImportFileType.json);
+
+      await svc.apply(
+        preview: preview,
+        strategy: BackupDedupeStrategy.overwrite,
+        db: db,
+        currentDeviceId: _devId,
+      );
+
+      // 直接拉 DB 行（绕过 mapper，验证字节层面落库正确）
+      final ledgerRow = await (db.select(db.ledgerTable)
+            ..where((t) => t.id.equals('L-svg')))
+          .getSingle();
+      final catRow = await (db.select(db.categoryTable)
+            ..where((t) => t.id.equals('C-svg')))
+          .getSingle();
+      final accRow = await (db.select(db.accountTable)
+            ..where((t) => t.id.equals('A-svg')))
+          .getSingle();
+
+      expect(ledgerRow.coverSvg, ledgerSvg);
+      expect(catRow.iconSvg, catSvg);
+      expect(accRow.iconSvg, accSvg);
+    });
+
+    test('SVG 字段为 null 时 round-trip 后 DB 列仍为 null（控制实验）', () async {
+      final ledger = _ledger('L-nil', '工作'); // 没传 coverSvg
+      final category = _cat('C-nil', '工资', parentKey: 'income');
+      final account = _acc('A-nil', '现金');
+
+      final multi = _multi([
+        _snap(
+          ledger,
+          categories: [category],
+          accounts: [account],
+        ),
+      ]);
+      final bytes = _jsonBytes(multi);
+
+      final db = _createDb();
+      addTearDown(db.close);
+
+      final svc = BackupImportService(uuid: const Uuid());
+      final preview = await svc.preview(
+        bytes: bytes,
+        fileType: BackupImportFileType.json,
+      );
+      await svc.apply(
+        preview: preview,
+        strategy: BackupDedupeStrategy.overwrite,
+        db: db,
+        currentDeviceId: _devId,
+      );
+
+      final ledgerRow = await (db.select(db.ledgerTable)
+            ..where((t) => t.id.equals('L-nil')))
+          .getSingle();
+      final catRow = await (db.select(db.categoryTable)
+            ..where((t) => t.id.equals('C-nil')))
+          .getSingle();
+      final accRow = await (db.select(db.accountTable)
+            ..where((t) => t.id.equals('A-nil')))
+          .getSingle();
+
+      expect(ledgerRow.coverSvg, isNull);
+      expect(catRow.iconSvg, isNull);
+      expect(accRow.iconSvg, isNull);
     });
   });
 }
