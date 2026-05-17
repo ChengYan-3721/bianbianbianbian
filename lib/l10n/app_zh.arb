@@ -802,9 +802,9 @@
   "importSupportedFormats": "支持的文件格式",
   "importJsonDesc": "JSON：本 App 导出的结构化备份（推荐）",
   "importBbbakDesc": ".bbbak：本 App 导出的加密备份（需要密码）",
-  "importCsvDesc": "CSV：本 App 导出的表格（按账本名匹配）",
-  "importThirdPartyDesc": "第三方账单：钱迹 / 微信 / 支付宝 CSV（自动识别）",
-  "importThirdPartyTip": "提示：第三方账单会被识别为单一账本，自动归入当前账本；分类按关键词推测，不能命中的归到「其他」。",
+  "importCsvDesc": "CSV：本 App 导出的表格（10 列，含一级分类）",
+  "importThirdPartyDesc": "第三方账单：微信 / 支付宝 / 钱迹 + 任意带中文表头 CSV（自动识别）",
+  "importThirdPartyTip": "提示：不存在的分类 / 账户会自动创建。分类按「一级分类」列归类，无法判断的归到「其他」；账户以 type=其他 创建。",
   "importSelectFile": "选择备份文件",
   "importFilePathError": "文件路径不可读",
   "importSelectFileFailed": "选择文件失败：{error}",
@@ -848,7 +848,7 @@
   "importRecognizedAs": "识别为",
   "importLedgerCount": "账本数",
   "importTxCount": "流水数",
-  "importUnmappedCategoryTip": "其中 {count} 条按关键词未匹配到本地分类，已归入「其他」。",
+  "importUnmappedCategoryTip": "其中 {count} 个分类本地不存在，导入时会自动创建；无法判断「一级分类」的归到「其他」。",
   "@importUnmappedCategoryTip": {
     "placeholders": {
       "count": {
@@ -1562,8 +1562,8 @@
     }
   },
   "exportBbbakLabel": "加密备份 .bbbak",
-  "importCsvThirdPartyDesc": "第三方账单不含本 App 的 ID，会作为「全部新记录」导入；账本归入当前账本，账户列若与现有账户同名会被关联，否则置空。",
-  "importCsvNoIdDesc": "CSV 文件不含 ID，只能作为「全部新记录」导入；账本/分类/账户按名称匹配，匹配不到时归到当前账本，分类/账户列空。",
+  "importCsvThirdPartyDesc": "CSV 不含本 App 的 ID，作为「全部新记录」导入；账本归入当前账本；分类与账户列若与本地已有同名则关联，否则自动新建。",
+  "importCsvNoIdDesc": "CSV 不含本 App 的 ID，作为「全部新记录」导入；账本归入当前账本；分类与账户列若与本地已有同名则关联，否则自动新建。",
   "pinUnlockSubtitle": "请输入应用锁 PIN",
   "ledgerDefaultName": "账本",
   "statsTooltipDateFormat": "M月d日",

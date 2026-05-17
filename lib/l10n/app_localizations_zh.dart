@@ -1386,14 +1386,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importBbbakDesc => '.bbbak：本 App 导出的加密备份（需要密码）';
 
   @override
-  String get importCsvDesc => 'CSV：本 App 导出的表格（按账本名匹配）';
+  String get importCsvDesc => 'CSV：本 App 导出的表格（10 列，含一级分类）';
 
   @override
-  String get importThirdPartyDesc => '第三方账单：钱迹 / 微信 / 支付宝 CSV（自动识别）';
+  String get importThirdPartyDesc => '第三方账单：微信 / 支付宝 / 钱迹 + 任意带中文表头 CSV（自动识别）';
 
   @override
   String get importThirdPartyTip =>
-      '提示：第三方账单会被识别为单一账本，自动归入当前账本；分类按关键词推测，不能命中的归到「其他」。';
+      '提示：不存在的分类 / 账户会自动创建。分类按「一级分类」列归类，无法判断的归到「其他」；账户以 type=其他 创建。';
 
   @override
   String get importSelectFile => '选择备份文件';
@@ -1450,7 +1450,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String importUnmappedCategoryTip(int count) {
-    return '其中 $count 条按关键词未匹配到本地分类，已归入「其他」。';
+    return '其中 $count 个分类本地不存在，导入时会自动创建；无法判断「一级分类」的归到「其他」。';
   }
 
   @override
@@ -2335,11 +2335,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importCsvThirdPartyDesc =>
-      '第三方账单不含本 App 的 ID，会作为「全部新记录」导入；账本归入当前账本，账户列若与现有账户同名会被关联，否则置空。';
+      'CSV 不含本 App 的 ID，作为「全部新记录」导入；账本归入当前账本；分类与账户列若与本地已有同名则关联，否则自动新建。';
 
   @override
   String get importCsvNoIdDesc =>
-      'CSV 文件不含 ID，只能作为「全部新记录」导入；账本/分类/账户按名称匹配，匹配不到时归到当前账本，分类/账户列空。';
+      'CSV 不含本 App 的 ID，作为「全部新记录」导入；账本归入当前账本；分类与账户列若与本地已有同名则关联，否则自动新建。';
 
   @override
   String get pinUnlockSubtitle => '请输入应用锁 PIN';

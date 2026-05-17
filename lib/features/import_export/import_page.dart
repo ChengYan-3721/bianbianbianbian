@@ -331,11 +331,16 @@ class _ImportPageState extends ConsumerState<ImportPage> {
                   label: context.l10n.importTxCount,
                   value: '${preview.transactionCount}',
                 ),
-                if (isThirdParty && preview.newCategoryCount > 0)
+                if (isThirdParty &&
+                    (preview.newCategoryCount > 0 ||
+                        preview.newAccountCount > 0))
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      context.l10n.importUnmappedCategoryTip(preview.newCategoryCount),
+                      '检测到 ${preview.newCategoryCount} 个本地不存在的分类 + '
+                      '${preview.newAccountCount} 个本地不存在的账户,导入时会自动创建。'
+                      '分类按「一级分类」列归类,无法判断的归到「其他」;'
+                      '账户以 type=其他 创建。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.tertiary,
                       ),
