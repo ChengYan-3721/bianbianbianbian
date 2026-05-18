@@ -1100,6 +1100,64 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get accountAssets => '资产';
+
+  @override
+  String get accountNetAssets => '净资产';
+
+  @override
+  String get accountLiabilities => '负债';
+
+  @override
+  String get accountDetailSettings => '设置';
+
+  @override
+  String get accountDetailBalance => '账户余额';
+
+  @override
+  String get accountDetailYear => '年份';
+
+  @override
+  String get accountDetailInflow => '流入';
+
+  @override
+  String get accountDetailOutflow => '流出';
+
+  @override
+  String accountDetailInflowLine(String amount) {
+    return '流入：¥$amount';
+  }
+
+  @override
+  String accountDetailOutflowLine(String amount) {
+    return '流出：¥$amount';
+  }
+
+  @override
+  String accountDetailMonthLabel(String month) {
+    return '$month月';
+  }
+
+  @override
+  String accountDetailMonthRange(String start, String end) {
+    return '$start-$end';
+  }
+
+  @override
+  String accountDetailDayLabel(String day) {
+    return '$day日';
+  }
+
+  @override
+  String get accountDetailYesterday => '昨日';
+
+  @override
+  String get accountDetailToday => '今日';
+
+  @override
+  String get accountDetailEmptyMonth => '一滴流水都没有~';
+
+  @override
   String get lockTitle => '应用锁';
 
   @override
@@ -1708,7 +1766,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncConfigS3 => '配置 S3';
 
   @override
-  String get syncS3CustomNameHint => '用作卡片标题与云端文件夹名（可选）';
+  String get syncS3CustomNameHint => '用作卡片标题与云端文件夹名(只能输入字母/数字/下划线/连字符)';
 
   @override
   String syncLedgerLoadFailed(String error) {
@@ -1764,7 +1822,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncUpload => '上传';
 
   @override
-  String get syncDownload => '下载';
+  String get syncDownload => '浏览备份';
 
   @override
   String get syncDeleteCloudBackupShort => '删除云端备份';
@@ -1776,7 +1834,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusNotLoggedIn => '未登录';
 
   @override
-  String get syncStatusNoBackup => '云端无备份';
+  String get syncStatusNoBackup => '当前账本云端无备份';
+
+  @override
+  String get syncNoBackupHintBrowse => '其他设备的备份可在「浏览备份」中找到';
 
   @override
   String get syncStatusSynced => '已同步';
@@ -2618,4 +2679,77 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importMappingFieldStatus => '状态';
+
+  @override
+  String get backupListTitle => '云端备份';
+
+  @override
+  String get backupListEmpty => '云端暂无任何备份';
+
+  @override
+  String backupListLoadFailed(String error) {
+    return '加载云端备份失败：$error';
+  }
+
+  @override
+  String backupRowTxCount(int count) {
+    return '$count 条流水';
+  }
+
+  @override
+  String backupRowFromDevice(String deviceShort) {
+    return '来自设备 $deviceShort';
+  }
+
+  @override
+  String backupRowExportedAt(String time) {
+    return '上传于 $time';
+  }
+
+  @override
+  String get backupRestoreAll => '全部恢复到本地';
+
+  @override
+  String get backupRestoreAllConfirmTitle => '全部恢复';
+
+  @override
+  String backupRestoreAllConfirmMsg(int count) {
+    return '把云端 $count 个备份全部追加为新的本地账本？原有账本保持不变。';
+  }
+
+  @override
+  String backupRestoreAllProgress(int done, int total) {
+    return '正在恢复 $done/$total';
+  }
+
+  @override
+  String backupRestoreAllDone(int count) {
+    return '已恢复 $count 个账本';
+  }
+
+  @override
+  String get backupRestoreConfirmTitle => '恢复为新账本';
+
+  @override
+  String backupRestoreConfirmMsg(String name) {
+    return '将「$name」作为新账本追加到本地。原有数据保留，下次同步会把新账本上传到云端。';
+  }
+
+  @override
+  String backupRestoreSuccess(String name) {
+    return '已恢复为新账本「$name」';
+  }
+
+  @override
+  String backupRestoreFailed(String error) {
+    return '恢复失败：$error';
+  }
+
+  @override
+  String get backupDeleteConfirmMsg => '确定删除此云端备份？仅删除云端，本地数据不动。';
+
+  @override
+  String backupDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
 }

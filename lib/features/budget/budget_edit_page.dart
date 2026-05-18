@@ -318,7 +318,7 @@ class _StartDatePicker extends StatelessWidget {
                   Text(
                     fmt,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.black54,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
                     ),
                   ),
                   if (!isEdit) ...[
@@ -326,7 +326,7 @@ class _StartDatePicker extends StatelessWidget {
                     Text(
                       context.l10n.budgetCarryStartHint,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.black45,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
                       ),
                     ),
                   ],

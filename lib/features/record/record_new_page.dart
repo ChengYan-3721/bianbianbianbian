@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,8 @@ import '../../core/util/svg_or_emoji_icon.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
+import '../account/account_balance.dart';
+import '../account/account_providers.dart';
 import '../settings/settings_providers.dart';
 import 'record_new_providers.dart';
 import 'widgets/attachment_thumbnail.dart';
@@ -797,6 +800,8 @@ class _WalletPillButton extends ConsumerWidget {
       );
     }
 
+    final balancesAsync = ref.watch(accountBalancesProvider);
+
     return FutureBuilder<List<Account>>(
       future: repo.listActive(),
       builder: (context, snapshot) {
@@ -807,6 +812,15 @@ class _WalletPillButton extends ConsumerWidget {
         final selected = selectedId == null
             ? null
             : allAccounts.where((a) => a.id == selectedId).firstOrNull;
+
+        final balancesById = balancesAsync.whenOrNull<List<AccountBalance>>(
+              data: (b) => b,
+            ) ??
+            const [];
+        final balanceById = {
+          for (final b in balancesById) b.accountId: b,
+        };
+
         return _MetaPillButton(
           label: emptyText,
           value: selected?.name ?? emptyText,
@@ -824,6 +838,10 @@ class _WalletPillButton extends ConsumerWidget {
                       size: 20,
                     ),
                     title: Text(a.name),
+                    trailing: _AccountBalanceText(
+                      balance: balanceById[a.id],
+                      account: a,
+                    ),
                     onTap: () {
                       onSelected(a.id);
                       Navigator.pop(ctx);
@@ -834,6 +852,32 @@ class _WalletPillButton extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// 账户选择列表弹窗中，账户名右侧的余额文本。
+///
+/// 余额数据来自 [accountBalancesProvider]，loading/error 时显示 "--"，
+/// 正常时格式化为 `¥1,234.56`（负数前加 `-`）。
+class _AccountBalanceText extends StatelessWidget {
+  const _AccountBalanceText({required this.balance, required this.account});
+
+  final AccountBalance? balance;
+  final Account account;
+
+  static final _fmt = NumberFormat('#,##0.00');
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = balance?.currentBalance ?? account.initialBalance;
+    final isNegative = amount < 0;
+    final text = '${isNegative ? '-' : ''}¥${_fmt.format(amount.abs())}';
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+          ),
     );
   }
 }

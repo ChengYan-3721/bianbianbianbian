@@ -269,4 +269,248 @@ void main() {
       expect(totalNone, 0);
     });
   });
+
+  group('computeAssetsAndLiabilities', () {
+    test('空账户返回 0/0', () {
+      final r = computeAssetsAndLiabilities(
+        accounts: const [],
+        transactions: const [],
+      );
+      expect(r.assets, 0);
+      expect(r.liabilities, 0);
+    });
+
+    test('正余额计入资产、负余额取绝对值计入负债', () {
+      final accs = [
+        _account(id: 'A', name: '现金', initialBalance: 1000),
+        _account(id: 'B', name: '储蓄卡', initialBalance: 500),
+        _account(
+          id: 'C',
+          name: '信用卡',
+          type: 'credit',
+          initialBalance: -300,
+        ),
+      ];
+      final r = computeAssetsAndLiabilities(
+        accounts: accs,
+        transactions: const [],
+      );
+      expect(r.assets, 1500);
+      expect(r.liabilities, 300);
+      // 净资产恒等于 totalAssets
+      expect(
+        r.assets - r.liabilities,
+        computeTotalAssets(accounts: accs, transactions: const []),
+      );
+    });
+
+    test('includeInTotal=false 的账户既不计资产也不计负债', () {
+      final accs = [
+        _account(id: 'A', name: '现金', initialBalance: 1000),
+        _account(
+          id: 'C',
+          name: '隐藏信用卡',
+          type: 'credit',
+          initialBalance: -300,
+          includeInTotal: false,
+        ),
+      ];
+      final r = computeAssetsAndLiabilities(
+        accounts: accs,
+        transactions: const [],
+      );
+      expect(r.assets, 1000);
+      expect(r.liabilities, 0);
+    });
+
+    test('流水使账户跨越正负边界后会切换计入桶', () {
+      final accs = [
+        _account(id: 'A', name: '现金', initialBalance: 100),
+      ];
+      final txs = [
+        _tx(id: 't1', type: 'expense', amount: 250, accountId: 'A'),
+      ];
+      final r = computeAssetsAndLiabilities(
+        accounts: accs,
+        transactions: txs,
+      );
+      // 100 - 250 = -150 → 负债 150,资产 0
+      expect(r.assets, 0);
+      expect(r.liabilities, 150);
+    });
+  });
+
+  group('computeAccountYearDetail', () {
+    test('空流水返回 12 个零月份', () {
+      final r = computeAccountYearDetail(
+        accountId: 'A',
+        year: 2026,
+        transactions: const [],
+      );
+      expect(r.year, 2026);
+      expect(r.yearInflow, 0);
+      expect(r.yearOutflow, 0);
+      expect(r.months.length, 12);
+      expect(r.months.every((m) => m.transactions.isEmpty), isTrue);
+    });
+
+    test('income 流水进本账户=流入；expense 出本账户=流出', () {
+      final txs = [
+        _tx(
+          id: 't1',
+          type: 'income',
+          amount: 100,
+          accountId: 'A',
+          occurredAt: DateTime(2026, 5, 10),
+        ),
+        _tx(
+          id: 't2',
+          type: 'expense',
+          amount: 30,
+          accountId: 'A',
+          occurredAt: DateTime(2026, 5, 11),
+        ),
+      ];
+      final r = computeAccountYearDetail(
+        accountId: 'A',
+        year: 2026,
+        transactions: txs,
+      );
+      expect(r.yearInflow, 100);
+      expect(r.yearOutflow, 30);
+      final may = r.months.firstWhere((m) => m.month == 5);
+      expect(may.inflow, 100);
+      expect(may.outflow, 30);
+      expect(may.transactions.length, 2);
+    });
+
+    test('transfer 双向：转入本账户=流入；转出本账户=流出', () {
+      final txs = [
+        _tx(
+          id: 't1',
+          type: 'transfer',
+          amount: 200,
+          accountId: 'A',
+          toAccountId: 'B',
+          occurredAt: DateTime(2026, 3, 15),
+        ),
+        _tx(
+          id: 't2',
+          type: 'transfer',
+          amount: 50,
+          accountId: 'B',
+          toAccountId: 'A',
+          occurredAt: DateTime(2026, 3, 16),
+        ),
+      ];
+      final rA = computeAccountYearDetail(
+        accountId: 'A',
+        year: 2026,
+        transactions: txs,
+      );
+      expect(rA.yearOutflow, 200);
+      expect(rA.yearInflow, 50);
+      final marchA = rA.months.firstWhere((m) => m.month == 3);
+      expect(marchA.outflow, 200);
+      expect(marchA.inflow, 50);
+      expect(marchA.transactions.length, 2);
+
+      final rB = computeAccountYearDetail(
+        accountId: 'B',
+        year: 2026,
+        transactions: txs,
+      );
+      expect(rB.yearInflow, 200);
+      expect(rB.yearOutflow, 50);
+    });
+
+    test('与本账户无关的流水被忽略', () {
+      final txs = [
+        _tx(
+          id: 't1',
+          type: 'expense',
+          amount: 30,
+          accountId: 'X',
+          occurredAt: DateTime(2026, 1, 1),
+        ),
+        _tx(
+          id: 't2',
+          type: 'transfer',
+          amount: 50,
+          accountId: 'X',
+          toAccountId: 'Y',
+          occurredAt: DateTime(2026, 2, 1),
+        ),
+      ];
+      final r = computeAccountYearDetail(
+        accountId: 'A',
+        year: 2026,
+        transactions: txs,
+      );
+      expect(r.yearInflow, 0);
+      expect(r.yearOutflow, 0);
+      expect(r.months.every((m) => m.transactions.isEmpty), isTrue);
+    });
+
+    test('非本年流水被忽略；软删流水被忽略', () {
+      final txs = [
+        _tx(
+          id: 't1',
+          type: 'income',
+          amount: 100,
+          accountId: 'A',
+          occurredAt: DateTime(2025, 12, 31),
+        ),
+        _tx(
+          id: 't2',
+          type: 'expense',
+          amount: 30,
+          accountId: 'A',
+          occurredAt: DateTime(2026, 4, 1),
+          deletedAt: DateTime(2026, 4, 2),
+        ),
+      ];
+      final r = computeAccountYearDetail(
+        accountId: 'A',
+        year: 2026,
+        transactions: txs,
+      );
+      expect(r.yearInflow, 0);
+      expect(r.yearOutflow, 0);
+    });
+
+    test('同月多条流水按 occurredAt 倒序', () {
+      final txs = [
+        _tx(
+          id: 'early',
+          type: 'expense',
+          amount: 10,
+          accountId: 'A',
+          occurredAt: DateTime(2026, 5, 3, 9),
+        ),
+        _tx(
+          id: 'late',
+          type: 'expense',
+          amount: 20,
+          accountId: 'A',
+          occurredAt: DateTime(2026, 5, 28, 18),
+        ),
+        _tx(
+          id: 'mid',
+          type: 'income',
+          amount: 5,
+          accountId: 'A',
+          occurredAt: DateTime(2026, 5, 15, 12),
+        ),
+      ];
+      final r = computeAccountYearDetail(
+        accountId: 'A',
+        year: 2026,
+        transactions: txs,
+      );
+      final may = r.months.firstWhere((m) => m.month == 5);
+      expect(may.transactions.map((t) => t.id).toList(),
+          ['late', 'mid', 'early']);
+    });
+  });
 }

@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show InsertMode;
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart' show DataSerializer;
+import 'package:uuid/uuid.dart';
 
 import '../../data/local/app_database.dart';
 import '../../data/repository/account_repository.dart';
@@ -230,3 +231,116 @@ Future<int> importLedgerSnapshot({
     return snapshot.transactions.length;
   });
 }
+
+/// "追加为新账本"导入路径——给云端 snapshot 分配全新的 UUID,把它注入本地 DB,
+/// 不与已有任何 ledger 冲突。
+///
+/// 与 [importLedgerSnapshot] 的对比:
+/// - 后者按 `snapshot.ledger.id` upsert,适合"重新覆盖同一本账本"(老 V1 路径);
+/// - 本函数为 `BackupListPage` 的"恢复"按钮服务——新装的设备本地 ledgerId
+///   不可能与云端老备份匹配,这时强行 upsert 反而会覆盖本地新数据。把云端备份
+///   当成"全新账本插入"是更安全的语义。
+///
+/// 重映射规则:
+/// - ledger.id = uuidFactory()
+/// - 每条 transaction:id = uuidFactory(),ledgerId = 新 ledger.id;
+/// - 每条 budget:同上;
+/// - categories / accounts:**保持原 id**——它们是全局共享资源,upsert 后
+///   不同 ledger 自然复用,新建 UUID 反而会复制出冗余分类/账户。
+///
+/// 附件 remoteKey 保持快照里的原值(指向老 deviceId 目录);Phase 11 的
+/// lazy download 走绝对路径,对 S3/WebDAV/iCloud 没有访问障碍。
+///
+/// `uuidFactory` 默认走 [Uuid.v4],测试时注入计数器即可断言确定结果。
+///
+/// 返回新分配的 ledger.id。
+Future<String> importLedgerSnapshotAsNew({
+  required LedgerSnapshot snapshot,
+  required AppDatabase db,
+  String Function()? uuidFactory,
+}) async {
+  final uuid = uuidFactory ?? _defaultUuid;
+
+  // 先在事务外算好新 id 映射——避免 batch 期间多次调用 uuid() 产生交错。
+  final newLedgerId = uuid();
+  final txIdMap = {
+    for (final t in snapshot.transactions) t.id: uuid(),
+  };
+  final budgetIdMap = {
+    for (final b in snapshot.budgets) b.id: uuid(),
+  };
+
+  return db.transaction(() async {
+    // 查询本地已有的分类和账户，按 (name, parentKey) / (name, type) 去重。
+    // 不同设备 seeder 生成的 UUID 不同，但同名同父级分类 / 同名同类型账户
+    // 应视为同一资源——直接按 UUID insertOrReplace 会导致重复行。
+    final existingCatRows = await (db.select(db.categoryTable)
+          ..where((t) => t.deletedAt.isNull()))
+        .get();
+    final existingCatKeys = <(String, String), String>{};
+    for (final r in existingCatRows) {
+      existingCatKeys[(r.name, r.parentKey)] = r.id;
+    }
+
+    final existingAcctRows = await (db.select(db.accountTable)
+          ..where((t) => t.deletedAt.isNull()))
+        .get();
+    final existingAcctKeys = <(String, String), String>{};
+    for (final r in existingAcctRows) {
+      existingAcctKeys[(r.name, r.type)] = r.id;
+    }
+
+    final remappedLedger = snapshot.ledger.copyWith(id: newLedgerId);
+    await db.into(db.ledgerTable).insert(
+          ledgerToCompanion(remappedLedger),
+          mode: InsertMode.insertOrReplace,
+        );
+
+    await db.batch((batch) {
+      for (final c in snapshot.categories) {
+        final key = (c.name, c.parentKey);
+        if (existingCatKeys.containsKey(key)) continue; // 本地已有同名同父级分类，跳过
+        batch.insert(
+          db.categoryTable,
+          categoryToCompanion(c),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+      for (final a in snapshot.accounts) {
+        final key = (a.name, a.type);
+        if (existingAcctKeys.containsKey(key)) continue; // 本地已有同名同类型账户，跳过
+        batch.insert(
+          db.accountTable,
+          accountToCompanion(a),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+      for (final tx in snapshot.transactions) {
+        final remapped = tx.copyWith(
+          id: txIdMap[tx.id],
+          ledgerId: newLedgerId,
+        );
+        batch.insert(
+          db.transactionEntryTable,
+          transactionEntryToCompanion(remapped),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+      for (final b in snapshot.budgets) {
+        final remapped = b.copyWith(
+          id: budgetIdMap[b.id],
+          ledgerId: newLedgerId,
+        );
+        batch.insert(
+          db.budgetTable,
+          budgetToCompanion(remapped),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+
+    return newLedgerId;
+  });
+}
+
+String _defaultUuid() => const Uuid().v4();

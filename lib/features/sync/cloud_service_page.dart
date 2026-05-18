@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 import 'package:flutter_cloud_sync_icloud/flutter_cloud_sync_icloud.dart';
@@ -9,12 +10,8 @@ import 'package:intl/intl.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart' show currentLedgerIdProvider;
-import '../account/account_providers.dart';
-import '../budget/budget_providers.dart';
-import '../ledger/ledger_providers.dart';
-import '../record/record_providers.dart';
-import '../stats/stats_range_providers.dart';
 import 'attachment/attachment_migration.dart';
+import 'backup_list_page.dart';
 import 'sync_provider.dart';
 import 'sync_service.dart';
 
@@ -467,7 +464,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       context: context,
       builder: (context) => _S3ConfigDialog(
         initialEndpoint: existing?.s3Endpoint ?? '',
-        initialRegion: existing?.s3Region ?? 'us-east-1',
+        initialRegion: existing?.s3Region ?? 'auto',
         initialAccessKey: existing?.s3AccessKey ?? '',
         initialSecretKey: existing?.s3SecretKey ?? '',
         initialBucket: existing?.s3Bucket ?? '',
@@ -789,8 +786,17 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
                 labelText: context.l10n.syncCustomName,
                 hintText: context.l10n.syncS3CustomNameHint,
               ),
+              // customName 会拼进云端路径 `users/<customName>/ledgers/...`——
+              // 不同 S3 兼容服务(Cloudflare R2 / MinIO / AWS / B2)对非 ASCII key
+              // 的 percent-encoding 与 SigV4 canonical 形式处理不一致,典型表现是
+              // 中文 customName 上传"看似成功"但 LIST 返回空,导致换设备后无法
+              // 找回备份。AWS 官方也只对 [A-Za-z0-9_\-./] 提供 well-defined
+              // 行为,这里直接拦截非安全字符。
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_\-]')),
+              ],
             ),
-            TextField(controller: _endpointController, decoration: const InputDecoration(labelText: 'Endpoint')),
+            TextField(controller: _endpointController, decoration: const InputDecoration(labelText: 'Endpoint (Without https://)')),
             TextField(controller: _regionController, decoration: const InputDecoration(labelText: 'Region')),
             TextField(controller: _accessKeyController, decoration: const InputDecoration(labelText: 'Access Key')),
             TextField(controller: _secretKeyController, decoration: const InputDecoration(labelText: 'Secret Key'), obscureText: true),
@@ -925,40 +931,21 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
         successMessage: context.l10n.syncUploaded,
       );
 
-  Future<void> _download() async {
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.syncRestoreFromCloud),
-        content: Text(l10n.syncRestoreConfirmMsg),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(l10n.cancel)),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(l10n.syncRestore)),
-        ],
-      ),
+  /// 下载按钮的新语义：打开《云端备份》列表，让用户挑要恢复哪一份。
+  ///
+  /// 与原 `downloadAndRestore(ledgerId)` 的差异：原路径只能恢复"与本地 ledgerId
+  /// 完全相同的备份"——在卸载重装/换机这两个典型恢复场景里 ledgerId 必然
+  /// 是新生成的 UUID，永远 miss。新页面 list `users/` 前缀拿到所有备份，
+  /// 选中后 `restoreFromBackup` 走"追加为新账本"路径。
+  Future<void> _openBackupList() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const BackupListPage()),
     );
-    if (confirmed != true) return;
-    return _runWithBusy(
-      () async {
-        final inserted = await widget.service.downloadAndRestore(
-          ledgerId: widget.ledgerId,
-        );
-        // 下载直接走 db.batch 写库（绕过 repository.save），Riverpod 不会感知
-        // DB 变化——必须手动 invalidate 各数据 provider，否则 UI 沿用旧 cache，
-        // 要等冷启动重建 ProviderContainer 才会刷新。
-        _invalidateDataProviders();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.syncRestoredCount(inserted))),
-        );
-      },
-      successMessage: l10n.syncRestored,
-    );
+    // 回到本页时如果云端列表发生过删除/恢复，状态卡里的数字可能要刷新
+    // ——下载触达 DB 改动后 BackupListPage 已经 invalidate 过相关 provider，
+    // 这里只刷状态显示。
+    widget.service.clearCache();
+    _refresh(force: true);
   }
 
   Future<void> _deleteRemote() async {
@@ -983,29 +970,6 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
       () => widget.service.deleteRemote(ledgerId: widget.ledgerId),
       successMessage: l10n.syncCloudDeleted,
     );
-  }
-
-  /// 下载恢复后必须 invalidate 所有受 DB 变化影响的数据 provider——保持与
-  /// `record_new_providers.save` 的 invalidate 列表一致，并补上账户/预算/
-  /// 账本流水计数（恢复路径会改这三类数据，普通保存只改流水）。
-  void _invalidateDataProviders() {
-    // 流水
-    ref.invalidate(recordMonthSummaryProvider);
-    // 统计 4 个聚合
-    ref.invalidate(statsLinePointsProvider);
-    ref.invalidate(statsPieSlicesProvider);
-    ref.invalidate(statsRankItemsProvider);
-    ref.invalidate(statsHeatmapCellsProvider);
-    // 账户
-    ref.invalidate(accountsListProvider);
-    ref.invalidate(accountBalancesProvider);
-    ref.invalidate(totalAssetsProvider);
-    // 预算
-    ref.invalidate(activeBudgetsProvider);
-    ref.invalidate(budgetableCategoriesProvider);
-    ref.invalidate(budgetProgressForProvider);
-    // 账本流水计数（账本列表卡显示）
-    ref.invalidate(ledgerTxCountsProvider);
   }
 
   @override
@@ -1072,7 +1036,7 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.cloud_download_outlined),
                 label: Text(context.l10n.syncDownload),
-                onPressed: _busy ? null : _download,
+                onPressed: _busy ? null : _openBackupList,
               ),
             ),
             const SizedBox(width: 8),
@@ -1161,6 +1125,14 @@ class _StatusLine extends StatelessWidget {
         if (status.message != null && status.state == SyncState.error) ...[
           const SizedBox(height: 4),
           Text(status.message!,
+              style: Theme.of(context).textTheme.bodySmall),
+        ],
+        // localOnly = 当前账本路径下云端没文件——这并不代表整个 bucket 没备份。
+        // 跨设备 / 重装场景下旧 deviceId 的备份藏在 users/<其他 uid>/ledgers/ 下,
+        // 路径定位查不到,得通过「浏览备份」(listBackups 扫全 users/ 前缀) 找回。
+        if (status.state == SyncState.localOnly) ...[
+          const SizedBox(height: 4),
+          Text(context.l10n.syncNoBackupHintBrowse,
               style: Theme.of(context).textTheme.bodySmall),
         ],
       ],

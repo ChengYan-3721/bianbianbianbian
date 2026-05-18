@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/app_theme.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../core/util/svg_or_emoji_icon.dart';
@@ -68,11 +69,13 @@ class RecordDetailSheet extends ConsumerWidget {
     final ledgerCurrency =
         ref.watch(currentLedgerDefaultCurrencyProvider).valueOrNull ?? 'CNY';
     final amountText = formatTxAmountForDetail(tx, ledgerCurrency);
+    final theme = Theme.of(context);
+    final semantic = theme.extension<BianBianSemanticColors>()!;
     final amountColor = tx.type == 'expense'
-        ? const Color(0xFFE76F51)
+        ? semantic.danger
         : tx.type == 'income'
-            ? const Color(0xFFA8D8B9)
-            : const Color(0xFF6C8CC8);
+            ? semantic.success
+            : theme.colorScheme.primary;
 
     return SafeArea(
       top: false,

@@ -28,7 +28,6 @@ void main() {
     expect(row!.type, 'expense');
     expect(row.categoryName, '餐饮美食');
     expect(row.accountName, '支付宝');
-    expect(row.ledgerLabel, '支付宝账单');
   });
 
   test('退款 / 关闭 / 失败 过滤', () {

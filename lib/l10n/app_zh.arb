@@ -632,6 +632,60 @@
       }
     }
   },
+  "accountAssets": "资产",
+  "accountNetAssets": "净资产",
+  "accountLiabilities": "负债",
+  "accountDetailSettings": "设置",
+  "accountDetailBalance": "账户余额",
+  "accountDetailYear": "年份",
+  "accountDetailInflow": "流入",
+  "accountDetailOutflow": "流出",
+  "accountDetailInflowLine": "流入：¥{amount}",
+  "@accountDetailInflowLine": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDetailOutflowLine": "流出：¥{amount}",
+  "@accountDetailOutflowLine": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDetailMonthLabel": "{month}月",
+  "@accountDetailMonthLabel": {
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDetailMonthRange": "{start}-{end}",
+  "@accountDetailMonthRange": {
+    "placeholders": {
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDetailDayLabel": "{day}日",
+  "@accountDetailDayLabel": {
+    "placeholders": {
+      "day": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDetailYesterday": "昨日",
+  "accountDetailToday": "今日",
+  "accountDetailEmptyMonth": "一滴流水都没有~",
   "lockTitle": "应用锁",
   "lockEnterPin": "请输入 PIN 解锁边边记账",
   "lockEnterCurrentPinToDisable": "请输入当前 PIN 以关闭应用锁",
@@ -1054,7 +1108,7 @@
   "syncWebdavPassword": "密码",
   "syncWebdavRemotePath": "远程路径",
   "syncConfigS3": "配置 S3",
-  "syncS3CustomNameHint": "用作卡片标题与云端文件夹名（可选）",
+  "syncS3CustomNameHint": "用作卡片标题与云端文件夹名(只能输入字母/数字/下划线/连字符)",
   "syncLedgerLoadFailed": "账本加载失败：{error}",
   "@syncLedgerLoadFailed": {
     "placeholders": {
@@ -1098,11 +1152,12 @@
     }
   },
   "syncUpload": "上传",
-  "syncDownload": "下载",
+  "syncDownload": "浏览备份",
   "syncDeleteCloudBackupShort": "删除云端备份",
   "syncStatusNotConfigured": "未配置",
   "syncStatusNotLoggedIn": "未登录",
-  "syncStatusNoBackup": "云端无备份",
+  "syncStatusNoBackup": "当前账本云端无备份",
+  "syncNoBackupHintBrowse": "其他设备的备份可在「浏览备份」中找到",
   "syncStatusSynced": "已同步",
   "syncStatusLocalNewer": "本地较新（建议上传）",
   "syncStatusCloudNewer": "云端较新（建议下载）",
@@ -1679,5 +1734,78 @@
   "importMappingFieldFromAccount": "转出账户",
   "importMappingFieldToAccount": "转入账户",
   "importMappingFieldNote": "备注",
-  "importMappingFieldStatus": "状态"
+  "importMappingFieldStatus": "状态",
+  "backupListTitle": "云端备份",
+  "backupListEmpty": "云端暂无任何备份",
+  "backupListLoadFailed": "加载云端备份失败：{error}",
+  "@backupListLoadFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "backupRowTxCount": "{count} 条流水",
+  "@backupRowTxCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "backupRowFromDevice": "来自设备 {deviceShort}",
+  "@backupRowFromDevice": {
+    "placeholders": {
+      "deviceShort": { "type": "String" }
+    }
+  },
+  "backupRowExportedAt": "上传于 {time}",
+  "@backupRowExportedAt": {
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "backupRestoreAll": "全部恢复到本地",
+  "backupRestoreAllConfirmTitle": "全部恢复",
+  "backupRestoreAllConfirmMsg": "把云端 {count} 个备份全部追加为新的本地账本？原有账本保持不变。",
+  "@backupRestoreAllConfirmMsg": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "backupRestoreAllProgress": "正在恢复 {done}/{total}",
+  "@backupRestoreAllProgress": {
+    "placeholders": {
+      "done": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "backupRestoreAllDone": "已恢复 {count} 个账本",
+  "@backupRestoreAllDone": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "backupRestoreConfirmTitle": "恢复为新账本",
+  "backupRestoreConfirmMsg": "将「{name}」作为新账本追加到本地。原有数据保留，下次同步会把新账本上传到云端。",
+  "@backupRestoreConfirmMsg": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "backupRestoreSuccess": "已恢复为新账本「{name}」",
+  "@backupRestoreSuccess": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "backupRestoreFailed": "恢复失败：{error}",
+  "@backupRestoreFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "backupDeleteConfirmMsg": "确定删除此云端备份？仅删除云端，本地数据不动。",
+  "backupDeleteFailed": "删除失败：{error}",
+  "@backupDeleteFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  }
 }

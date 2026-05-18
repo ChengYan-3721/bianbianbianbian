@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 网络权限：Release 构建也需要联网（debug/profile 的 AndroidManifest.xml 各自声明了，
+         但 main 清单是 release 构建的合并基础，必须在此声明 INTERNET 权限） -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Step 16.1：flutter_local_notifications 调度通知需要重启后重建调度 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Step 16.1：Android 13+ 通知运行时权限声明 -->
@@ -10,7 +13,8 @@
     <application
         android:label="边边记账"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

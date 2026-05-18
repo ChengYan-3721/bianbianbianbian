@@ -110,7 +110,11 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.savings_outlined, size: 64, color: Colors.black26),
+          Icon(
+            Icons.savings_outlined,
+            size: 64,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.26),
+          ),
           const SizedBox(height: 12),
           Text(
             context.l10n.budgetEmptyHint,
@@ -198,7 +202,7 @@ class _BudgetCard extends ConsumerWidget {
                         Text(
                           subtitle.toString(),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.black54,
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
                           ),
                         ),
                       ],
@@ -339,7 +343,7 @@ class _ProgressPlaceholder extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
           child: LinearProgressIndicator(
             minHeight: 8,
-            backgroundColor: Colors.black12,
+            backgroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
             valueColor: AlwaysStoppedAnimation<Color>(
               Theme.of(context).colorScheme.primary,
             ),

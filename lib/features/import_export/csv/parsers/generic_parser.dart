@@ -91,8 +91,8 @@ class GenericBillParser extends BillParser {
     final type = _typeFromAnyLabel(typeRaw);
     if (type == null) return null;
 
-    // 如果 CSV 中有账本列，使用其值；否则使用 displayName
-    final ledgerLabel = getBy('ledger') ?? displayName;
+    // 如果 CSV 中有账本列，使用其值；否则留空，由 apply 阶段 fallback 到当前账本
+    final ledgerLabel = getBy('ledger') ?? '';
 
     return BackupImportCsvRow(
       ledgerLabel: ledgerLabel,

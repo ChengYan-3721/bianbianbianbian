@@ -2116,6 +2116,102 @@ abstract class AppLocalizations {
   /// **'还款日 {day} 号'**
   String accountRepaymentDayDisplay(int day);
 
+  /// No description provided for @accountAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'资产'**
+  String get accountAssets;
+
+  /// No description provided for @accountNetAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'净资产'**
+  String get accountNetAssets;
+
+  /// No description provided for @accountLiabilities.
+  ///
+  /// In zh, this message translates to:
+  /// **'负债'**
+  String get accountLiabilities;
+
+  /// No description provided for @accountDetailSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置'**
+  String get accountDetailSettings;
+
+  /// No description provided for @accountDetailBalance.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户余额'**
+  String get accountDetailBalance;
+
+  /// No description provided for @accountDetailYear.
+  ///
+  /// In zh, this message translates to:
+  /// **'年份'**
+  String get accountDetailYear;
+
+  /// No description provided for @accountDetailInflow.
+  ///
+  /// In zh, this message translates to:
+  /// **'流入'**
+  String get accountDetailInflow;
+
+  /// No description provided for @accountDetailOutflow.
+  ///
+  /// In zh, this message translates to:
+  /// **'流出'**
+  String get accountDetailOutflow;
+
+  /// No description provided for @accountDetailInflowLine.
+  ///
+  /// In zh, this message translates to:
+  /// **'流入：¥{amount}'**
+  String accountDetailInflowLine(String amount);
+
+  /// No description provided for @accountDetailOutflowLine.
+  ///
+  /// In zh, this message translates to:
+  /// **'流出：¥{amount}'**
+  String accountDetailOutflowLine(String amount);
+
+  /// No description provided for @accountDetailMonthLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'{month}月'**
+  String accountDetailMonthLabel(String month);
+
+  /// No description provided for @accountDetailMonthRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'{start}-{end}'**
+  String accountDetailMonthRange(String start, String end);
+
+  /// No description provided for @accountDetailDayLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'{day}日'**
+  String accountDetailDayLabel(String day);
+
+  /// No description provided for @accountDetailYesterday.
+  ///
+  /// In zh, this message translates to:
+  /// **'昨日'**
+  String get accountDetailYesterday;
+
+  /// No description provided for @accountDetailToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日'**
+  String get accountDetailToday;
+
+  /// No description provided for @accountDetailEmptyMonth.
+  ///
+  /// In zh, this message translates to:
+  /// **'一滴流水都没有~'**
+  String get accountDetailEmptyMonth;
+
   /// No description provided for @lockTitle.
   ///
   /// In zh, this message translates to:
@@ -3193,7 +3289,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncS3CustomNameHint.
   ///
   /// In zh, this message translates to:
-  /// **'用作卡片标题与云端文件夹名（可选）'**
+  /// **'用作卡片标题与云端文件夹名(只能输入字母/数字/下划线/连字符)'**
   String get syncS3CustomNameHint;
 
   /// No description provided for @syncLedgerLoadFailed.
@@ -3289,7 +3385,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncDownload.
   ///
   /// In zh, this message translates to:
-  /// **'下载'**
+  /// **'浏览备份'**
   String get syncDownload;
 
   /// No description provided for @syncDeleteCloudBackupShort.
@@ -3313,8 +3409,14 @@ abstract class AppLocalizations {
   /// No description provided for @syncStatusNoBackup.
   ///
   /// In zh, this message translates to:
-  /// **'云端无备份'**
+  /// **'当前账本云端无备份'**
   String get syncStatusNoBackup;
+
+  /// No description provided for @syncNoBackupHintBrowse.
+  ///
+  /// In zh, this message translates to:
+  /// **'其他设备的备份可在「浏览备份」中找到'**
+  String get syncNoBackupHintBrowse;
 
   /// No description provided for @syncStatusSynced.
   ///
@@ -4771,6 +4873,108 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'状态'**
   String get importMappingFieldStatus;
+
+  /// No description provided for @backupListTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端备份'**
+  String get backupListTitle;
+
+  /// No description provided for @backupListEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端暂无任何备份'**
+  String get backupListEmpty;
+
+  /// No description provided for @backupListLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载云端备份失败：{error}'**
+  String backupListLoadFailed(String error);
+
+  /// No description provided for @backupRowTxCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条流水'**
+  String backupRowTxCount(int count);
+
+  /// No description provided for @backupRowFromDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'来自设备 {deviceShort}'**
+  String backupRowFromDevice(String deviceShort);
+
+  /// No description provided for @backupRowExportedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'上传于 {time}'**
+  String backupRowExportedAt(String time);
+
+  /// No description provided for @backupRestoreAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部恢复到本地'**
+  String get backupRestoreAll;
+
+  /// No description provided for @backupRestoreAllConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部恢复'**
+  String get backupRestoreAllConfirmTitle;
+
+  /// No description provided for @backupRestoreAllConfirmMsg.
+  ///
+  /// In zh, this message translates to:
+  /// **'把云端 {count} 个备份全部追加为新的本地账本？原有账本保持不变。'**
+  String backupRestoreAllConfirmMsg(int count);
+
+  /// No description provided for @backupRestoreAllProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在恢复 {done}/{total}'**
+  String backupRestoreAllProgress(int done, int total);
+
+  /// No description provided for @backupRestoreAllDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复 {count} 个账本'**
+  String backupRestoreAllDone(int count);
+
+  /// No description provided for @backupRestoreConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复为新账本'**
+  String get backupRestoreConfirmTitle;
+
+  /// No description provided for @backupRestoreConfirmMsg.
+  ///
+  /// In zh, this message translates to:
+  /// **'将「{name}」作为新账本追加到本地。原有数据保留，下次同步会把新账本上传到云端。'**
+  String backupRestoreConfirmMsg(String name);
+
+  /// No description provided for @backupRestoreSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已恢复为新账本「{name}」'**
+  String backupRestoreSuccess(String name);
+
+  /// No description provided for @backupRestoreFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复失败：{error}'**
+  String backupRestoreFailed(String error);
+
+  /// No description provided for @backupDeleteConfirmMsg.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除此云端备份？仅删除云端，本地数据不动。'**
+  String get backupDeleteConfirmMsg;
+
+  /// No description provided for @backupDeleteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除失败：{error}'**
+  String backupDeleteFailed(String error);
 }
 
 class _AppLocalizationsDelegate

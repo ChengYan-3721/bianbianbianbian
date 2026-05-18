@@ -55,14 +55,4 @@ void main() {
       '零钱通', '充值完成'];
     expect(parser.parseRow(row, mapping), isNull);
   });
-
-  test('ledgerLabel 固定 = 「微信账单」', () {
-    final header = ['交易时间', '交易类型', '交易对方', '商品', '收/支',
-      '金额(元)', '支付方式', '当前状态'];
-    final mapping = parser.mapColumns(header);
-    final row = ['2026-01-01 12:00:00', '商户消费', 'X', 'Y', '支出', '10',
-      '零钱', '支付成功'];
-    final parsed = parser.parseRow(row, mapping);
-    expect(parsed!.ledgerLabel, '微信账单');
-  });
 }

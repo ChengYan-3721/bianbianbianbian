@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
+import '../../domain/entity/transaction_entry.dart';
 import 'account_balance.dart';
 
 part 'account_providers.g.dart';
@@ -39,3 +40,26 @@ Future<double> totalAssets(Ref ref) async {
   final txs = await txRepo.listActiveByLedger(ledgerId);
   return computeTotalAssets(accounts: accounts, transactions: txs);
 }
+
+/// 当前账本视角下「资产 / 负债」二分——按 `includeInTotal` 账户当前余额的
+/// 正负拆分（详见 [computeAssetsAndLiabilities]）。资产页顶部卡片在新版三值
+/// 布局（资产 + 净资产 + 负债）下消费本结果。
+///
+/// 手写 provider 而非走 `@riverpod` 代码生成，避免新增产物时跑 build_runner。
+final accountAssetLiabilityProvider =
+    AutoDisposeFutureProvider<({double assets, double liabilities})>((ref) async {
+  final accounts = await ref.watch(accountsListProvider.future);
+  final ledgerId = await ref.watch(currentLedgerIdProvider.future);
+  final txRepo = await ref.watch(transactionRepositoryProvider.future);
+  final txs = await txRepo.listActiveByLedger(ledgerId);
+  return computeAssetsAndLiabilities(accounts: accounts, transactions: txs);
+});
+
+/// 当前账本视角下未软删的全部流水——账户详情页用本 provider 拉数后再按账户、
+/// 年份在本地聚合。手写 provider 同样避免触发 build_runner。
+final currentLedgerTransactionsProvider =
+    AutoDisposeFutureProvider<List<TransactionEntry>>((ref) async {
+  final ledgerId = await ref.watch(currentLedgerIdProvider.future);
+  final txRepo = await ref.watch(transactionRepositoryProvider.future);
+  return txRepo.listActiveByLedger(ledgerId);
+});

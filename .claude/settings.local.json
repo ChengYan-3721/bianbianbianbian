@@ -32,7 +32,12 @@
       "Bash(cd \"D:\\\\\\\\Projects\\\\\\\\bianbianbianbian\")",
       "Bash(python *)",
       "Bash(node *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(git -C \"D:/Projects/bianbianbianbian\" rev-parse HEAD HEAD~1)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(unix2dos /tmp/append_content.txt)",
+      "Bash(sed -i 's/$/\\\\r/' /tmp/append_content.txt)"
     ]
   }
 }

@@ -117,11 +117,12 @@ bianbianbianbian/
 │     │  ├─ budget_providers.g.dart     riverpod_generator 产物
 │     │  ├─ budget_list_page.dart       BudgetListPage（卡片列表 + 进度条/颜色/震动 + 新建 FAB + 删除二次确认）
 │     │  └─ budget_edit_page.dart       BudgetEditPage（周期/分类/金额/结转，冲突 Snackbar）
-│     ├─ account/               Step 7.1 列表；Step 7.2 CRUD（新建/编辑/软删）
-│     │  ├─ account_balance.dart        AccountBalance + aggregateNetAmountsByAccount / computeAccountBalances / computeTotalAssets 纯函数
-│     │  ├─ account_providers.dart      accountsList / accountBalances / totalAssets 三个 @riverpod FutureProvider
+│     ├─ account/               Step 7.1 列表；Step 7.2 CRUD（新建/编辑/软删）；2026-05-18 资产页重构（资产/净资产/负债三值 + 账户详情页）
+│     │  ├─ account_balance.dart        AccountBalance + aggregateNetAmountsByAccount / computeAccountBalances / computeTotalAssets / computeAssetsAndLiabilities / AccountYearDetail + AccountMonthGroup + computeAccountYearDetail 纯函数
+│     │  ├─ account_providers.dart      accountsList / accountBalances / totalAssets 三个 @riverpod FutureProvider + accountAssetLiabilityProvider / currentLedgerTransactionsProvider 两个手写 AutoDisposeFutureProvider
 │     │  ├─ account_providers.g.dart    riverpod_generator 产物
-│     │  ├─ account_list_page.dart      AccountListPage（总资产卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单）
+│     │  ├─ account_list_page.dart      AccountListPage（资产+净资产+负债三值卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单 + 点击进详情页）
+│     │  ├─ account_detail_page.dart    AccountDetailPage（顶部 success 色卡片：余额 + 年份切换器 + 年度流出/流入 + 右上"设置"入口；下方 12→1 月卡片：默认当月展开，余月折叠；展开后按日聚簇 + 复用 openRecordTileActions 编辑/复制/删除）
 │     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/初始余额/币种/计入总资产，新建+编辑双模式）
 │     ├─ sync/                  Phase 10 已完成 + Phase 11.2 附件上传管线 + Phase 11.3 附件懒下载与本地缓存 + Phase 11.4 软删 / GC / 孤儿 sweep / 跨 backend 迁移
 │     │  ├─ sync_service.dart        SyncService 抽象 + LocalOnlySyncService + SnapshotSyncService（V1，upload 内部已接入附件上传前置：扫表 → uploadPending → 写回 BLOB → 上传 JSON 快照）
@@ -237,7 +238,7 @@ bianbianbianbian/
 │  │  ├─ budget_progress_test.dart           computeBudgetProgress 边界 + computePeriodSpent + shouldTriggerBudgetVibration（16 用例，Step 6.2）
 │  │  └─ budget_vibration_session_test.dart  BudgetVibrationSession Notifier 幂等/独立标记/clear（5 用例，Step 6.2）
 │  ├─ features/account/
-│  │  └─ account_balance_test.dart           aggregateNetAmountsByAccount + computeAccountBalances + computeTotalAssets 纯函数边界（16 用例，Step 7.1）
+│  │  └─ account_balance_test.dart           aggregateNetAmountsByAccount + computeAccountBalances + computeTotalAssets + computeAssetsAndLiabilities + computeAccountYearDetail 纯函数边界（30 用例，Step 7.1 + 2026-05-18 资产页重构）
 │  ├─ features/settings/
 │  │  └─ multi_currency_page_test.dart       MultiCurrencyPage 开关 + 汇率列表 + 手动覆盖（11 用例，Step 8.1+8.3）
 │  │  └─ fx_rate_compute_test.dart           computeFxRate 同币种/跨币种/兜底（8 用例，Step 8.2）
@@ -2600,3 +2601,72 @@ file bytes
 ### 实施日期
 
 2026-05-16 — 8 个 Phase / 22 个 task / 单个 master 分支顺次执行;每 task 独立 commit(`Step 13.5(N/22):...`);subagent-driven 工作流(implementer → spec reviewer → code-quality reviewer)在前 15 task 严格执行,后 7 task 因机械性强直接由主 agent 完成。
+
+## 资产页重构（2026-05-18）
+
+参考叨叨记账「资产账户列表页 + 账户详情页」交互对资产 Tab 重构。顶部卡片由「单值总资产」升级为「资产 / 净资产 / 负债」三值，账户卡片点击行为由「直达编辑」改为「先进详情页、详情页右上『设置』再到编辑页」。
+
+### 计算口径
+
+- **资产 / 负债拆分（`computeAssetsAndLiabilities`）**：按 `Account.includeInTotal=true` 账户的 *currentBalance* 正负二分。
+  - `assets = Σ max(0, currentBalance)`——仅取正余额。
+  - `liabilities = Σ |min(0, currentBalance)|`——欠款绝对值之和。
+  - 性质：`assets - liabilities ≡ computeTotalAssets(...)`——净资产即原"总资产"，两个 provider 数值同源。UI 顶部卡片同时展示「资产（仅正余额）」「净资产（= assets - liabilities）」「负债」三值，让用户分别看到「有多少正向资源」「净身价」「欠债面」。
+- **账户详情 · 年度/月度流入流出（`computeAccountYearDetail`）含转账**：
+  - 流入：`type=='income' && accountId==X` ∪ `type=='transfer' && toAccountId==X`。
+  - 流出：`type=='expense' && accountId==X` ∪ `type=='transfer' && accountId==X`。
+  - 与余额变动方向一致；顶部年度合计和月度卡片右侧合计**同一口径**（避免「年汇总含转账、月卡片不含」让用户疑惑）。
+  - 输出 `AccountYearDetail { year, yearInflow, yearOutflow, months: List<AccountMonthGroup>(长度恒为 12) }`；`AccountMonthGroup { month, inflow, outflow, transactions(按 occurredAt 倒序) }`。空月份占位以便 UI 渲染 12 张固定卡片。
+  - 已软删 / 非本年流水在聚合阶段直接过滤。
+
+### Provider 拓扑
+
+- `lib/features/account/account_providers.dart` 在原 `accountsListProvider` / `accountBalancesProvider` / `totalAssetsProvider` 三个 `@riverpod` provider 旁，新增两个**手写** `AutoDisposeFutureProvider`（刻意绕开 codegen，避免新增产物时跑 build_runner）：
+  - `accountAssetLiabilityProvider`：`watch(accountsListProvider.future)` + `watch(currentLedgerIdProvider.future)` + `txRepo.listActiveByLedger(ledgerId)` → `computeAssetsAndLiabilities`。资产列表页顶部卡片消费。
+  - `currentLedgerTransactionsProvider`：拉当前账本未软删流水。账户详情页 watch 后用 `computeAccountYearDetail` 在本地按账户+年份聚合，避免 family provider。
+- 资产列表页 / 详情页所有写路径（账户保存、软删、流水编辑/删除）都额外 invalidate 这两个新 provider，确保数据一致。
+
+### UI 重构
+
+- **`account_list_page.dart`**：
+  - 拆除原 `_TotalAssetsCard`，替换为 `_AssetsOverviewCard`：上半「资产」标签 + 大数字（key `account_assets_amount`）；中间分隔线；下半两列「净资产 | 负债」分别挂 key `account_net_assets_amount` / `account_liabilities_amount`，中间垂直 1px divider。颜色继续走 `colorScheme.primaryContainer`（保持暖色卡片基调）。
+  - 账户卡片 `onTap` 由 `context.push('/accounts/edit?id=')` 改为 `context.push<bool>('/accounts/detail?id=')`，返回值仍按 `true == 数据有变更` 触发四个 provider invalidate（accountsList / accountBalances / totalAssets / accountAssetLiability）。
+  - 长按菜单（编辑 / 删除）、FAB（新建账户）保持不变；删除/保存路径同步加 `ref.invalidate(accountAssetLiabilityProvider)`。
+
+- **`account_detail_page.dart`（新建）**：`AccountDetailPage(accountId)` `ConsumerStatefulWidget`，状态字段：
+  - `_year`：默认 `DateTime.now().year`；`_setYear(delta)` 切年并按当前年是否为今年重置 `_expandedMonths` 为 `{now.month}` 或 `<int>{}`。
+  - `_expandedMonths`：折叠状态集合；`_toggleMonth` 增量切换，并把 `_userToggled=true` 标志置位——避免数据刷新（流水编辑回流）触发重建时把展开的月份"自动合上"。
+  - 三层 `AsyncValue.when`：accounts → 找到本账户（找不到落到空账户占位走 `accountNotExist` 文案）；txs → 在本地用 `computeAccountYearDetail` + `aggregateNetAmountsByAccount` 同时算出余额和聚合。
+  - AppBar：右上 `TextButton('设置')`（key `account_detail_settings_btn`）→ `context.push('/accounts/edit?id=')`；返回 `true` 同步 invalidate 上述 5 个 provider。
+  - 顶部 `_HeaderCard`：`BianBianSemanticColors.success` 背景 + 白字。大数字余额（key `account_detail_balance`）；下排三等份：`_YearSwitcher`（`<` `年份` `>` + "年份" 标签，箭头键 `account_detail_prev_year` / `account_detail_next_year`，年份文本键 `account_detail_year_label`）、`_HeaderStat(流出, key=account_detail_year_outflow)`、`_HeaderStat(流入, key=account_detail_year_inflow)`。**无铅笔图标**（用户明确不要）。
+  - 主体：12 张 `_MonthCard`（倒序：12→1），月号 + 日期范围（`MM.DD-MM.DD`）+ 流入(`danger` 红)/流出(`success` 绿) + 折叠箭头（`Color(0xFFE2A03F)` 暖橙）。展开后 `_MonthBody`：流水按日聚簇——`_TxRow` 左侧 56px 槽位仅在当日第一条显示日期（"今日"/"昨日"/`DD日`），后续行留白；图标圈用语义色 18%(α) 底色；点击复用 `openRecordTileActions(...)` 走「详情 sheet → 编辑/复制/删除」标准链路，返回后 invalidate 流水+余额相关 provider。
+  - 空月份：水滴图标 + "一滴流水都没有~" 占位。
+  - 转账按钮：本次**不实现**——参考图右上有"转账"按钮，用户确认留到后续专项任务，避免本次膨胀范围。
+
+### 路由
+
+- `lib/app/app_router.dart` 在 `/accounts/edit` 旁加 `GoRoute('/accounts/detail')`，query `id` 必填（缺省传空字符串走 `accountNotExist` 容错）。两条路由相互不嵌套，AppBar 返回箭头直接回到上一屏（列表页）。
+
+### l10n 新增键（`app_zh.arb` + `app_localizations.dart` + `app_localizations_zh.dart`）
+
+`accountAssets / accountNetAssets / accountLiabilities`（顶部卡片三标签）、`accountDetailSettings / accountDetailBalance / accountDetailYear / accountDetailInflow / accountDetailOutflow`（详情页 5 个静态标签）、`accountDetailInflowLine(amount) / accountDetailOutflowLine(amount)`（月卡片"流入：¥X" / "流出：¥Y" 行）、`accountDetailMonthLabel(month) / accountDetailMonthRange(start, end) / accountDetailDayLabel(day)`（带占位符的月/日标签）、`accountDetailYesterday / accountDetailToday`（同日聚簇用）、`accountDetailEmptyMonth`（"一滴流水都没有~"）。
+
+注：未走 `flutter gen-l10n`——直接手工在三处文件同步追加；后续若再跑 codegen 需保证 ARB 与抽象类签名一致。
+
+### 单元测试新增（`test/features/account/account_balance_test.dart`，14 条）
+
+- `computeAssetsAndLiabilities` 4 条：空账户 / 正负拆分 + 净资产恒等 totalAssets / `includeInTotal=false` 既不计资产也不计负债 / 流水把账户余额拉过零点后切换计入桶。
+- `computeAccountYearDetail` 6 条：空流水 12 个零月 / income+expense 正向计入 / transfer 双向（A 视角 + B 视角对称）/ 无关账户被过滤 / 跨年/软删被过滤 / 同月多条按 `occurredAt` 倒序。
+
+`flutter analyze` 全项目无 issue；`flutter test test/features/account/ test/widget_test.dart` 33/33 通过。
+
+### 故意不做的事
+
+- **不**做铅笔快捷调整余额：用户明确暂不实现；点设置进编辑页改 `initialBalance` 是现成路径。
+- **不**实现"转账"按钮：参考图有，但属于独立功能（流水 + 双账户更新），留专项任务。
+- **不**为详情数据再造 family provider：`accountId / year` 直接走页面 state；流水拉取走全账本级 `currentLedgerTransactionsProvider`（与 `accountBalancesProvider` 一样的口径，缓存语义一致）。
+- **不**对单条流水做直达编辑：复用 `openRecordTileActions`——一是和首页/搜索页交互一致，二是 sheet 顶部已展示完整字段，"先看再改"对照编辑更友好；用户期望"点击跳转编辑"的字面诉求由 sheet 的"编辑"按钮一键满足。
+
+### 实施日期
+
+2026-05-18 — 单次会话内完成；6 个有序 task（providers → l10n → 列表页改造 → 详情页新建 → 路由 → 单测）顺次落地；中间 4 轮用户对齐口径（资产/负债定义、流入流出含转账、月卡片同口径、铅笔图标取舍、转账按钮、三值大数字、单条流水跳转、长按菜单去留）。

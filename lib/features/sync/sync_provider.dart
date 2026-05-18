@@ -87,6 +87,7 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     return const LocalOnlySyncService();
   }
 
+  final config = await ref.watch(activeCloudConfigProvider.future);
   final db = ref.watch(local.appDatabaseProvider);
   final deviceId = await ref.watch(local.deviceIdProvider.future);
   final ledgerRepo = await ref.watch(repo.ledgerRepositoryProvider.future);
@@ -105,6 +106,7 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     manager: manager,
     db: db,
     deviceId: deviceId,
+    backendType: config.type,
     ledgerRepo: ledgerRepo,
     categoryRepo: categoryRepo,
     accountRepo: accountRepo,

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../domain/entity/category.dart';
+import '../features/account/account_detail_page.dart';
 import '../features/account/account_edit_page.dart';
 import '../features/account/account_list_page.dart';
 import '../features/budget/budget_edit_page.dart';
@@ -109,6 +110,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       builder: (context, state) {
         final accountId = state.uri.queryParameters['id'];
         return AccountEditPage(accountId: accountId);
+      },
+    ),
+    GoRoute(
+      path: '/accounts/detail',
+      builder: (context, state) {
+        final accountId = state.uri.queryParameters['id'] ?? '';
+        return AccountDetailPage(accountId: accountId);
       },
     ),
     GoRoute(

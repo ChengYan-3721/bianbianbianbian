@@ -116,3 +116,125 @@ double computeTotalAssets({
   }
   return total;
 }
+
+/// 资产/负债二分：按 `includeInTotal` 账户当前余额的正负拆分。
+///
+/// - `assets`：Σ max(0, currentBalance)——仅取正余额。
+/// - `liabilities`：Σ |min(0, currentBalance)|——欠款绝对值之和。
+///
+/// 性质：`assets - liabilities == computeTotalAssets(...)`（净资产即总资产）。
+/// 资产页顶部卡片在「余额按正负拆分」口径下消费本结果。
+({double assets, double liabilities}) computeAssetsAndLiabilities({
+  required Iterable<Account> accounts,
+  required Iterable<TransactionEntry> transactions,
+}) {
+  final nets = aggregateNetAmountsByAccount(transactions);
+  var assets = 0.0;
+  var liabilities = 0.0;
+  for (final acc in accounts) {
+    if (!acc.includeInTotal) continue;
+    final balance = acc.initialBalance + (nets[acc.id] ?? 0);
+    if (balance >= 0) {
+      assets += balance;
+    } else {
+      liabilities += -balance;
+    }
+  }
+  return (assets: assets, liabilities: liabilities);
+}
+
+/// 账户详情页的"年份×月份"聚合结果。
+class AccountYearDetail {
+  const AccountYearDetail({
+    required this.year,
+    required this.yearInflow,
+    required this.yearOutflow,
+    required this.months,
+  });
+
+  final int year;
+  final double yearInflow;
+  final double yearOutflow;
+  /// 长度恒为 12，索引 0..11 对应 1..12 月（缺月仍占位，inflow/outflow=0、
+  /// transactions=[]）。UI 据此渲染 12 张月份卡片。
+  final List<AccountMonthGroup> months;
+}
+
+/// 月度分组：流入/流出 + 该月该账户的全部流水（已按 `occurredAt` 倒序）。
+class AccountMonthGroup {
+  const AccountMonthGroup({
+    required this.month,
+    required this.inflow,
+    required this.outflow,
+    required this.transactions,
+  });
+
+  final int month; // 1..12
+  final double inflow;
+  final double outflow;
+  final List<TransactionEntry> transactions;
+}
+
+/// 给定流水清单，过滤出与 [accountId] 相关、发生于 [year] 的活跃流水，
+/// 按月份聚合流入/流出与明细列表。
+///
+/// 流入 / 流出口径（与资产/详情页顶部一致，含转账）：
+/// - 流入：`type == 'income' && accountId == X` ∪
+///   `type == 'transfer' && toAccountId == X`
+/// - 流出：`type == 'expense' && accountId == X` ∪
+///   `type == 'transfer' && accountId == X`
+///
+/// 已软删 (`deletedAt != null`) 的流水被忽略。
+AccountYearDetail computeAccountYearDetail({
+  required String accountId,
+  required int year,
+  required Iterable<TransactionEntry> transactions,
+}) {
+  final inflowsByMonth = List<double>.filled(12, 0);
+  final outflowsByMonth = List<double>.filled(12, 0);
+  final txsByMonth = List<List<TransactionEntry>>.generate(12, (_) => []);
+
+  for (final tx in transactions) {
+    if (tx.deletedAt != null) continue;
+    if (tx.occurredAt.year != year) continue;
+
+    final isInflowHere = (tx.type == 'income' && tx.accountId == accountId) ||
+        (tx.type == 'transfer' && tx.toAccountId == accountId);
+    final isOutflowHere = (tx.type == 'expense' && tx.accountId == accountId) ||
+        (tx.type == 'transfer' && tx.accountId == accountId);
+    if (!isInflowHere && !isOutflowHere) continue;
+
+    final idx = tx.occurredAt.month - 1;
+    if (isInflowHere) inflowsByMonth[idx] += tx.amount;
+    if (isOutflowHere) outflowsByMonth[idx] += tx.amount;
+    txsByMonth[idx].add(tx);
+  }
+
+  for (final list in txsByMonth) {
+    list.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+  }
+
+  final months = [
+    for (var m = 1; m <= 12; m++)
+      AccountMonthGroup(
+        month: m,
+        inflow: inflowsByMonth[m - 1],
+        outflow: outflowsByMonth[m - 1],
+        transactions: List.unmodifiable(txsByMonth[m - 1]),
+      ),
+  ];
+
+  var yearInflow = 0.0;
+  var yearOutflow = 0.0;
+  for (final mg in months) {
+    yearInflow += mg.inflow;
+    yearOutflow += mg.outflow;
+  }
+
+  return AccountYearDetail(
+    year: year,
+    yearInflow: yearInflow,
+    yearOutflow: yearOutflow,
+    months: months,
+  );
+}

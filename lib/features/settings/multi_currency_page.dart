@@ -156,7 +156,10 @@ class _MultiCurrencyPageState extends ConsumerState<MultiCurrencyPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               context.l10n.multiCurrencyRateHint,
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.54),
+              ),
             ),
           ),
           asyncRows.when(

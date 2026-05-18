@@ -8,15 +8,20 @@ import '../../core/l10n/l10n_ext.dart';
 import '../../data/repository/providers.dart';
 import '../../core/util/svg_or_emoji_icon.dart';
 import '../../domain/entity/account.dart';
+import '../record/record_new_page.dart';
+import '../record/record_new_providers.dart';
 import 'account_balance.dart';
 import 'account_providers.dart';
 
-/// 资产 Tab（Step 7.1 列表 / Step 7.2 CRUD）：顶部"总资产"卡片 + 下方账户卡片列表。
+/// 资产 Tab（Step 7.1 列表 / Step 7.2 CRUD / 重构版）：顶部"资产"卡片
+/// （资产 / 净资产 / 负债 三值） + 下方账户卡片列表。
 ///
-/// 总资产 = 当前账本下全部 `include_in_total = true` 的账户当前余额相加；
+/// 顶部资产 = Σ max(0, currentBalance)（仅正余额账户）；
+/// 负债 = Σ |min(0, currentBalance)|（欠款账户绝对值）；
+/// 净资产 = 资产 - 负债（与原 totalAssets 同值）。
 /// 各账户卡片分别展示"图标、名称、类型、当前余额"。信用卡负余额（欠款）
-/// 用语义 danger 色突出。Step 7.2：新增 FAB 进入新建页、点击卡片进入编辑、
-/// 长按弹出菜单（编辑 / 删除），删除走软删（进垃圾桶 30 天）。
+/// 用语义 danger 色突出。重构后：点击账户进入 `/accounts/detail?id=` 详情页
+/// 而不再直达编辑；长按弹出菜单（编辑 / 删除），删除走软删（进垃圾桶 30 天）。
 class AccountListPage extends ConsumerWidget {
   const AccountListPage({super.key});
 
@@ -24,7 +29,7 @@ class AccountListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final accountsAsync = ref.watch(accountsListProvider);
     final balancesAsync = ref.watch(accountBalancesProvider);
-    final totalAsync = ref.watch(totalAssetsProvider);
+    final assetLiabilityAsync = ref.watch(accountAssetLiabilityProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.meAssets)),
@@ -36,6 +41,7 @@ class AccountListPage extends ConsumerWidget {
             ref.invalidate(accountsListProvider);
             ref.invalidate(accountBalancesProvider);
             ref.invalidate(totalAssetsProvider);
+            ref.invalidate(accountAssetLiabilityProvider);
           }
         },
         icon: const Icon(Icons.add),
@@ -52,7 +58,10 @@ class AccountListPage extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
               children: [
-                _TotalAssetsCard(totalAsync: totalAsync),
+                _AssetsOverviewCard(
+                  assetLiabilityAsync: assetLiabilityAsync,
+                  onTransfer: () => _openTransferSheet(context, ref),
+                ),
                 const SizedBox(height: 16),
                 if (accounts.isEmpty)
                   const _EmptyState()
@@ -64,13 +73,14 @@ class AccountListPage extends ConsumerWidget {
                         account: acc,
                         balance: byId[acc.id],
                         onTap: () async {
-                          final saved = await context.push<bool>(
-                            '/accounts/edit?id=${acc.id}',
+                          final changed = await context.push<bool>(
+                            '/accounts/detail?id=${acc.id}',
                           );
-                          if (saved == true) {
+                          if (changed == true) {
                             ref.invalidate(accountsListProvider);
                             ref.invalidate(accountBalancesProvider);
                             ref.invalidate(totalAssetsProvider);
+                            ref.invalidate(accountAssetLiabilityProvider);
                           }
                         },
                         onLongPress: () =>
@@ -84,6 +94,40 @@ class AccountListPage extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// 资产卡片右上角"转账"按钮入口——与首页 swap 图标走同一套路径：
+  /// reset 表单 + setTransferMode(true) → 弹底部 RecordNewPage(isTransfer: true)
+  /// 模态。模态关闭后无论用户是否保存，统一 invalidate 资产相关 provider，
+  /// 让顶部卡片和账户列表立刻反映新流水。
+  Future<void> _openTransferSheet(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    ref.read(recordFormProvider.notifier).reset();
+    ref.read(recordFormProvider.notifier).setTransferMode(true);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: 0.58,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: Material(
+            color: Theme.of(sheetContext).colorScheme.surface,
+            child: const SafeArea(
+              top: false,
+              child: RecordNewPage(isTransfer: true),
+            ),
+          ),
+        ),
+      ),
+    );
+    ref.invalidate(accountsListProvider);
+    ref.invalidate(accountBalancesProvider);
+    ref.invalidate(totalAssetsProvider);
+    ref.invalidate(accountAssetLiabilityProvider);
   }
 
   void _showAccountMenu(
@@ -109,6 +153,7 @@ class AccountListPage extends ConsumerWidget {
                   ref.invalidate(accountsListProvider);
                   ref.invalidate(accountBalancesProvider);
                   ref.invalidate(totalAssetsProvider);
+                  ref.invalidate(accountAssetLiabilityProvider);
                 }
               },
             ),
@@ -157,6 +202,7 @@ class AccountListPage extends ConsumerWidget {
       ref.invalidate(accountsListProvider);
       ref.invalidate(accountBalancesProvider);
       ref.invalidate(totalAssetsProvider);
+      ref.invalidate(accountAssetLiabilityProvider);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.accountDeleted(account.name))),
@@ -170,48 +216,171 @@ class AccountListPage extends ConsumerWidget {
   }
 }
 
-class _TotalAssetsCard extends StatelessWidget {
-  const _TotalAssetsCard({required this.totalAsync});
+class _AssetsOverviewCard extends StatelessWidget {
+  const _AssetsOverviewCard({
+    required this.assetLiabilityAsync,
+    required this.onTransfer,
+  });
 
-  final AsyncValue<double> totalAsync;
+  final AsyncValue<({double assets, double liabilities})> assetLiabilityAsync;
+  final VoidCallback onTransfer;
 
   static final _fmt = NumberFormat('#,##0.00');
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final amountText = totalAsync.when(
-      loading: () => '--',
-      error: (e, _) => context.l10n.loadFailed,
-      data: (v) => '¥${_fmt.format(v)}',
+    final loadFailed = context.l10n.loadFailed;
+    final (assetsText, netText, liabilitiesText) = assetLiabilityAsync.when(
+      loading: () => ('--', '--', '--'),
+      error: (e, _) => (loadFailed, loadFailed, loadFailed),
+      data: (v) => (
+        '¥${_fmt.format(v.assets)}',
+        '¥${_fmt.format(v.assets - v.liabilities)}',
+        '¥${_fmt.format(v.liabilities)}',
+      ),
     );
+
+    final onContainer = theme.colorScheme.onPrimaryContainer;
+    final dividerColor = onContainer.withValues(alpha: 0.25);
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      color: onContainer.withValues(alpha: 0.85),
+    );
+
     return Card(
       color: theme.colorScheme.primaryContainer,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.l10n.accountTotalAssets,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onPrimaryContainer.withValues(
-                  alpha: 0.8,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(context.l10n.accountAssets, style: labelStyle),
+                      const SizedBox(height: 6),
+                      Text(
+                        assetsText,
+                        key: const Key('account_assets_amount'),
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: onContainer,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                _TransferPill(
+                  onTap: onTransfer,
+                  color: onContainer,
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              amountText,
-              key: const Key('total_assets_amount'),
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
+            const SizedBox(height: 14),
+            Divider(height: 1, color: dividerColor),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _OverviewCell(
+                    label: context.l10n.accountNetAssets,
+                    amount: netText,
+                    amountKey: const Key('account_net_assets_amount'),
+                    color: onContainer,
+                  ),
+                ),
+                Container(width: 1, height: 32, color: dividerColor),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: _OverviewCell(
+                      label: context.l10n.accountLiabilities,
+                      amount: liabilitiesText,
+                      amountKey: const Key('account_liabilities_amount'),
+                      color: onContainer,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TransferPill extends StatelessWidget {
+  const _TransferPill({required this.onTap, required this.color});
+
+  final VoidCallback onTap;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      shape: StadiumBorder(
+        side: BorderSide(color: color.withValues(alpha: 0.55)),
+      ),
+      child: InkWell(
+        key: const Key('account_list_transfer_btn'),
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          child: Text(
+            context.l10n.txTypeTransfer,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewCell extends StatelessWidget {
+  const _OverviewCell({
+    required this.label,
+    required this.amount,
+    required this.amountKey,
+    required this.color,
+  });
+
+  final String label;
+  final String amount;
+  final Key amountKey;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color.withValues(alpha: 0.85),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          amount,
+          key: amountKey,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -225,10 +394,10 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 64),
       child: Column(
         children: [
-          const Icon(
+          Icon(
             Icons.account_balance_wallet_outlined,
             size: 64,
-            color: Colors.black26,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.26),
           ),
           const SizedBox(height: 12),
           Text(
@@ -295,7 +464,7 @@ class _AccountCard extends StatelessWidget {
                     Text(
                       '$typeLabel$notInTotalSuffix',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.black54,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
                       ),
                     ),
                     if (creditInfo != null) ...[
@@ -304,7 +473,7 @@ class _AccountCard extends StatelessWidget {
                         creditInfo,
                         key: Key('credit_info_${account.id}'),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.black54,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
                         ),
                       ),
                     ],

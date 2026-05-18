@@ -108,7 +108,7 @@ class QianjiBillParser extends GenericBillParser {
     final accountTo = getBy('to_account');
 
     return BackupImportCsvRow(
-      ledgerLabel: displayName,
+      ledgerLabel: '',
       occurredAt: occurredAt,
       type: type,
       amount: amount.abs(),

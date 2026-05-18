@@ -137,7 +137,7 @@ class _PrivacyConsentDialogState extends ConsumerState<PrivacyConsentDialog> {
     final l10n = context.l10n;
     return Positioned.fill(
       child: Material(
-        color: Colors.black54,
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),

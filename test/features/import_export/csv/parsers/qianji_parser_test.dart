@@ -39,7 +39,6 @@ void main() {
     expect(row!.primaryCategoryName, '饮食');
     expect(row.categoryName, '午餐');
     expect(row.accountName, '现金');
-    expect(row.ledgerLabel, '钱迹');
   });
 
   test('amount 永远 abs()', () {

@@ -9,6 +9,7 @@ import '../../data/repository/ledger_repository.dart';
 import '../../data/repository/transaction_repository.dart';
 import '../../domain/entity/attachment_meta.dart';
 import 'attachment/attachment_uploader.dart';
+import 'cloud_backup_discovery.dart';
 import 'snapshot_serializer.dart';
 
 /// V1 同步服务：账本快照模型（整库 upload / 整库 download / 指纹比对）。
@@ -35,6 +36,24 @@ abstract class SyncService {
 
   /// 清除内部状态缓存。本地数据变更后调用，强制下次 [getStatus] 重算。
   void clearCache();
+
+  /// 枚举云端所有可恢复备份。
+  ///
+  /// - 鉴权后端（Supabase）：仅扫 `users/<auth.uid()>/ledgers/`，RLS 必须；
+  /// - 非鉴权后端（S3 / WebDAV / iCloud）：扫 `users/` 全前缀，可以发现历史
+  ///   deviceId 下的老备份——这是"重装后找回备份"的核心能力。
+  ///
+  /// 损坏 / 不兼容版本的 JSON 会被静默跳过，不阻塞整张列表。
+  Future<List<RemoteBackup>> listBackups();
+
+  /// 从指定备份恢复到本地——**追加为新账本**：为云端 ledger 分配新 UUID，
+  /// 流水/预算的 ledgerId 全部 remap，本地原有账本保持不动。
+  /// 返回新建的本地 ledger.id。
+  Future<String> restoreFromBackup(RemoteBackup backup);
+
+  /// 删除云端指定路径的备份（用于 BackupListPage 里逐条删除）。
+  /// 不存在视为幂等成功。
+  Future<void> deleteBackupAt(String cloudPath);
 }
 
 /// 未配置或未激活云服务时的兜底实现——所有操作抛 [UnsupportedError]，
@@ -69,6 +88,21 @@ class LocalOnlySyncService implements SyncService {
   }
 
   @override
+  Future<List<RemoteBackup>> listBackups() async {
+    throw UnsupportedError('Cloud sync not configured');
+  }
+
+  @override
+  Future<String> restoreFromBackup(RemoteBackup backup) async {
+    throw UnsupportedError('Cloud sync not configured');
+  }
+
+  @override
+  Future<void> deleteBackupAt(String cloudPath) async {
+    throw UnsupportedError('Cloud sync not configured');
+  }
+
+  @override
   void clearCache() {}
 }
 
@@ -78,6 +112,7 @@ class SnapshotSyncService implements SyncService {
     required CloudSyncManager<LedgerSnapshot> manager,
     required AppDatabase db,
     required String deviceId,
+    required CloudBackendType backendType,
     required LedgerRepository ledgerRepo,
     required CategoryRepository categoryRepo,
     required AccountRepository accountRepo,
@@ -86,6 +121,7 @@ class SnapshotSyncService implements SyncService {
   })  : _manager = manager,
         _db = db,
         _deviceId = deviceId,
+        _backendType = backendType,
         _ledgerRepo = ledgerRepo,
         _categoryRepo = categoryRepo,
         _accountRepo = accountRepo,
@@ -95,23 +131,40 @@ class SnapshotSyncService implements SyncService {
   final CloudSyncManager<LedgerSnapshot> _manager;
   final AppDatabase _db;
   final String _deviceId;
+  final CloudBackendType _backendType;
   final LedgerRepository _ledgerRepo;
   final CategoryRepository _categoryRepo;
   final AccountRepository _accountRepo;
   final TransactionRepository _transactionRepo;
   final BudgetRepository _budgetRepo;
 
-  /// 云端路径——与"蜜蜂记账云同步方案.md"约定一致：
-  /// `users/<userId>/ledgers/<ledgerId>.json`。
+  /// 该后端是否使用"真鉴权"（账号密码登录、RLS 隔离）。
+  /// 真鉴权后端 → `listBackups` 只能扫自己 `auth.uid()` 那一个目录;
+  /// 伪鉴权后端（S3 / WebDAV / iCloud）整桶都是自己的,可以扫全 `users/`
+  /// 前缀,这样**换 customName / 重装** 后也能找回旧 deviceId 下的备份。
+  bool get _hasRealAuth =>
+      _backendType == CloudBackendType.supabase ||
+      _backendType == CloudBackendType.beecountCloud;
+
+  /// 云端路径。
   ///
-  /// Supabase RLS 依赖 `(storage.foldername(name))[1] = 'users'` AND
-  /// `(storage.foldername(name))[2] = auth.uid()`，所以 `userId` 必须等于
-  /// `auth.uid()`。其他 backend（WebDAV/iCloud/S3）不强制此格式，但保留
-  /// `users/<deviceId>/...` 前缀以统一目录结构。
+  /// - 鉴权后端（Supabase）：`users/<auth.uid()>/ledgers/<ledgerId>.json`，
+  ///   RLS 强制 userId 必须等于 auth.uid()。
+  /// - 非鉴权后端（S3/WebDAV/iCloud）：`users/ledgers/<ledgerName>.json`，
+  ///   整桶都是同一用户的，使用固定目录 + 账本名称构建路径，确保：
+  ///   ① 多设备共用同一份备份（不再按 deviceId 分目录）；
+  ///   ② 恢复后 ledgerId 变化仍能定位到原有云端备份（名称不变）。
   Future<String> _path(String ledgerId) async {
-    final user = await _manager.provider.auth.currentUser;
-    final userId = user?.id ?? _deviceId;
-    return 'users/$userId/ledgers/$ledgerId.json';
+    if (_hasRealAuth) {
+      final user = await _manager.provider.auth.currentUser;
+      final userId = user?.id ?? _deviceId;
+      return 'users/$userId/ledgers/$ledgerId.json';
+    }
+    // 非鉴权后端：用账本名称代替 ledgerId，多设备共享同一路径
+    final ledger = await _ledgerRepo.getById(ledgerId);
+    final name = ledger?.name ?? ledgerId;
+    final safeName = name.replaceAll(RegExp(r'[/\\]'), '_');
+    return 'users/ledgers/$safeName.json';
   }
 
   Future<LedgerSnapshot> _exportLocal(String ledgerId) {
@@ -231,6 +284,40 @@ class SnapshotSyncService implements SyncService {
       await _manager.deleteRemote(path: path);
     } on CloudStorageException {
       // 云端已不存在视为幂等成功。
+    }
+  }
+
+  @override
+  Future<List<RemoteBackup>> listBackups() async {
+    // 伪鉴权后端（S3 / WebDAV / iCloud）的 currentUser.id 实为 customName /
+    // accessKey 派生值,并非真账号。如果照旧把它当 authUid 传下去,会让
+    // discoverBackups 只扫 `users/<当前 customName>/ledgers/`,导致换设备时
+    // 哪怕 customName 差一个字符也找不回旧备份——伪鉴权后端整桶都是自己的,
+    // 应该扫全 `users/` 前缀。
+    final authUid = _hasRealAuth
+        ? (await _manager.provider.auth.currentUser)?.id
+        : null;
+    return discoverBackups(
+      storage: _manager.provider.storage,
+      authUid: authUid,
+    );
+  }
+
+  @override
+  Future<String> restoreFromBackup(RemoteBackup backup) async {
+    return restoreBackupAsNew(
+      storage: _manager.provider.storage,
+      backup: backup,
+      db: _db,
+    );
+  }
+
+  @override
+  Future<void> deleteBackupAt(String cloudPath) async {
+    try {
+      await _manager.provider.storage.delete(path: cloudPath);
+    } on CloudStorageException {
+      // 幂等：路径不存在视为已删除。
     }
   }
 

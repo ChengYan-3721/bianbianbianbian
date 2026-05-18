@@ -100,7 +100,7 @@ class AlipayBillParser extends GenericBillParser {
     if (type == null) return null;
 
     return BackupImportCsvRow(
-      ledgerLabel: displayName,
+      ledgerLabel: '',
       occurredAt: occurredAt,
       type: type,
       amount: amount,
