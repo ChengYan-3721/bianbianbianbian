@@ -152,11 +152,16 @@ Future<List<RemoteBackup>> discoverBackups({
 /// (典型场景:列表打开后另一个设备删了备份)。
 ///
 /// `uuidFactory` 透传到 [importLedgerSnapshotAsNew],测试时可注入计数器。
+///
+/// [conflictStrategy] 和 [renameTo] 透传到 [importLedgerSnapshotAsNew],
+/// 控制同名账本冲突时的处理方式。
 Future<String> restoreBackupAsNew({
   required CloudStorageService storage,
   required RemoteBackup backup,
   required AppDatabase db,
   String Function()? uuidFactory,
+  LedgerNameConflictStrategy? conflictStrategy,
+  String? renameTo,
 }) async {
   final raw = await storage.download(path: backup.cloudPath);
   if (raw == null) {
@@ -167,5 +172,7 @@ Future<String> restoreBackupAsNew({
     snapshot: snap,
     db: db,
     uuidFactory: uuidFactory,
+    conflictStrategy: conflictStrategy,
+    renameTo: renameTo,
   );
 }

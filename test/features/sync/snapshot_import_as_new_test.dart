@@ -12,12 +12,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// 不与本地现有账本同 id 冲突。
 ///
 /// 关键不变量:
-/// - ledger 拿到 uuidFactory() 的第 1 个 UUID;
+/// - ledger:**优先保留原始 id**——仅当本地已存在同名活跃账本时才生成新 UUID;
 /// - 每条 transaction 拿到独立的 UUID(后续 UUID);
 /// - 每条 budget 拿到独立的 UUID;
-/// - 所有 transaction.ledgerId / budget.ledgerId 重映射到新 ledger UUID;
+/// - 所有 transaction.ledgerId / budget.ledgerId 重映射到最终 ledger UUID;
 /// - categories / accounts 仍按原 id upsert(全局共享,不动);
-/// - 同一个备份导入两次产生两个相互独立的 ledger。
+/// - 同一个备份导入两次:第一次保留原始 id,第二次检测到冲突后生成新 UUID。
 void main() {
   late AppDatabase db;
 
@@ -27,14 +27,16 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('ledger / tx / budget 全部分配新 UUID,且 ledgerId 重映射一致', () async {
+  test('无冲突时保留原始 ledgerId,tx/budget 分配新 UUID 且 ledgerId 重映射一致', () async {
     final snap = _snapshotWith(
       ledgerId: 'cloud-L',
       ledgerName: '云端账本',
       txIds: const ['cloud-tx-1', 'cloud-tx-2'],
       budgetIds: const ['cloud-b-1'],
     );
-    final factory = _UuidCounter(['new-L', 'new-tx-A', 'new-tx-B', 'new-b-A']);
+    // uuidFactory 的第 1 个 UUID 留给 ledger(仅冲突时使用),此处无冲突故保留原始 id。
+    // tx 和 budget 各需独立 UUID。
+    final factory = _UuidCounter(['new-tx-A', 'new-tx-B', 'new-b-A']);
 
     final newId = await importLedgerSnapshotAsNew(
       snapshot: snap,
@@ -42,19 +44,20 @@ void main() {
       uuidFactory: factory.next,
     );
 
-    expect(newId, 'new-L');
+    // 无冲突 → 保留原始 ledgerId
+    expect(newId, 'cloud-L');
 
     final ledgers = await db.select(db.ledgerTable).get();
-    expect(ledgers.map((l) => l.id), ['new-L']);
+    expect(ledgers.map((l) => l.id), ['cloud-L']);
     expect(ledgers.single.name, '云端账本');
 
     final txs = await db.select(db.transactionEntryTable).get();
     expect(txs.map((t) => t.id).toSet(), {'new-tx-A', 'new-tx-B'});
-    expect(txs.every((t) => t.ledgerId == 'new-L'), isTrue);
+    expect(txs.every((t) => t.ledgerId == 'cloud-L'), isTrue);
 
     final budgets = await db.select(db.budgetTable).get();
     expect(budgets.map((b) => b.id), ['new-b-A']);
-    expect(budgets.single.ledgerId, 'new-L');
+    expect(budgets.single.ledgerId, 'cloud-L');
   });
 
   test('categories / accounts 仍按原 id upsert,可与已有共享', () async {
@@ -63,7 +66,8 @@ void main() {
       categoryIds: const ['food', 'transport'],
       accountIds: const ['cash', 'card'],
     );
-    final factory = _UuidCounter(['new-L']);
+    // 无冲突 → ledgerId 保留原始值,不需要 uuidFactory 提供 ledger UUID
+    final factory = _UuidCounter(<String>[]);
 
     await importLedgerSnapshotAsNew(
       snapshot: snap,
@@ -78,34 +82,37 @@ void main() {
     expect(accts.map((a) => a.id).toSet(), {'cash', 'card'});
   });
 
-  test('同一个 snapshot 导入两次产生两个独立 ledger 与各自 txs', () async {
+  test('同一个 snapshot 导入两次:第一次保留原始 id,第二次冲突后生成新 UUID', () async {
     final snap = _snapshotWith(
       ledgerId: 'cloud-L',
       txIds: const ['cloud-tx-1'],
     );
 
-    final f1 = _UuidCounter(['L-a', 'tx-a']);
+    // 第一次导入:无冲突 → 保留原始 ledgerId 'cloud-L'
+    final f1 = _UuidCounter(['tx-a']);
     final id1 = await importLedgerSnapshotAsNew(
       snapshot: snap,
       db: db,
       uuidFactory: f1.next,
     );
-    final f2 = _UuidCounter(['L-b', 'tx-b']);
+    // 第二次导入:同名活跃账本 'cloud-L' 已存在 → 冲突 → 生成新 UUID。
+    // uuidFactory 调用顺序:先为 tx 分配 UUID(事务外),再为 ledger 分配(事务内冲突时)。
+    final f2 = _UuidCounter(['tx-b', 'L-b']);
     final id2 = await importLedgerSnapshotAsNew(
       snapshot: snap,
       db: db,
       uuidFactory: f2.next,
     );
 
-    expect(id1, 'L-a');
+    expect(id1, 'cloud-L');
     expect(id2, 'L-b');
 
     final ledgers = await db.select(db.ledgerTable).get();
-    expect(ledgers.map((l) => l.id).toSet(), {'L-a', 'L-b'});
+    expect(ledgers.map((l) => l.id).toSet(), {'cloud-L', 'L-b'});
 
     final txs = await db.select(db.transactionEntryTable).get();
     expect(txs.map((t) => t.id).toSet(), {'tx-a', 'tx-b'});
-    expect(txs.where((t) => t.ledgerId == 'L-a').length, 1);
+    expect(txs.where((t) => t.ledgerId == 'cloud-L').length, 1);
     expect(txs.where((t) => t.ledgerId == 'L-b').length, 1);
   });
 }

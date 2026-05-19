@@ -48,8 +48,23 @@ abstract class SyncService {
 
   /// 从指定备份恢复到本地——**追加为新账本**：为云端 ledger 分配新 UUID，
   /// 流水/预算的 ledgerId 全部 remap，本地原有账本保持不动。
+  ///
+  /// [conflictStrategy] 控制同名账本冲突时的行为：
+  /// - [LedgerNameConflictStrategy.merge]:合并到本地同名账本;
+  /// - [LedgerNameConflictStrategy.overwrite]:覆盖本地同名账本;
+  /// - [LedgerNameConflictStrategy.rename]:以 [renameTo] 新建账本;
+  /// - null:自动生成新 UUID 保留原名(旧行为)。
+  ///
   /// 返回新建的本地 ledger.id。
-  Future<String> restoreFromBackup(RemoteBackup backup);
+  Future<String> restoreFromBackup(
+    RemoteBackup backup, {
+    LedgerNameConflictStrategy? conflictStrategy,
+    String? renameTo,
+  });
+
+  /// 检查云端备份的账本名是否与本地已有活跃账本重名。
+  /// 返回 null 表示无冲突;非 null 表示存在同名活跃账本。
+  Future<LedgerNameConflict?> checkLedgerNameConflict(String ledgerName);
 
   /// 删除云端指定路径的备份（用于 BackupListPage 里逐条删除）。
   /// 不存在视为幂等成功。
@@ -93,7 +108,16 @@ class LocalOnlySyncService implements SyncService {
   }
 
   @override
-  Future<String> restoreFromBackup(RemoteBackup backup) async {
+  Future<String> restoreFromBackup(
+    RemoteBackup backup, {
+    LedgerNameConflictStrategy? conflictStrategy,
+    String? renameTo,
+  }) async {
+    throw UnsupportedError('Cloud sync not configured');
+  }
+
+  @override
+  Future<LedgerNameConflict?> checkLedgerNameConflict(String ledgerName) async {
     throw UnsupportedError('Cloud sync not configured');
   }
 
@@ -150,21 +174,21 @@ class SnapshotSyncService implements SyncService {
   ///
   /// - 鉴权后端（Supabase）：`users/<auth.uid()>/ledgers/<ledgerId>.json`，
   ///   RLS 强制 userId 必须等于 auth.uid()。
-  /// - 非鉴权后端（S3/WebDAV/iCloud）：`users/ledgers/<ledgerName>.json`，
-  ///   整桶都是同一用户的，使用固定目录 + 账本名称构建路径，确保：
-  ///   ① 多设备共用同一份备份（不再按 deviceId 分目录）；
-  ///   ② 恢复后 ledgerId 变化仍能定位到原有云端备份（名称不变）。
+  /// - 非鉴权后端（S3/WebDAV/iCloud）：`users/ledgers/<ledgerId>.json`，
+  ///   整桶都是同一用户的，使用固定目录 + ledgerId（UUID）构建路径：
+  ///   ① UUID 纯 ASCII，避免 S3 `_encodeKey` 对中文双重编码导致 LIST 可见
+  ///      但 download 404 的问题；
+  ///   ② UUID 不随账本改名变化，改名后仍能找到原有云端备份；
+  ///   ③ 配合 `importLedgerSnapshotAsNew` 的"保留原始 ledgerId"策略，
+  ///      多设备恢复同一备份后 ledgerId 相同，自然共享同一云端路径。
   Future<String> _path(String ledgerId) async {
     if (_hasRealAuth) {
       final user = await _manager.provider.auth.currentUser;
       final userId = user?.id ?? _deviceId;
       return 'users/$userId/ledgers/$ledgerId.json';
     }
-    // 非鉴权后端：用账本名称代替 ledgerId，多设备共享同一路径
-    final ledger = await _ledgerRepo.getById(ledgerId);
-    final name = ledger?.name ?? ledgerId;
-    final safeName = name.replaceAll(RegExp(r'[/\\]'), '_');
-    return 'users/ledgers/$safeName.json';
+    // 非鉴权后端：直接用 ledgerId（UUID），纯 ASCII 无编码问题
+    return 'users/ledgers/$ledgerId.json';
   }
 
   Future<LedgerSnapshot> _exportLocal(String ledgerId) {
@@ -304,11 +328,32 @@ class SnapshotSyncService implements SyncService {
   }
 
   @override
-  Future<String> restoreFromBackup(RemoteBackup backup) async {
+  Future<String> restoreFromBackup(
+    RemoteBackup backup, {
+    LedgerNameConflictStrategy? conflictStrategy,
+    String? renameTo,
+  }) async {
     return restoreBackupAsNew(
       storage: _manager.provider.storage,
       backup: backup,
       db: _db,
+      conflictStrategy: conflictStrategy,
+      renameTo: renameTo,
+    );
+  }
+
+  @override
+  Future<LedgerNameConflict?> checkLedgerNameConflict(String ledgerName) async {
+    final rows = await (_db.select(_db.ledgerTable)
+          ..where((t) => t.name.equals(ledgerName))
+          ..where((t) => t.deletedAt.isNull()))
+        .get();
+    if (rows.isEmpty) return null;
+    final local = rows.first;
+    return LedgerNameConflict(
+      cloudLedgerName: ledgerName,
+      localLedgerId: local.id,
+      localLedgerName: local.name,
     );
   }
 

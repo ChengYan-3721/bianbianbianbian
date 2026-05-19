@@ -1,7 +1,6 @@
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 import 'package:flutter_cloud_sync_icloud/flutter_cloud_sync_icloud.dart';
@@ -17,6 +16,7 @@ import 'sync_service.dart';
 
 class CloudServicePage extends ConsumerStatefulWidget {
   const CloudServicePage({super.key});
+
   @override
   ConsumerState<CloudServicePage> createState() => _CloudServicePageState();
 }
@@ -31,12 +31,11 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     final failedAsync = ref.watch(cloudFailedBackendsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(context.l10n.syncTitle),
-      ),
+      appBar: AppBar(title: Text(context.l10n.syncTitle)),
       body: activeAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(context.l10n.syncError(e.toString()))),
+        error: (e, _) =>
+            Center(child: Text(context.l10n.syncError(e.toString()))),
         data: (active) {
           final cloudEnabled = active.type != CloudBackendType.local;
           // failed 集合在加载未完成时取空，对应"暂时全 ready"的乐观渲染——
@@ -59,7 +58,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
             );
           }
 
-          final supabaseReady = readyFor(CloudBackendType.supabase, supabaseAsync);
+          final supabaseReady = readyFor(
+            CloudBackendType.supabase,
+            supabaseAsync,
+          );
           final webdavReady = readyFor(CloudBackendType.webdav, webdavAsync);
           final s3Ready = readyFor(CloudBackendType.s3, s3Async);
           final icloudReady = !kIsWeb && Platform.isIOS;
@@ -73,12 +75,15 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
               Card(
                 elevation: 1,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: SwitchListTile(
                   title: Text(context.l10n.syncEnable),
-                  subtitle: Text(cloudEnabled
-                      ? context.l10n.syncCurrentBackend(active.name)
-                      : context.l10n.syncDisabled),
+                  subtitle: Text(
+                    cloudEnabled
+                        ? context.l10n.syncCurrentBackend(active.name)
+                        : context.l10n.syncDisabled,
+                  ),
                   value: cloudEnabled,
                   onChanged: (on) => _toggleCloudSync(on),
                 ),
@@ -165,8 +170,9 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
   }) {
     if (isFailed) return context.l10n.syncLastTestFailed;
     return cfgAsync.maybeWhen(
-      data: (cfg) =>
-          cfg == null || !cfg.valid ? context.l10n.syncNotConfiguredFormat(defaultText) : defaultText,
+      data: (cfg) => cfg == null || !cfg.valid
+          ? context.l10n.syncNotConfiguredFormat(defaultText)
+          : defaultText,
       orElse: () => defaultText,
     );
   }
@@ -208,7 +214,11 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     );
   }
 
-  Widget _buildICloudCard(BuildContext context, CloudServiceConfig active, {bool isDisabled = false}) {
+  Widget _buildICloudCard(
+    BuildContext context,
+    CloudServiceConfig active, {
+    bool isDisabled = false,
+  }) {
     final isSelected = active.type == CloudBackendType.icloud;
     return _buildServiceCard(
       context: context,
@@ -276,7 +286,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
         builder: (context) => AlertDialog(
           title: Text(context.l10n.syncMigrateAttachments),
           content: Text(
-            context.l10n.syncMigrateAttachmentsDetail(remoteAttachments, _typeLabel(context, type)),
+            context.l10n.syncMigrateAttachmentsDetail(
+              remoteAttachments,
+              _typeLabel(context, type),
+            ),
           ),
           actions: [
             TextButton(
@@ -301,8 +314,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-                content: Text(
-                    context.l10n.syncSwitchNotConfigured(_typeLabel(context, type)))),
+              content: Text(
+                context.l10n.syncSwitchNotConfigured(_typeLabel(context, type)),
+              ),
+            ),
           );
         }
         return;
@@ -324,11 +339,14 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       ref.invalidate(syncServiceProvider);
       if (mounted) {
         final msg = migratedRows > 0
-            ? context.l10n.syncSwitchedWithMigration(_typeLabel(context, type), migratedRows)
+            ? context.l10n.syncSwitchedWithMigration(
+                _typeLabel(context, type),
+                migratedRows,
+              )
             : context.l10n.syncSwitched(_typeLabel(context, type));
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (mounted) {
@@ -370,14 +388,15 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       ref.invalidate(authServiceProvider);
       ref.invalidate(syncServiceProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.syncCloudDisabled)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.syncCloudDisabled)));
       }
       return;
     }
 
-    final restored = await store.reactivateLast() ?? await store.findFirstReady();
+    final restored =
+        await store.reactivateLast() ?? await store.findFirstReady();
     if (restored == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -391,7 +410,11 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     ref.invalidate(syncServiceProvider);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.syncEnabledWith(_typeLabel(context, restored)))),
+        SnackBar(
+          content: Text(
+            context.l10n.syncEnabledWith(_typeLabel(context, restored)),
+          ),
+        ),
       );
     }
   }
@@ -478,15 +501,19 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     }
   }
 
-  Future<void> _saveConfig(CloudBackendType type, Map<String, dynamic> data) async {
+  Future<void> _saveConfig(
+    CloudBackendType type,
+    Map<String, dynamic> data,
+  ) async {
     final store = ref.read(cloudServiceStoreProvider);
     CloudServiceConfig? cfg;
 
     try {
       // 通用：自定义名称——空 / 全空白视为未设置；统一存到 CloudServiceConfig.customName
       final customNameRaw = (data['customName'] as String?)?.trim();
-      final customName =
-          (customNameRaw == null || customNameRaw.isEmpty) ? null : customNameRaw;
+      final customName = (customNameRaw == null || customNameRaw.isEmpty)
+          ? null
+          : customNameRaw;
       if (type == CloudBackendType.supabase) {
         cfg = CloudServiceConfig(
           type: CloudBackendType.supabase,
@@ -542,9 +569,11 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(testError == null
-                  ? context.l10n.syncConfigSavedAndTested
-                  : context.l10n.syncConfigSavedTestFailed(testError)),
+              content: Text(
+                testError == null
+                    ? context.l10n.syncConfigSavedAndTested
+                    : context.l10n.syncConfigSavedTestFailed(testError),
+              ),
               duration: testError == null
                   ? const Duration(seconds: 3)
                   : const Duration(seconds: 6),
@@ -557,7 +586,9 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.saveFailedWithError(e.toString()))),
+          SnackBar(
+            content: Text(context.l10n.saveFailedWithError(e.toString())),
+          ),
         );
       }
     }
@@ -611,29 +642,44 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
     super.initState();
     _urlController = TextEditingController(text: widget.initialUrl);
     _keyController = TextEditingController(text: widget.initialKey);
-    _customNameController = TextEditingController(text: widget.initialCustomName);
+    _customNameController = TextEditingController(
+      text: widget.initialCustomName,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(context.l10n.syncConfigSupabase),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _customNameController,
-            decoration: InputDecoration(
-              labelText: context.l10n.syncCustomName,
-              hintText: context.l10n.syncCustomNameHint,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _customNameController,
+              decoration: InputDecoration(
+                labelText: context.l10n.syncCustomName,
+                hintText: context.l10n.syncCustomNameHint,
+              ),
             ),
-          ),
-          TextField(controller: _urlController, decoration: const InputDecoration(labelText: 'URL')),
-          TextField(controller: _keyController, decoration: const InputDecoration(labelText: 'Anon Key')),
-        ],
+            const SizedBox(height: 16),
+            TextField(
+              controller: _urlController,
+              decoration: const InputDecoration(labelText: 'URL'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _keyController,
+              decoration: const InputDecoration(labelText: 'Anon Key'),
+            ),
+          ],
+        ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(context.l10n.cancel),
+        ),
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
@@ -682,31 +728,61 @@ class _WebdavConfigDialogState extends State<_WebdavConfigDialog> {
     _usernameController = TextEditingController(text: widget.initialUsername);
     _passwordController = TextEditingController(text: widget.initialPassword);
     _pathController = TextEditingController(text: widget.initialPath);
-    _customNameController = TextEditingController(text: widget.initialCustomName);
+    _customNameController = TextEditingController(
+      text: widget.initialCustomName,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(context.l10n.syncConfigWebdav),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _customNameController,
-            decoration: InputDecoration(
-              labelText: context.l10n.syncCustomName,
-              hintText: context.l10n.syncCustomNameHint,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _customNameController,
+              decoration: InputDecoration(
+                labelText: context.l10n.syncCustomName,
+                hintText: context.l10n.syncCustomNameHint,
+              ),
             ),
-          ),
-          TextField(controller: _urlController, decoration: const InputDecoration(labelText: 'URL')),
-          TextField(controller: _usernameController, decoration: InputDecoration(labelText: context.l10n.syncWebdavUsername)),
-          TextField(controller: _passwordController, decoration: InputDecoration(labelText: context.l10n.syncWebdavPassword), obscureText: true),
-          TextField(controller: _pathController, decoration: InputDecoration(labelText: context.l10n.syncWebdavRemotePath)),
-        ],
+            const SizedBox(height: 16),
+            TextField(
+              controller: _urlController,
+              decoration: const InputDecoration(labelText: 'URL'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _usernameController,
+              decoration: InputDecoration(
+                labelText: context.l10n.syncWebdavUsername,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passwordController,
+              decoration: InputDecoration(
+                labelText: context.l10n.syncWebdavPassword,
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _pathController,
+              decoration: InputDecoration(
+                labelText: context.l10n.syncWebdavRemotePath,
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(context.l10n.cancel),
+        ),
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
@@ -767,8 +843,12 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
     _accessKeyController = TextEditingController(text: widget.initialAccessKey);
     _secretKeyController = TextEditingController(text: widget.initialSecretKey);
     _bucketController = TextEditingController(text: widget.initialBucket);
-    _portController = TextEditingController(text: widget.initialPort?.toString() ?? '');
-    _customNameController = TextEditingController(text: widget.initialCustomName);
+    _portController = TextEditingController(
+      text: widget.initialPort?.toString() ?? '',
+    );
+    _customNameController = TextEditingController(
+      text: widget.initialCustomName,
+    );
     _useSSL = widget.initialUseSSL;
   }
 
@@ -786,22 +866,43 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
                 labelText: context.l10n.syncCustomName,
                 hintText: context.l10n.syncS3CustomNameHint,
               ),
-              // customName 会拼进云端路径 `users/<customName>/ledgers/...`——
-              // 不同 S3 兼容服务(Cloudflare R2 / MinIO / AWS / B2)对非 ASCII key
-              // 的 percent-encoding 与 SigV4 canonical 形式处理不一致,典型表现是
-              // 中文 customName 上传"看似成功"但 LIST 返回空,导致换设备后无法
-              // 找回备份。AWS 官方也只对 [A-Za-z0-9_\-./] 提供 well-defined
-              // 行为,这里直接拦截非安全字符。
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_\-]')),
-              ],
             ),
-            TextField(controller: _endpointController, decoration: const InputDecoration(labelText: 'Endpoint (Without https://)')),
-            TextField(controller: _regionController, decoration: const InputDecoration(labelText: 'Region')),
-            TextField(controller: _accessKeyController, decoration: const InputDecoration(labelText: 'Access Key')),
-            TextField(controller: _secretKeyController, decoration: const InputDecoration(labelText: 'Secret Key'), obscureText: true),
-            TextField(controller: _bucketController, decoration: const InputDecoration(labelText: 'Bucket')),
-            TextField(controller: _portController, decoration: InputDecoration(labelText: 'Port (${context.l10n.optional})'), keyboardType: TextInputType.number),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _endpointController,
+              decoration: const InputDecoration(
+                labelText: 'Endpoint (Without https://)',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _regionController,
+              decoration: const InputDecoration(labelText: 'Region'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _accessKeyController,
+              decoration: const InputDecoration(labelText: 'Access Key'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _secretKeyController,
+              decoration: const InputDecoration(labelText: 'Secret Key'),
+              obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _bucketController,
+              decoration: const InputDecoration(labelText: 'Bucket'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _portController,
+              decoration: InputDecoration(
+                labelText: 'Port (${context.l10n.optional})',
+              ),
+              keyboardType: TextInputType.number,
+            ),
             SwitchListTile(
               title: const Text('Use SSL'),
               value: _useSSL,
@@ -811,7 +912,10 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(context.l10n.cancel),
+        ),
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
@@ -821,7 +925,9 @@ class _S3ConfigDialogState extends State<_S3ConfigDialog> {
               'secretKey': _secretKeyController.text,
               'bucket': _bucketController.text,
               'useSSL': _useSSL,
-              'port': _portController.text.isNotEmpty ? int.tryParse(_portController.text) : null,
+              'port': _portController.text.isNotEmpty
+                  ? int.tryParse(_portController.text)
+                  : null,
               'customName': _customNameController.text,
             });
           },
@@ -851,7 +957,8 @@ class _SyncStatusCard extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: ledgerAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Text(context.l10n.syncLedgerLoadFailed(e.toString())),
+          error: (e, _) =>
+              Text(context.l10n.syncLedgerLoadFailed(e.toString())),
           data: (ledgerId) => syncAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text(context.l10n.syncInitFailed(e.toString())),
@@ -904,22 +1011,26 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
     });
   }
 
-  Future<void> _runWithBusy(Future<void> Function() action,
-      {required String successMessage}) async {
+  Future<void> _runWithBusy(
+    Future<void> Function() action, {
+    required String successMessage,
+  }) async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
       await action();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(successMessage)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(successMessage)));
       widget.service.clearCache();
       _refresh(force: true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.operationFailedWithError(e.toString()))),
+        SnackBar(
+          content: Text(context.l10n.operationFailedWithError(e.toString())),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -927,9 +1038,9 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
   }
 
   Future<void> _upload() => _runWithBusy(
-        () => widget.service.upload(ledgerId: widget.ledgerId),
-        successMessage: context.l10n.syncUploaded,
-      );
+    () => widget.service.upload(ledgerId: widget.ledgerId),
+    successMessage: context.l10n.syncUploaded,
+  );
 
   /// 下载按钮的新语义：打开《云端备份》列表，让用户挑要恢复哪一份。
   ///
@@ -938,9 +1049,9 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
   /// 是新生成的 UUID，永远 miss。新页面 list `users/` 前缀拿到所有备份，
   /// 选中后 `restoreFromBackup` 走"追加为新账本"路径。
   Future<void> _openBackupList() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const BackupListPage()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const BackupListPage()));
     // 回到本页时如果云端列表发生过删除/恢复，状态卡里的数字可能要刷新
     // ——下载触达 DB 改动后 BackupListPage 已经 invalidate 过相关 provider，
     // 这里只刷状态显示。
@@ -957,11 +1068,13 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
         content: Text(l10n.syncDeleteCloudConfirm),
         actions: [
           TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(l10n.cancel)),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.cancel),
+          ),
           TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(l10n.delete)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.delete),
+          ),
         ],
       ),
     );
@@ -1014,7 +1127,9 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
             if (snap.hasError) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(context.l10n.syncStatusFetchFailed(snap.error.toString())),
+                child: Text(
+                  context.l10n.syncStatusFetchFailed(snap.error.toString()),
+                ),
               );
             }
             final status = snap.data!;
@@ -1109,31 +1224,42 @@ class _StatusLine extends StatelessWidget {
           children: [
             Icon(Icons.circle, size: 10, color: _color(context)),
             const SizedBox(width: 6),
-            Text(_label(context), style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              _label(context),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ],
         ),
         if (tsLabel != null) ...[
           const SizedBox(height: 4),
-          Text(context.l10n.syncLastSyncAt(tsLabel),
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            context.l10n.syncLastSyncAt(tsLabel),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
         if (status.localCount != null && status.cloudCount != null) ...[
           const SizedBox(height: 4),
-          Text(context.l10n.syncLocalCloudCount(status.localCount!, status.cloudCount!),
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            context.l10n.syncLocalCloudCount(
+              status.localCount!,
+              status.cloudCount!,
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
         if (status.message != null && status.state == SyncState.error) ...[
           const SizedBox(height: 4),
-          Text(status.message!,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(status.message!, style: Theme.of(context).textTheme.bodySmall),
         ],
         // localOnly = 当前账本路径下云端没文件——这并不代表整个 bucket 没备份。
         // 跨设备 / 重装场景下旧 deviceId 的备份藏在 users/<其他 uid>/ledgers/ 下,
         // 路径定位查不到,得通过「浏览备份」(listBackups 扫全 users/ 前缀) 找回。
         if (status.state == SyncState.localOnly) ...[
           const SizedBox(height: 4),
-          Text(context.l10n.syncNoBackupHintBrowse,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            context.l10n.syncNoBackupHintBrowse,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ],
       ],
     );

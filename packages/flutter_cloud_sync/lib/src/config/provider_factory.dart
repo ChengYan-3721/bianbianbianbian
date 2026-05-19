@@ -44,7 +44,7 @@ Future<({CloudProvider? provider, CloudAuthService? auth})> createCloudServices(
       await provider.initialize({
         'url': config.supabaseUrl!,
         'anonKey': config.supabaseAnonKey!,
-        'bucket': config.supabaseBucket ?? 'beecount-backups', // 兼容老配置，提供默认值
+        'bucket': config.supabaseBucket ?? 'bbbb-backups', // 兼容老配置，提供默认值
         'pathPrefix': null, // 使用默认的 users/{userId}/ 结构，基础包支持但业务层不配置
       });
 

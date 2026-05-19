@@ -218,7 +218,7 @@
 - **适用场景**：跨平台用户（iOS + Android），希望快速启用云同步。
 - **优势**：URL + anon key 即可，邮箱密码登录，全托管。
 - **配置**：
-  - **后端**：用户在自己的 Supabase 项目里跑一次 `docs/supabase-setup.sql`（脚本幂等），创建 `beecount-backups`（账本快照）+ `attachments`（附件本体）两个私有 Storage Bucket，并对每个 bucket 的 4 个操作（SELECT / INSERT / UPDATE / DELETE）配置 RLS 策略：
+  - **后端**：用户在自己的 Supabase 项目里跑一次 `docs/supabase-setup.sql`（脚本幂等），创建 `bbbb-backups`（账本快照）+ `attachments`（附件本体）两个私有 Storage Bucket，并对每个 bucket 的 4 个操作（SELECT / INSERT / UPDATE / DELETE）配置 RLS 策略：
     ```sql
     ((storage.foldername(name))[1] = 'users'::text
      AND ((storage.foldername(name))[2] = (auth.uid())::text))
@@ -480,7 +480,7 @@ CREATE TABLE sync_op (
 V1 采用账本快照模型——**云端不建数据库表**，所有数据以 JSON / 二进制对象的形式存放在 backend 的对象存储中。
 
 - **Supabase**（4 backend 之一，最复杂的一个，其他 backend 路径约定相同）：
-  - 两个私有 Storage Bucket：`beecount-backups`（账本快照）+ `attachments`（附件本体）。
+  - 两个私有 Storage Bucket：`bbbb-backups`（账本快照）+ `attachments`（附件本体）。
   - 路径约定：
     - 备份：`users/<auth.uid()>/ledgers/<ledgerId>.json`（一个账本一个 JSON 对象）
     - 附件：`users/<auth.uid()>/attachments/<txId>/<sha256><ext>`（明文，原始扩展名保留）

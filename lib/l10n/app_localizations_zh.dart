@@ -1158,6 +1158,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountDetailEmptyMonth => '一滴流水都没有~';
 
   @override
+  String get accountDetailEmptyYear => '一整年都没有流水~';
+
+  @override
   String get lockTitle => '应用锁';
 
   @override
@@ -2752,4 +2755,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String backupDeleteFailed(String error) {
     return '删除失败：$error';
   }
+
+  @override
+  String get backupConflictTitle => '同名账本冲突';
+
+  @override
+  String backupConflictMsg(String name) {
+    return '本地已存在同名账本「$name」，请选择处理方式：';
+  }
+
+  @override
+  String get backupConflictMerge => '合并到本地账本';
+
+  @override
+  String get backupConflictMergeDesc => '将云端流水/预算追加到本地同名账本，不删除本地已有数据';
+
+  @override
+  String get backupConflictOverwrite => '覆盖本地账本';
+
+  @override
+  String get backupConflictOverwriteDesc => '用云端数据替换本地同名账本的全部流水与预算（本地原有数据将丢失）';
+
+  @override
+  String get backupConflictRename => '重命名为新账本';
+
+  @override
+  String get backupConflictRenameDesc => '以新名称创建独立账本，本地同名账本保持不动';
+
+  @override
+  String get backupConflictNewName => '新账本名称';
 }

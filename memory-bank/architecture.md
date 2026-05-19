@@ -1364,7 +1364,7 @@ Step 3.6（首页流水搜索）与 3.7（首页月份选择器）此前在 Phas
 ### `docs/supabase-setup.sql`（2026-05-03 新增）
 
 - **作用**：仅当用户选用 Supabase 作为云同步 backend 时，在自己的 Supabase 项目里跑一次的初始化脚本。覆盖：
-  1. 创建/更新两个私有 bucket：`beecount-backups`（账本快照，Phase 10 已上线）+ `attachments`（附件本体明文，Phase 11 新增）。
+  1. 创建/更新两个私有 bucket：`bbbb-backups`（账本快照，Phase 10 已上线）+ `attachments`（附件本体明文，Phase 11 新增）。
   2. 显式 `enable row level security` on `storage.objects`（默认就开，写出来便于审计）。
   3. 8 条 RLS 策略：每个 bucket 各 4 条（SELECT / INSERT / UPDATE / DELETE），统一校验 `(storage.foldername(name))[1] = 'users' AND (storage.foldername(name))[2] = auth.uid()::text`。UPDATE 策略同时挂 USING + WITH CHECK，防止用户通过改名把别人对象搬到自己路径。
   4. 验证段（4 个查询）+ 客户端测试脚本骨架（Phase 11 落地时配 `test/integration/supabase_rls_test.dart`）+ 注释掉的回滚段。

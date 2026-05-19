@@ -730,7 +730,7 @@ class _RankingList extends StatelessWidget {
               child: Row(
                 children: [
                   SizedBox(
-                    width: 24,
+                    width: 16,
                     child: Text(
                       '${index + 1}',
                       style: textTheme.bodySmall?.copyWith(
@@ -741,7 +741,7 @@ class _RankingList extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 5),
                   Container(
                     width: 10,
                     height: 10,
@@ -750,7 +750,7 @@ class _RankingList extends StatelessWidget {
                       shape: BoxShape.circle,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 5),
                   Expanded(
                     flex: 3,
                     child: Text(
@@ -761,7 +761,7 @@ class _RankingList extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 5),
                   Expanded(
                     flex: 4,
                     child: Stack(
@@ -791,7 +791,7 @@ class _RankingList extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
-                    width: 72,
+                    width: 120,
                     child: Text(
                       '$prefix¥${moneyFmt.format(item.amount)}',
                       style: textTheme.bodySmall?.copyWith(

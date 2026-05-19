@@ -1,5 +1,6 @@
 import 'package:bianbianbianbian/features/sync/backup_list_page.dart';
 import 'package:bianbianbianbian/features/sync/cloud_backup_discovery.dart';
+import 'package:bianbianbianbian/features/sync/snapshot_serializer.dart';
 import 'package:bianbianbianbian/features/sync/sync_provider.dart';
 import 'package:bianbianbianbian/features/sync/sync_service.dart';
 import 'package:bianbianbianbian/l10n/app_localizations.dart';
@@ -93,7 +94,16 @@ class _FakeSyncService implements SyncService {
   Future<List<RemoteBackup>> listBackups() async => backups;
 
   @override
-  Future<String> restoreFromBackup(RemoteBackup backup) async => 'new-id';
+  Future<String> restoreFromBackup(
+    RemoteBackup backup, {
+    LedgerNameConflictStrategy? conflictStrategy,
+    String? renameTo,
+  }) async =>
+      'new-id';
+
+  @override
+  Future<LedgerNameConflict?> checkLedgerNameConflict(String ledgerName) async =>
+      null;
 
   @override
   Future<void> deleteBackupAt(String cloudPath) async {}

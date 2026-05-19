@@ -232,8 +232,62 @@ Future<int> importLedgerSnapshot({
   });
 }
 
-/// "追加为新账本"导入路径——给云端 snapshot 分配全新的 UUID,把它注入本地 DB,
-/// 不与已有任何 ledger 冲突。
+/// 同名账本冲突时的处理策略。
+///
+/// - [merge]:保留本地账本,把云端快照的流水/预算追加到本地同名账本中
+///   (tx/budget 分配新 UUID,ledgerId 重映射到本地账本 id)。
+/// - [overwrite]:用云端快照**替换**本地同名账本的全部流水与预算
+///   (先清空再写入,保留本地账本 id 和元数据)。
+/// - [rename]:以新名称创建独立账本(新 UUID),本地同名账本保持不动。
+enum LedgerNameConflictStrategy {
+  /// 合并到本地同名账本——流水/预算追加,不删本地已有数据。
+  merge,
+
+  /// 覆盖本地同名账本——先清空流水/预算,再写入云端数据。
+  overwrite,
+
+  /// 重命名为新账本——生成新 UUID + 新名称,本地同名账本不动。
+  rename,
+}
+
+/// 同名账本冲突检测结果。
+///
+/// 由 [checkLedgerNameConflict] 返回,供 UI 层在恢复前展示冲突对话框。
+@immutable
+class LedgerNameConflict {
+  final String cloudLedgerName;
+  final String localLedgerId;
+  final String localLedgerName;
+
+  const LedgerNameConflict({
+    required this.cloudLedgerName,
+    required this.localLedgerId,
+    required this.localLedgerName,
+  });
+}
+
+/// 检查云端备份的账本名是否与本地已有活跃账本重名。
+///
+/// 返回 null 表示无冲突;非 null 表示存在同名活跃账本,UI 应展示冲突解决对话框。
+Future<LedgerNameConflict?> checkLedgerNameConflict({
+  required String cloudLedgerName,
+  required AppDatabase db,
+}) async {
+  final rows = await (db.select(db.ledgerTable)
+        ..where((t) => t.name.equals(cloudLedgerName))
+        ..where((t) => t.deletedAt.isNull()))
+      .get();
+  if (rows.isEmpty) return null;
+  final local = rows.first;
+  return LedgerNameConflict(
+    cloudLedgerName: cloudLedgerName,
+    localLedgerId: local.id,
+    localLedgerName: local.name,
+  );
+}
+
+/// "追加为新账本"导入路径——把云端 snapshot 注入本地 DB,不与已有任何 ledger
+/// 冲突。
 ///
 /// 与 [importLedgerSnapshot] 的对比:
 /// - 后者按 `snapshot.ledger.id` upsert,适合"重新覆盖同一本账本"(老 V1 路径);
@@ -242,8 +296,11 @@ Future<int> importLedgerSnapshot({
 ///   当成"全新账本插入"是更安全的语义。
 ///
 /// 重映射规则:
-/// - ledger.id = uuidFactory()
-/// - 每条 transaction:id = uuidFactory(),ledgerId = 新 ledger.id;
+/// - ledger.id:**优先保留原始 id**——仅当本地已存在同名活跃账本时才生成新 UUID。
+///   保留原始 id 的意义:非鉴权后端(S3/WebDAV/iCloud)用 ledgerId 构建云端路径,
+///   多设备恢复同一备份后 ledgerId 相同 → 自然共享同一份云端备份,实现真正的
+///   多设备自动同步。
+/// - 每条 transaction:id = uuidFactory(),ledgerId = 最终 ledger.id;
 /// - 每条 budget:同上;
 /// - categories / accounts:**保持原 id**——它们是全局共享资源,upsert 后
 ///   不同 ledger 自然复用,新建 UUID 反而会复制出冗余分类/账户。
@@ -251,18 +308,28 @@ Future<int> importLedgerSnapshot({
 /// 附件 remoteKey 保持快照里的原值(指向老 deviceId 目录);Phase 11 的
 /// lazy download 走绝对路径,对 S3/WebDAV/iCloud 没有访问障碍。
 ///
+/// [conflictStrategy] 控制同名账本冲突时的行为:
+/// - [LedgerNameConflictStrategy.merge]:合并到本地同名账本;
+/// - [LedgerNameConflictStrategy.overwrite]:覆盖本地同名账本;
+/// - [LedgerNameConflictStrategy.rename]:以 [renameTo] 新建账本(必须提供新名称);
+/// - null(默认):自动生成新 UUID 保留原名(旧行为,可能导致重名)。
+///
 /// `uuidFactory` 默认走 [Uuid.v4],测试时注入计数器即可断言确定结果。
 ///
-/// 返回新分配的 ledger.id。
+/// 返回最终使用的 ledger.id。
 Future<String> importLedgerSnapshotAsNew({
   required LedgerSnapshot snapshot,
   required AppDatabase db,
   String Function()? uuidFactory,
+  LedgerNameConflictStrategy? conflictStrategy,
+  String? renameTo,
 }) async {
   final uuid = uuidFactory ?? _defaultUuid;
 
   // 先在事务外算好新 id 映射——避免 batch 期间多次调用 uuid() 产生交错。
-  final newLedgerId = uuid();
+  // ledgerId:优先保留原始 id,仅当本地已存在同名活跃账本时才生成新 UUID。
+  // 保留原始 id 让多设备恢复同一备份后 ledgerId 相同,自然共享同一云端路径。
+  final originalLedgerId = snapshot.ledger.id;
   final txIdMap = {
     for (final t in snapshot.transactions) t.id: uuid(),
   };
@@ -290,7 +357,70 @@ Future<String> importLedgerSnapshotAsNew({
       existingAcctKeys[(r.name, r.type)] = r.id;
     }
 
-    final remappedLedger = snapshot.ledger.copyWith(id: newLedgerId);
+    // 检查原始 ledgerId 是否与本地已有活跃账本冲突。
+    // 冲突条件:本地已存在同名活跃账本(非软删)且 id 不同。
+    // 不冲突(本地无此 id 或同名账本已软删) → 保留原始 id,多设备共享同一云端路径。
+    final existingLedger = await (db.select(db.ledgerTable)
+          ..where((t) => t.id.equals(originalLedgerId)))
+        .getSingleOrNull();
+    final hasConflict = existingLedger != null &&
+        existingLedger.deletedAt == null &&
+        existingLedger.name == snapshot.ledger.name;
+
+    // 同时检查按名称的冲突(不同 id 但同名)——这是 S3 云同步恢复的常见场景。
+    final nameConflictRows = await (db.select(db.ledgerTable)
+          ..where((t) => t.name.equals(snapshot.ledger.name))
+          ..where((t) => t.deletedAt.isNull()))
+        .get();
+    final nameConflict = nameConflictRows
+        .where((r) => r.id != originalLedgerId)
+        .toList();
+    final hasNameConflict = nameConflict.isNotEmpty;
+
+    final String finalLedgerId;
+    final String finalLedgerName;
+
+    if (hasNameConflict && conflictStrategy != null) {
+      // 有同名冲突且用户已选择策略
+      final localLedger = nameConflict.first;
+      switch (conflictStrategy) {
+        case LedgerNameConflictStrategy.merge:
+          // 合并:使用本地账本 id,流水/预算追加到本地账本
+          finalLedgerId = localLedger.id;
+          finalLedgerName = localLedger.name;
+          break;
+        case LedgerNameConflictStrategy.overwrite:
+          // 覆盖:使用本地账本 id,但先清空其流水/预算再写入
+          finalLedgerId = localLedger.id;
+          finalLedgerName = localLedger.name;
+          // 清空本地同名账本的流水与预算
+          await (db.delete(db.transactionEntryTable)
+                ..where((t) => t.ledgerId.equals(localLedger.id)))
+              .go();
+          await (db.delete(db.budgetTable)
+                ..where((t) => t.ledgerId.equals(localLedger.id)))
+              .go();
+          break;
+        case LedgerNameConflictStrategy.rename:
+          // 重命名:新 UUID + 新名称
+          finalLedgerId = uuid();
+          finalLedgerName = renameTo ?? '${snapshot.ledger.name}(恢复)';
+          break;
+      }
+    } else if (hasConflict) {
+      // 旧行为:ID 冲突 → 生成新 UUID,保留原名
+      finalLedgerId = uuid();
+      finalLedgerName = snapshot.ledger.name;
+    } else {
+      // 无冲突 → 保留原始 id 和名称
+      finalLedgerId = originalLedgerId;
+      finalLedgerName = snapshot.ledger.name;
+    }
+
+    final remappedLedger = snapshot.ledger.copyWith(
+      id: finalLedgerId,
+      name: finalLedgerName,
+    );
     await db.into(db.ledgerTable).insert(
           ledgerToCompanion(remappedLedger),
           mode: InsertMode.insertOrReplace,
@@ -318,7 +448,7 @@ Future<String> importLedgerSnapshotAsNew({
       for (final tx in snapshot.transactions) {
         final remapped = tx.copyWith(
           id: txIdMap[tx.id],
-          ledgerId: newLedgerId,
+          ledgerId: finalLedgerId,
         );
         batch.insert(
           db.transactionEntryTable,
@@ -329,7 +459,7 @@ Future<String> importLedgerSnapshotAsNew({
       for (final b in snapshot.budgets) {
         final remapped = b.copyWith(
           id: budgetIdMap[b.id],
-          ledgerId: newLedgerId,
+          ledgerId: finalLedgerId,
         );
         batch.insert(
           db.budgetTable,
@@ -339,7 +469,7 @@ Future<String> importLedgerSnapshotAsNew({
       }
     });
 
-    return newLedgerId;
+    return finalLedgerId;
   });
 }
 

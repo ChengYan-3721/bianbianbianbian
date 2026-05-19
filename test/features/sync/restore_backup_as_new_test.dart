@@ -84,16 +84,18 @@ void main() {
       sizeBytes: 100,
     );
 
+    // 无冲突 → 保留原始 ledgerId 'cloud-L',tx 需要新 UUID
     final newId = await restoreBackupAsNew(
       storage: storage,
       backup: backup,
       db: db,
-      uuidFactory: _seq(['new-L', 'new-tx']).next,
+      uuidFactory: _seq(['new-tx']).next,
+      conflictStrategy: null,
     );
 
-    expect(newId, 'new-L');
+    expect(newId, 'cloud-L');
     final txs = await db.select(db.transactionEntryTable).get();
-    expect(txs.single.ledgerId, 'new-L');
+    expect(txs.single.ledgerId, 'cloud-L');
     expect(txs.single.id, 'new-tx');
   });
 

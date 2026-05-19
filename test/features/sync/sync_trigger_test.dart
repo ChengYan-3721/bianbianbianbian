@@ -11,6 +11,7 @@ import 'package:bianbianbianbian/features/sync/sync_provider.dart';
 import 'package:bianbianbianbian/features/sync/sync_service.dart';
 import 'package:bianbianbianbian/features/sync/sync_trigger.dart';
 import 'package:bianbianbianbian/features/sync/cloud_backup_discovery.dart';
+import 'package:bianbianbianbian/features/sync/snapshot_serializer.dart';
 
 /// Step 10.7：SyncTrigger 单测覆盖三大不变量 + 防抖语义。
 ///
@@ -207,8 +208,16 @@ class _FakeSyncService implements SyncService {
   Future<List<RemoteBackup>> listBackups() async => const [];
 
   @override
-  Future<String> restoreFromBackup(RemoteBackup backup) async =>
+  Future<String> restoreFromBackup(
+    RemoteBackup backup, {
+    LedgerNameConflictStrategy? conflictStrategy,
+    String? renameTo,
+  }) async =>
       throw UnimplementedError();
+
+  @override
+  Future<LedgerNameConflict?> checkLedgerNameConflict(String ledgerName) async =>
+      null;
 
   @override
   Future<void> deleteBackupAt(String cloudPath) async {}

@@ -6,7 +6,7 @@
 --       任何后端配置。
 --
 -- 覆盖：
---   1. 账本快照备份 bucket（beecount-backups，Phase 10 已上线）
+--   1. 账本快照备份 bucket（bbbb-backups，Phase 10 已上线）
 --   2. 附件本体 bucket（attachments，Phase 11 新增）
 --   3. 上述两个 bucket 的 SELECT / INSERT / UPDATE / DELETE 共 8 条 RLS 策略
 --   4. 验证查询：用两个测试账户跑一遍，确认跨用户访问被挡
@@ -55,7 +55,7 @@
 --     原始格式；服务端不重复约束便于未来调整。
 
 insert into storage.buckets (id, name, public)
-values ('beecount-backups', 'beecount-backups', false)
+values ('bbbb-backups', 'bbbb-backups', false)
 on conflict (id) do update set public = excluded.public;
 
 insert into storage.buckets (id, name, public)
@@ -70,7 +70,7 @@ alter table storage.objects enable row level security;
 
 
 -- -----------------------------------------------------------------------------
--- 3. RLS 策略 · beecount-backups（账本快照）
+-- 3. RLS 策略 · bbbb-backups（账本快照）
 -- -----------------------------------------------------------------------------
 -- 设计原则：
 --   - 只读自己的对象（folder[2] == auth.uid()）；
@@ -85,7 +85,7 @@ create policy "backups: owner can read"
   for select
   to authenticated
   using (
-    bucket_id = 'beecount-backups'
+    bucket_id = 'bbbb-backups'
     and (storage.foldername(name))[1] = 'users'
     and (storage.foldername(name))[2] = (auth.uid())::text
   );
@@ -97,7 +97,7 @@ create policy "backups: owner can insert"
   for insert
   to authenticated
   with check (
-    bucket_id = 'beecount-backups'
+    bucket_id = 'bbbb-backups'
     and (storage.foldername(name))[1] = 'users'
     and (storage.foldername(name))[2] = (auth.uid())::text
   );
@@ -109,12 +109,12 @@ create policy "backups: owner can update"
   for update
   to authenticated
   using (
-    bucket_id = 'beecount-backups'
+    bucket_id = 'bbbb-backups'
     and (storage.foldername(name))[1] = 'users'
     and (storage.foldername(name))[2] = (auth.uid())::text
   )
   with check (
-    bucket_id = 'beecount-backups'
+    bucket_id = 'bbbb-backups'
     and (storage.foldername(name))[1] = 'users'
     and (storage.foldername(name))[2] = (auth.uid())::text
   );
@@ -126,7 +126,7 @@ create policy "backups: owner can delete"
   for delete
   to authenticated
   using (
-    bucket_id = 'beecount-backups'
+    bucket_id = 'bbbb-backups'
     and (storage.foldername(name))[1] = 'users'
     and (storage.foldername(name))[2] = (auth.uid())::text
   );
@@ -215,7 +215,7 @@ create policy "attachments: owner can delete"
 
 -- V1. 列出当前登录用户能看到的对象（应只看到自己的）
 -- select name, bucket_id, owner from storage.objects
--- where bucket_id in ('beecount-backups', 'attachments')
+-- where bucket_id in ('bbbb-backups', 'attachments')
 -- order by created_at desc
 -- limit 20;
 
@@ -299,5 +299,5 @@ order by policyname;
 -- drop policy if exists "attachments: owner can delete" on storage.objects;
 --
 -- -- 2. 删 bucket（必须先清空对象，否则报错）
--- delete from storage.objects where bucket_id in ('beecount-backups', 'attachments');
--- delete from storage.buckets where id in ('beecount-backups', 'attachments');
+-- delete from storage.objects where bucket_id in ('bbbb-backups', 'attachments');
+-- delete from storage.buckets where id in ('bbbb-backups', 'attachments');

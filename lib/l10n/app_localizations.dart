@@ -2212,6 +2212,12 @@ abstract class AppLocalizations {
   /// **'一滴流水都没有~'**
   String get accountDetailEmptyMonth;
 
+  /// No description provided for @accountDetailEmptyYear.
+  ///
+  /// In zh, this message translates to:
+  /// **'一整年都没有流水~'**
+  String get accountDetailEmptyYear;
+
   /// No description provided for @lockTitle.
   ///
   /// In zh, this message translates to:
@@ -4975,6 +4981,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'删除失败：{error}'**
   String backupDeleteFailed(String error);
+
+  /// No description provided for @backupConflictTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'同名账本冲突'**
+  String get backupConflictTitle;
+
+  /// No description provided for @backupConflictMsg.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地已存在同名账本「{name}」，请选择处理方式：'**
+  String backupConflictMsg(String name);
+
+  /// No description provided for @backupConflictMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并到本地账本'**
+  String get backupConflictMerge;
+
+  /// No description provided for @backupConflictMergeDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'将云端流水/预算追加到本地同名账本，不删除本地已有数据'**
+  String get backupConflictMergeDesc;
+
+  /// No description provided for @backupConflictOverwrite.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖本地账本'**
+  String get backupConflictOverwrite;
+
+  /// No description provided for @backupConflictOverwriteDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'用云端数据替换本地同名账本的全部流水与预算（本地原有数据将丢失）'**
+  String get backupConflictOverwriteDesc;
+
+  /// No description provided for @backupConflictRename.
+  ///
+  /// In zh, this message translates to:
+  /// **'重命名为新账本'**
+  String get backupConflictRename;
+
+  /// No description provided for @backupConflictRenameDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'以新名称创建独立账本，本地同名账本保持不动'**
+  String get backupConflictRenameDesc;
+
+  /// No description provided for @backupConflictNewName.
+  ///
+  /// In zh, this message translates to:
+  /// **'新账本名称'**
+  String get backupConflictNewName;
 }
 
 class _AppLocalizationsDelegate

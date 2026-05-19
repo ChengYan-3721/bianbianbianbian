@@ -20,7 +20,7 @@ import 'account_providers.dart';
 /// 账户详情页（资产页重构 · 2026-05）：
 ///
 /// - AppBar：返回 + 右上角「设置」文本按钮（跳到原 [AccountEditPage]）；
-/// - 顶部 success 色卡片：余额、年份切换器（默认当年）、年度流出 / 流入；
+/// - 顶部卡片：余额、年份切换器（默认当年）、年度流出 / 流入；
 /// - 下方按月分组的当年流水卡片（默认当月展开，其余折叠）。
 ///
 /// 流入 / 流出口径包含转账（见 [computeAccountYearDetail]）：
@@ -110,6 +110,7 @@ class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
         }
         return Scaffold(
           appBar: AppBar(
+            title: Text(account.name),
             actions: [
               TextButton(
                 key: const Key('account_detail_settings_btn'),
@@ -199,6 +200,7 @@ class _DetailBody extends ConsumerWidget {
         ? allMonths.where((g) => g.month <= now.month).toList(growable: false)
         : allMonths;
     final canGoNextYear = year < now.year;
+    final isEmptyYear = detail.yearInflow == 0 && detail.yearOutflow == 0;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
@@ -211,17 +213,20 @@ class _DetailBody extends ConsumerWidget {
           onNextYear: canGoNextYear ? onNextYear : null,
         ),
         const SizedBox(height: 12),
-        for (final group in months)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _MonthCard(
-              account: account,
-              group: group,
-              year: year,
-              expanded: expandedMonths.contains(group.month),
-              onToggle: () => onToggleMonth(group.month),
+        if (isEmptyYear)
+          _EmptyYearWidget()
+        else
+          for (final group in months)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _MonthCard(
+                account: account,
+                group: group,
+                year: year,
+                expanded: expandedMonths.contains(group.month),
+                onToggle: () => onToggleMonth(group.month),
+              ),
             ),
-          ),
       ],
     );
   }
@@ -251,9 +256,8 @@ class _HeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final semantic = theme.extension<BianBianSemanticColors>()!;
-    final bg = semantic.success;
-    final fg = Colors.white;
+    final bg = theme.colorScheme.primaryContainer;
+    final fg = theme.colorScheme.onPrimaryContainer;
 
     return Container(
       decoration: BoxDecoration(
@@ -414,6 +418,34 @@ class _HeaderStat extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EmptyYearWidget extends StatelessWidget {
+  const _EmptyYearWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 64),
+      child: Column(
+        children: [
+          Icon(
+            Icons.water_drop_outlined,
+            size: 64,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            context.l10n.accountDetailEmptyYear,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

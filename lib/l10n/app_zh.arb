@@ -686,6 +686,7 @@
   "accountDetailYesterday": "昨日",
   "accountDetailToday": "今日",
   "accountDetailEmptyMonth": "一滴流水都没有~",
+  "accountDetailEmptyYear": "一整年都没有流水~",
   "lockTitle": "应用锁",
   "lockEnterPin": "请输入 PIN 解锁边边记账",
   "lockEnterCurrentPinToDisable": "请输入当前 PIN 以关闭应用锁",
@@ -1807,5 +1808,19 @@
     "placeholders": {
       "error": { "type": "String" }
     }
-  }
+  },
+  "backupConflictTitle": "同名账本冲突",
+  "backupConflictMsg": "本地已存在同名账本「{name}」，请选择处理方式：",
+  "@backupConflictMsg": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "backupConflictMerge": "合并到本地账本",
+  "backupConflictMergeDesc": "将云端流水/预算追加到本地同名账本，不删除本地已有数据",
+  "backupConflictOverwrite": "覆盖本地账本",
+  "backupConflictOverwriteDesc": "用云端数据替换本地同名账本的全部流水与预算（本地原有数据将丢失）",
+  "backupConflictRename": "重命名为新账本",
+  "backupConflictRenameDesc": "以新名称创建独立账本，本地同名账本保持不动",
+  "backupConflictNewName": "新账本名称"
 }

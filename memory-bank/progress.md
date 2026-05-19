@@ -804,7 +804,7 @@
 - Step 5.1 仅完成“区间状态 + 选择器 UI + 统计 Tab 接入”，**未开始 Step 5.2 折线图**。
 - 后续图表（Step 5.2/5.3/5.4/5.5）应统一订阅 `statsRangeProvider` 作为时间过滤来源，避免各图表重复维护各自时间状态。
 
-### ✅ Step 5.2 收支折线图（2026-04-28）
+### ✅ Step 5.2 收支折线图（2026-04-28）（已作废）（于 2026/05/19 重构统计页折线图：按年统计收入/支出/结余）
 
 **改动**
 - `lib/features/stats/stats_range_providers.dart`：
@@ -2247,7 +2247,7 @@ Repository 层（5 个仓库）：
 
 ### 配套文档
 
-- **`docs/supabase-setup.sql`**（2026-05-03 新增）：仅 Supabase 后端用户在自己的 Supabase 项目里跑一次的初始化脚本——创建 `beecount-backups` + `attachments` 两个私有 bucket + 8 条 RLS 策略（每 bucket 4 条 SELECT/INSERT/UPDATE/DELETE，统一校验 `folder[2] = auth.uid()::text`）。**App 内不自动执行**（避免持有 service_role key）。其他 3 个 backend（iCloud / WebDAV / S3）无需后端配置。
+- **`docs/supabase-setup.sql`**（2026-05-03 新增）：仅 Supabase 后端用户在自己的 Supabase 项目里跑一次的初始化脚本——创建 `bbbb-backups` + `attachments` 两个私有 bucket + 8 条 RLS 策略（每 bucket 4 条 SELECT/INSERT/UPDATE/DELETE，统一校验 `folder[2] = auth.uid()::text`）。**App 内不自动执行**（避免持有 service_role key）。其他 3 个 backend（iCloud / WebDAV / S3）无需后端配置。
 - **`memory-bank/architecture.md`** 末尾「Phase 11 配套文档」段：详细说明上述 SQL 的设计决策（为什么不做 mime 白名单、为什么 folder[3] 不参与 RLS、为什么明文不加密），落地时按需查阅。
 
 ### 不再相信的旧描述

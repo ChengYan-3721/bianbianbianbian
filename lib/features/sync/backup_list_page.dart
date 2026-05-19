@@ -11,6 +11,7 @@ import '../ledger/ledger_providers.dart';
 import '../record/record_providers.dart';
 import '../stats/stats_range_providers.dart';
 import 'cloud_backup_discovery.dart';
+import 'snapshot_serializer.dart';
 import 'sync_provider.dart';
 import 'sync_service.dart';
 
@@ -69,6 +70,44 @@ class _BackupListPageState extends ConsumerState<BackupListPage> {
     if (_busyPaths.contains(backup.cloudPath) || _bulkRunning) return;
 
     final l10n = context.l10n;
+    final svc = await _service();
+
+    // 先检查是否有同名账本冲突
+    final conflict = await svc.checkLedgerNameConflict(backup.ledgerName);
+
+    if (conflict != null) {
+      // 有冲突 → 弹出冲突解决对话框
+      final resolution = await _showConflictDialog(backup, conflict);
+      if (resolution == null) return; // 用户取消
+
+      setState(() => _busyPaths.add(backup.cloudPath));
+      try {
+        await svc.restoreFromBackup(
+          backup,
+          conflictStrategy: resolution.strategy,
+          renameTo: resolution.renameTo,
+        );
+        _invalidateDataProviders();
+        if (!mounted) return;
+        final successName = resolution.renameTo ?? backup.ledgerName;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupRestoreSuccess(successName))),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.backupRestoreFailed(e.toString()))),
+        );
+      } finally {
+        if (mounted) {
+          setState(() => _busyPaths.remove(backup.cloudPath));
+        }
+      }
+      return;
+    }
+
+    // 无冲突 → 走原来的简单确认流程
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -90,7 +129,6 @@ class _BackupListPageState extends ConsumerState<BackupListPage> {
 
     setState(() => _busyPaths.add(backup.cloudPath));
     try {
-      final svc = await _service();
       await svc.restoreFromBackup(backup);
       _invalidateDataProviders();
       if (!mounted) return;
@@ -107,6 +145,106 @@ class _BackupListPageState extends ConsumerState<BackupListPage> {
         setState(() => _busyPaths.remove(backup.cloudPath));
       }
     }
+  }
+
+  /// 弹出同名账本冲突解决对话框,返回用户选择的策略和可选的新名称。
+  /// 返回 null 表示用户取消。
+  Future<_ConflictResolution?> _showConflictDialog(
+    RemoteBackup backup,
+    LedgerNameConflict conflict,
+  ) async {
+    final l10n = context.l10n;
+    LedgerNameConflictStrategy selectedStrategy =
+        LedgerNameConflictStrategy.rename;
+    final renameCtrl = TextEditingController(
+      text: '${backup.ledgerName}(恢复)',
+    );
+
+    final result = await showDialog<_ConflictResolution>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(l10n.backupConflictTitle),
+          content: SingleChildScrollView(
+            child: RadioGroup<LedgerNameConflictStrategy>(
+              groupValue: selectedStrategy,
+              onChanged: (v) {
+                if (v != null) {
+                  setDialogState(() => selectedStrategy = v);
+                }
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.backupConflictMsg(backup.ledgerName)),
+                  const SizedBox(height: 16),
+                  // 合并选项
+                  RadioListTile<LedgerNameConflictStrategy>(
+                    value: LedgerNameConflictStrategy.merge,
+                    title: Text(l10n.backupConflictMerge),
+                    subtitle: Text(l10n.backupConflictMergeDesc),
+                  ),
+                  // 覆盖选项
+                  RadioListTile<LedgerNameConflictStrategy>(
+                    value: LedgerNameConflictStrategy.overwrite,
+                    title: Text(l10n.backupConflictOverwrite),
+                    subtitle: Text(l10n.backupConflictOverwriteDesc),
+                  ),
+                  // 重命名选项
+                  RadioListTile<LedgerNameConflictStrategy>(
+                    value: LedgerNameConflictStrategy.rename,
+                    title: Text(l10n.backupConflictRename),
+                    subtitle: Text(l10n.backupConflictRenameDesc),
+                  ),
+                  if (selectedStrategy == LedgerNameConflictStrategy.rename) ...[
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: renameCtrl,
+                      decoration: InputDecoration(
+                        labelText: l10n.backupConflictNewName,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                renameCtrl.dispose();
+                Navigator.of(ctx).pop(null);
+              },
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () {
+                final renameTo = selectedStrategy ==
+                        LedgerNameConflictStrategy.rename
+                    ? renameCtrl.text.trim()
+                    : null;
+                if (selectedStrategy ==
+                        LedgerNameConflictStrategy.rename &&
+                    (renameTo == null || renameTo.isEmpty)) {
+                  return; // 重命名模式下名称不能为空
+                }
+                renameCtrl.dispose();
+                Navigator.of(ctx).pop(_ConflictResolution(
+                  strategy: selectedStrategy,
+                  renameTo: renameTo,
+                ));
+              },
+              child: Text(l10n.confirm),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) renameCtrl.dispose();
+    return result;
   }
 
   Future<void> _deleteOne(RemoteBackup backup) async {
@@ -187,7 +325,17 @@ class _BackupListPageState extends ConsumerState<BackupListPage> {
       final svc = await _service();
       for (final b in backups) {
         try {
-          await svc.restoreFromBackup(b);
+          // 批量恢复时检查同名冲突:有冲突则自动重命名为「原名(恢复)」
+          final conflict = await svc.checkLedgerNameConflict(b.ledgerName);
+          if (conflict != null) {
+            await svc.restoreFromBackup(
+              b,
+              conflictStrategy: LedgerNameConflictStrategy.rename,
+              renameTo: '${b.ledgerName}(恢复)',
+            );
+          } else {
+            await svc.restoreFromBackup(b);
+          }
           success++;
         } catch (e) {
           // 单条失败不中断整体流程,继续下一个;最终 snackbar 给"已恢复 N/总数"
@@ -382,6 +530,17 @@ class _BackupListPageState extends ConsumerState<BackupListPage> {
 }
 
 enum _RowAction { restore, delete }
+
+/// 冲突解决结果——由 [_showConflictDialog] 返回。
+class _ConflictResolution {
+  const _ConflictResolution({
+    required this.strategy,
+    this.renameTo,
+  });
+
+  final LedgerNameConflictStrategy strategy;
+  final String? renameTo;
+}
 
 /// 设备 UUID 太长——取前 6 位足以让用户分辨"老设备 vs 新设备"。
 String _shortId(String id) {
