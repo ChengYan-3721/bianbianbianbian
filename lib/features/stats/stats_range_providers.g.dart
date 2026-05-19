@@ -75,6 +75,26 @@ final statsHeatmapCellsProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef StatsHeatmapCellsRef = FutureProviderRef<List<StatsHeatmapCell>>;
+String _$statsYearlyMonthPointsHash() =>
+    r'bd6a08025ecc9215d8eb16effcddeca050542cf7';
+
+/// See also [statsYearlyMonthPoints].
+@ProviderFor(statsYearlyMonthPoints)
+final statsYearlyMonthPointsProvider =
+    FutureProvider<List<StatsYearlyMonthPoint>>.internal(
+      statsYearlyMonthPoints,
+      name: r'statsYearlyMonthPointsProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$statsYearlyMonthPointsHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef StatsYearlyMonthPointsRef =
+    FutureProviderRef<List<StatsYearlyMonthPoint>>;
 String _$statsRangeHash() => r'83bb6e04cef2dd7ab6816b1f78a476209696e814';
 
 /// See also [StatsRange].
@@ -91,5 +111,20 @@ final statsRangeProvider =
     );
 
 typedef _$StatsRange = Notifier<StatsRangeState>;
+String _$statsYearlyYearHash() => r'085b97cf58e3e2360cb1fe0883d678eba0173c3a';
+
+/// See also [StatsYearlyYear].
+@ProviderFor(StatsYearlyYear)
+final statsYearlyYearProvider = NotifierProvider<StatsYearlyYear, int>.internal(
+  StatsYearlyYear.new,
+  name: r'statsYearlyYearProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$statsYearlyYearHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef _$StatsYearlyYear = Notifier<int>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

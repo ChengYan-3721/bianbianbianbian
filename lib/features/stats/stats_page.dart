@@ -232,8 +232,6 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Column(
                       children: [
-                        SizedBox(height: 260, child: _IncomeExpenseLineCard()),
-                        const SizedBox(height: 12),
                         SizedBox(height: 300, child: _CategoryPieCard()),
                         const SizedBox(height: 12),
                         _RankingCard(),
@@ -241,6 +239,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                         const SizedBox(
                           height: 320,
                           child: _HeatmapCard(),
+                        ),
+                        const SizedBox(height: 12),
+                        const SizedBox(
+                          height: 320,
+                          child: _YearlyLineCard(),
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -317,312 +320,6 @@ class _RangeBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _IncomeExpenseLineCard extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pointsAsync = ref.watch(statsLinePointsProvider);
-    final theme = Theme.of(context);
-    final semantic = theme.extension<BianBianSemanticColors>()!;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.statsIncomeExpenseLine,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: pointsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(
-                  child: Text(
-                    context.l10n.statsChartLoadFailed(e.toString()),
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-                data: (points) {
-                  if (points.isEmpty) {
-                    return _LineChartEmptyState();
-                  }
-                  return _LineChartView(
-                    points: points,
-                    incomeColor: semantic.success,
-                    expenseColor: semantic.danger,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LineChartEmptyState extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.insert_chart_outlined, size: 34),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.statsNoIncomeExpenseData,
-            style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.statsTryAnotherRange,
-            style: textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LineChartView extends StatelessWidget {
-  const _LineChartView({
-    required this.points,
-    required this.incomeColor,
-    required this.expenseColor,
-  });
-
-  final List<StatsLinePoint> points;
-  final Color incomeColor;
-  final Color expenseColor;
-
-  static const double _minWidthPerDay = 48.0;
-  // X 轴标签竖排（quarterTurns=3）后只占 ~14px 横向空间
-  static const double _labelWidth = 16.0;
-  static const double _yAxisWidth = 50.0;
-  // 竖排标签需要更多垂直预留：文字 ~30px + space 6 + 缓冲
-  static const double _bottomReservedSize = 44.0;
-  static const double _topPadding = 10.0;
-  // 数据区左右内边距：首尾标签居中点不在 SizedBox 边缘，
-  // 才能完整显示又不与邻居重叠。
-  static const double _chartHPadding = 10.0;
-  static const int _yDivisions = 4;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxY = _computeMaxY(points);
-        final firstDay = points.first.day;
-        final dayFmt = DateFormat('M.d');
-        final moneyFmt = NumberFormat('#,##0');
-
-        final incomeSpots = <FlSpot>[];
-        final expenseSpots = <FlSpot>[];
-        for (final p in points) {
-          final x = p.day.difference(firstDay).inDays.toDouble();
-          incomeSpots.add(FlSpot(x, p.income));
-          expenseSpots.add(FlSpot(x, p.expense));
-        }
-
-        // 数据区可用宽度 = 父宽 - Y 轴固定列
-        final scrollableWidth = constraints.maxWidth - _yAxisWidth;
-        final requiredWidth = points.length * _minWidthPerDay;
-        final chartWidth =
-            requiredWidth > scrollableWidth ? requiredWidth : scrollableWidth;
-        final interval =
-            _computeBottomInterval(points.length, chartWidth);
-        final yInterval = maxY <= 0 ? 1.0 : maxY / _yDivisions;
-
-        final dataChart = SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            // 额外加 2 * _chartHPadding，使绘图区净宽仍约等于 chartWidth，
-            // 同时为首尾标签的外溢留出余地。
-            width: chartWidth + _chartHPadding * 2,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _chartHPadding,
-              ),
-              child: LineChart(
-              LineChartData(
-                minX: incomeSpots.first.x,
-                maxX: incomeSpots.last.x,
-                minY: 0,
-                maxY: maxY,
-                gridData: FlGridData(
-                  show: true,
-                  horizontalInterval: yInterval,
-                  drawVerticalLine: false,
-                ),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  // Y 轴由外部固定列承担，这里隐藏
-                  leftTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: _bottomReservedSize,
-                      interval: interval,
-                      getTitlesWidget: (value, meta) {
-                        final d =
-                            firstDay.add(Duration(days: value.round()));
-                        final text = dayFmt.format(d);
-                        return SideTitleWidget(
-                          meta: meta,
-                          space: 6,
-                          child: RotatedBox(
-                            quarterTurns: 3,
-                            child: Text(
-                              text,
-                              style: Theme.of(context).textTheme.labelSmall,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                borderData: FlBorderData(show: false),
-                lineTouchData: LineTouchData(
-                  enabled: true,
-                  touchTooltipData: LineTouchTooltipData(
-                    // 当点击靠近顶部的高峰时，自动把 tooltip 翻到下方/挤进图表内，
-                    // 避免数字被卡片上边缘截断。
-                    fitInsideVertically: true,
-                    fitInsideHorizontally: true,
-                  ),
-                ),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: incomeSpots,
-                    isCurved: true,
-                    color: incomeColor,
-                    barWidth: 3,
-                    dotData: const FlDotData(show: false),
-                  ),
-                  LineChartBarData(
-                    spots: expenseSpots,
-                    isCurved: true,
-                    color: expenseColor,
-                    barWidth: 3,
-                    dotData: const FlDotData(show: false),
-                  ),
-                ],
-              ),
-            ),
-            ),
-          ),
-        );
-
-        return Padding(
-          padding: const EdgeInsets.only(top: _topPadding),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                width: _yAxisWidth,
-                child: _FrozenYAxis(
-                  maxY: maxY,
-                  divisions: _yDivisions,
-                  bottomReserved: _bottomReservedSize,
-                  moneyFmt: moneyFmt,
-                ),
-              ),
-              Expanded(child: dataChart),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  double _computeMaxY(List<StatsLinePoint> points) {
-    var max = 0.0;
-    for (final p in points) {
-      if (p.income > max) max = p.income;
-      if (p.expense > max) max = p.expense;
-    }
-    if (max <= 0) return 1;
-    return max * 1.15;
-  }
-
-  double _computeBottomInterval(int pointCount, double chartWidth) {
-    if (pointCount <= 1) return 1;
-    final pixelsPerPoint = chartWidth / (pointCount - 1);
-    if (pixelsPerPoint <= 0) return pointCount.toDouble();
-    final ratio = (_labelWidth / pixelsPerPoint).ceil();
-    return ratio.clamp(1, 31).toDouble();
-  }
-}
-
-/// 与 [_LineChartView] 数据区水平并列的固定 Y 轴。
-///
-/// 在 LayoutBuilder 中按 plotHeight = 总高 - 底部预留空间 重建标签位置，
-/// 与 fl_chart 的网格线一一对齐；clipBehavior=none 使最高位标签即使
-/// 中心定位在顶部也能完整露出（因此外层须保留 [_LineChartView._topPadding]）。
-class _FrozenYAxis extends StatelessWidget {
-  const _FrozenYAxis({
-    required this.maxY,
-    required this.divisions,
-    required this.bottomReserved,
-    required this.moneyFmt,
-  });
-
-  final double maxY;
-  final int divisions;
-  final double bottomReserved;
-  final NumberFormat moneyFmt;
-
-  @override
-  Widget build(BuildContext context) {
-    final textStyle = Theme.of(context).textTheme.labelSmall;
-    return LayoutBuilder(
-      builder: (ctx, constraints) {
-        final plotHeight =
-            (constraints.maxHeight - bottomReserved).clamp(1.0, double.infinity);
-        final stepValue = maxY / divisions;
-        return Stack(
-          clipBehavior: Clip.none,
-          children: [
-            for (var i = 0; i <= divisions; i++)
-              Builder(builder: (_) {
-                final value = i * stepValue;
-                final centerY = plotHeight * (1 - value / maxY);
-                return Positioned(
-                  top: centerY - 7,
-                  left: 0,
-                  right: 4,
-                  child: Text(
-                    moneyFmt.format(value),
-                    textAlign: TextAlign.right,
-                    style: textStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }),
-          ],
-        );
-      },
     );
   }
 }
@@ -1383,6 +1080,365 @@ class _HeatmapCellTile extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YearlyLineCard extends ConsumerStatefulWidget {
+  const _YearlyLineCard();
+
+  @override
+  ConsumerState<_YearlyLineCard> createState() => _YearlyLineCardState();
+}
+
+class _YearlyLineCardState extends ConsumerState<_YearlyLineCard> {
+  bool _showIncome = true;
+  bool _showExpense = true;
+  bool _showBalance = true;
+
+  void _toggleLine(String type) {
+    setState(() {
+      switch (type) {
+        case 'income':
+          if (!_showIncome || (_showExpense || _showBalance)) {
+            _showIncome = !_showIncome;
+          }
+          break;
+        case 'expense':
+          if (!_showExpense || (_showIncome || _showBalance)) {
+            _showExpense = !_showExpense;
+          }
+          break;
+        case 'balance':
+          if (!_showBalance || (_showIncome || _showExpense)) {
+            _showBalance = !_showBalance;
+          }
+          break;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final year = ref.watch(statsYearlyYearProvider);
+    final pointsAsync = ref.watch(statsYearlyMonthPointsProvider);
+    final theme = Theme.of(context);
+    final semantic = theme.extension<BianBianSemanticColors>()!;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () {
+                    ref.read(statsYearlyYearProvider.notifier).previousYear();
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '$year',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () {
+                    ref.read(statsYearlyYearProvider.notifier).nextYear();
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                const Spacer(),
+                _LegendChip(
+                  label: '收入',
+                  color: semantic.success,
+                  selected: _showIncome,
+                  onTap: () => _toggleLine('income'),
+                ),
+                const SizedBox(width: 8),
+                _LegendChip(
+                  label: '支出',
+                  color: semantic.danger,
+                  selected: _showExpense,
+                  onTap: () => _toggleLine('expense'),
+                ),
+                const SizedBox(width: 8),
+                _LegendChip(
+                  label: '结余',
+                  color: const Color(0xFFFFA726),
+                  selected: _showBalance,
+                  onTap: () => _toggleLine('balance'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: pointsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(
+                  child: Text(
+                    context.l10n.statsChartLoadFailed(e.toString()),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                data: (points) {
+                  return _YearlyLineChartView(
+                    points: points,
+                    incomeColor: semantic.success,
+                    expenseColor: semantic.danger,
+                    balanceColor: const Color(0xFFFFA726),
+                    showIncome: _showIncome,
+                    showExpense: _showExpense,
+                    showBalance: _showBalance,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LegendChip extends StatelessWidget {
+  const _LegendChip({
+    required this.label,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? color : theme.colorScheme.outline.withAlpha(100),
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: selected ? Colors.white : theme.colorScheme.onSurface.withAlpha(150),
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _YearlyLineChartView extends StatelessWidget {
+  const _YearlyLineChartView({
+    required this.points,
+    required this.incomeColor,
+    required this.expenseColor,
+    required this.balanceColor,
+    required this.showIncome,
+    required this.showExpense,
+    required this.showBalance,
+  });
+
+  final List<StatsYearlyMonthPoint> points;
+  final Color incomeColor;
+  final Color expenseColor;
+  final Color balanceColor;
+  final bool showIncome;
+  final bool showExpense;
+  final bool showBalance;
+
+  @override
+  Widget build(BuildContext context) {
+    final moneyFmt = NumberFormat('#,##0');
+
+    final incomeSpots = <FlSpot>[];
+    final expenseSpots = <FlSpot>[];
+    final balanceSpots = <FlSpot>[];
+
+    double minY = 0;
+    double maxY = 0;
+
+    for (final p in points) {
+      final x = (p.month - 1).toDouble();
+      if (showIncome) {
+        incomeSpots.add(FlSpot(x, p.income));
+        if (p.income > maxY) maxY = p.income;
+      }
+      if (showExpense) {
+        expenseSpots.add(FlSpot(x, p.expense));
+        if (p.expense > maxY) maxY = p.expense;
+      }
+      if (showBalance) {
+        balanceSpots.add(FlSpot(x, p.balance));
+        if (p.balance > maxY) maxY = p.balance;
+        if (p.balance < minY) minY = p.balance;
+      }
+    }
+
+    if (maxY <= 0 && minY >= 0) {
+      maxY = 1;
+    } else {
+      final range = maxY - minY;
+      maxY = maxY + range * 0.15;
+      minY = minY - range * 0.15;
+    }
+
+    final lineBars = <LineChartBarData>[];
+    if (showIncome && incomeSpots.isNotEmpty) {
+      lineBars.add(LineChartBarData(
+        spots: incomeSpots,
+        isCurved: true,
+        color: incomeColor,
+        barWidth: 3,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          color: incomeColor.withAlpha(50),
+        ),
+      ));
+    }
+    if (showExpense && expenseSpots.isNotEmpty) {
+      lineBars.add(LineChartBarData(
+        spots: expenseSpots,
+        isCurved: true,
+        color: expenseColor,
+        barWidth: 3,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          color: expenseColor.withAlpha(50),
+        ),
+      ));
+    }
+    if (showBalance && balanceSpots.isNotEmpty) {
+      lineBars.add(LineChartBarData(
+        spots: balanceSpots,
+        isCurved: true,
+        color: balanceColor,
+        barWidth: 3,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: true,
+          color: balanceColor.withAlpha(50),
+        ),
+      ));
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 12, top: 10),
+      child: LineChart(
+        LineChartData(
+          minX: 0,
+          maxX: 11,
+          minY: minY,
+          maxY: maxY,
+          gridData: FlGridData(
+            show: true,
+            horizontalInterval: (maxY - minY) / 4,
+            drawVerticalLine: false,
+          ),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 50,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    moneyFmt.format(value),
+                    style: Theme.of(context).textTheme.labelSmall,
+                    textAlign: TextAlign.right,
+                  );
+                },
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 24,
+                getTitlesWidget: (value, meta) {
+                  final month = value.toInt() + 1;
+                  if (month < 1 || month > 12) return const SizedBox.shrink();
+                  return Text(
+                    '$month',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  );
+                },
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          lineTouchData: LineTouchData(
+            enabled: true,
+            touchTooltipData: LineTouchTooltipData(
+              fitInsideVertically: true,
+              fitInsideHorizontally: true,
+              getTooltipItems: (spots) {
+                return spots.map((spot) {
+                  String label = '';
+                  Color color = Colors.white;
+
+                  int currentIndex = 0;
+                  if (showIncome) {
+                    if (spot.barIndex == currentIndex) {
+                      label = '收入';
+                      color = incomeColor;
+                    }
+                    currentIndex++;
+                  }
+                  if (showExpense) {
+                    if (spot.barIndex == currentIndex) {
+                      label = '支出';
+                      color = expenseColor;
+                    }
+                    currentIndex++;
+                  }
+                  if (showBalance) {
+                    if (spot.barIndex == currentIndex) {
+                      label = '结余';
+                      color = balanceColor;
+                    }
+                  }
+
+                  return LineTooltipItem(
+                    '$label\n¥${moneyFmt.format(spot.y)}',
+                    TextStyle(color: color, fontWeight: FontWeight.bold),
+                  );
+                }).toList();
+              },
+            ),
+          ),
+          lineBarsData: lineBars,
         ),
       ),
     );

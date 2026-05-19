@@ -535,3 +535,97 @@ Future<List<StatsHeatmapCell>> statsHeatmapCells(Ref ref) async {
     rangeState.range.end,
   );
 }
+
+class StatsYearlyMonthPoint {
+  const StatsYearlyMonthPoint({
+    required this.month,
+    required this.income,
+    required this.expense,
+    required this.balance,
+  });
+
+  final int month;
+  final double income;
+  final double expense;
+  final double balance;
+}
+
+@Riverpod(keepAlive: true)
+class StatsYearlyYear extends _$StatsYearlyYear {
+  @override
+  int build() {
+    return DateTime.now().year;
+  }
+
+  void setYear(int year) {
+    state = year;
+  }
+
+  void previousYear() {
+    state = state - 1;
+  }
+
+  void nextYear() {
+    state = state + 1;
+  }
+}
+
+@Riverpod(keepAlive: true)
+Future<List<StatsYearlyMonthPoint>> statsYearlyMonthPoints(Ref ref) async {
+  final year = ref.watch(statsYearlyYearProvider);
+  final ledgerId = await ref.watch(currentLedgerIdProvider.future);
+  final repo = await ref.watch(transactionRepositoryProvider.future);
+
+  final entries = await repo.listActiveByLedger(ledgerId);
+
+  final byMonth = <int, _MonthIncomeExpense>{};
+
+  for (final tx in entries) {
+    if (tx.type == 'transfer') continue;
+    final occurred = tx.occurredAt;
+    if (occurred.year != year) continue;
+
+    final month = occurred.month;
+    final bucket = byMonth.putIfAbsent(month, () => const _MonthIncomeExpense());
+
+    final converted = tx.amount * tx.fxRate;
+    if (tx.type == 'income') {
+      byMonth[month] = bucket.copyWith(income: bucket.income + converted);
+    } else if (tx.type == 'expense') {
+      byMonth[month] = bucket.copyWith(expense: bucket.expense + converted);
+    }
+  }
+
+  final points = <StatsYearlyMonthPoint>[];
+  for (int month = 1; month <= 12; month++) {
+    final data = byMonth[month] ?? const _MonthIncomeExpense();
+    points.add(StatsYearlyMonthPoint(
+      month: month,
+      income: data.income,
+      expense: data.expense,
+      balance: data.income - data.expense,
+    ));
+  }
+
+  return points;
+}
+
+class _MonthIncomeExpense {
+  const _MonthIncomeExpense({
+    this.income = 0,
+    this.expense = 0,
+  });
+
+  final double income;
+  final double expense;
+
+  _MonthIncomeExpense copyWith({
+    double? income,
+    double? expense,
+  }) {
+    return _MonthIncomeExpense(
+      income: income ?? this.income,
+      expense: expense ?? this.expense,
+    );
+  }
+}
