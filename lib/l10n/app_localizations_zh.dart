@@ -1751,7 +1751,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCustomName => '自定义名称';
 
   @override
-  String get syncCustomNameHint => '用作卡片标题（可选）';
+  String get syncCustomNameHint => '用作卡片标题';
 
   @override
   String get syncConfigWebdav => '配置 WebDAV';
@@ -1769,7 +1769,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncConfigS3 => '配置 S3';
 
   @override
-  String get syncS3CustomNameHint => '用作卡片标题与云端文件夹名(只能输入字母/数字/下划线/连字符)';
+  String get syncS3CustomNameHint => '用作卡片标题';
 
   @override
   String syncLedgerLoadFailed(String error) {
@@ -1837,7 +1837,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusNotLoggedIn => '未登录';
 
   @override
-  String get syncStatusNoBackup => '当前账本云端无备份';
+  String get syncStatusNoBackup => '云端无备份';
 
   @override
   String get syncNoBackupHintBrowse => '其他设备的备份可在「浏览备份」中找到';
@@ -1875,6 +1875,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String syncLocalCloudCount(int local, int cloud) {
     return '本地 $local · 云端 $cloud';
   }
+
+  @override
+  String get syncSyncNow => '立即同步';
+
+  @override
+  String syncPendingCount(int count) {
+    return '待推送 $count 条';
+  }
+
+  @override
+  String get syncFullPullTitle => '从云端恢复全部数据';
+
+  @override
+  String get syncFullPullPrompt =>
+      '检测到 Supabase 已登录,是否立即把云端全部账本与流水拉到本机?\n\n选「否」也可以,后续首次同步会自动全量拉取。';
+
+  @override
+  String get syncFullPullRunning => '正在从云端恢复…';
+
+  @override
+  String get syncFullPullDone => '云端数据已拉到本机';
 
   @override
   String get syncTriggerInProgress => '同步进行中';
@@ -2784,4 +2805,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupConflictNewName => '新账本名称';
+
+  @override
+  String get syncForcePush => '强制推送';
+
+  @override
+  String get syncForcePushConfirm => '将本地全部数据强制推送到云端，可能覆盖云端已有数据。确定继续？';
+
+  @override
+  String get syncForcePushDone => '强制推送完成';
+
+  @override
+  String get syncForcePull => '强制拉取';
+
+  @override
+  String get syncForcePullConfirm => '从云端强制拉取全部数据，将覆盖本地数据。确定继续？';
+
+  @override
+  String get syncForcePullDone => '强制拉取完成';
 }

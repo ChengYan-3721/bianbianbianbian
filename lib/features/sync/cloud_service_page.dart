@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
@@ -10,9 +11,10 @@ import '../../core/l10n/l10n_ext.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart' show currentLedgerIdProvider;
 import 'attachment/attachment_migration.dart';
-import 'backup_list_page.dart';
+import 'incremental_sync_service.dart';
 import 'sync_provider.dart';
 import 'sync_service.dart';
+import 'sync_trigger.dart';
 
 class CloudServicePage extends ConsumerStatefulWidget {
   const CloudServicePage({super.key});
@@ -455,6 +457,8 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
         initialUrl: existing?.supabaseUrl ?? '',
         initialKey: existing?.supabaseAnonKey ?? '',
         initialCustomName: existing?.customName ?? '',
+        initialEmail: existing?.supabaseEmail ?? '',
+        initialPassword: existing?.supabasePassword ?? '',
       ),
     );
     if (result != null) {
@@ -519,8 +523,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           type: CloudBackendType.supabase,
           name: 'Supabase',
           customName: customName,
-          supabaseUrl: data['url'] as String,
-          supabaseAnonKey: data['key'] as String,
+          supabaseUrl: (data['url'] as String).trim(),
+          supabaseAnonKey: (data['key'] as String).trim(),
+          supabaseEmail: (data['email'] as String?)?.trim(),
+          supabasePassword: data['password'] as String?,
         );
       } else if (type == CloudBackendType.webdav) {
         cfg = CloudServiceConfig(
@@ -580,6 +586,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
             ),
           );
         }
+        // Step 17(云同步 V2):Supabase 保存且测试通过 → 询问首次全量拉取。
+        if (testError == null && cfg.type == CloudBackendType.supabase) {
+          await _maybePromptFullPull();
+        }
       } else {
         throw Exception(context.l10n.syncConfigInvalid);
       }
@@ -613,6 +623,80 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
       }
     }
   }
+
+  /// Step 17(云同步 V2):Supabase 配置保存且连接测试通过后,询问用户是否
+  /// 立即从云端拉取全部账本与流水到本机。
+  ///
+  /// 典型场景:用户在新设备装好 App 后填写已有 Supabase 凭据,这一弹窗
+  /// 让"换设备 → 全恢复"成为可发现的一步操作,而不必等下一次同步触发。
+  /// 用户点「否」也可以——首次自动同步(cursor=0)会把云端全部行一次拉下来。
+  Future<void> _maybePromptFullPull() async {
+    if (!mounted) return;
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.syncFullPullTitle),
+        content: Text(l10n.syncFullPullPrompt),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.confirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // 弹 loading dialog,期间执行 fullPull。barrierDismissible: false,
+    // 避免用户误点关闭后操作还在跑;rootNavigator 兜底以便在嵌套
+    // navigator 场景里也能正确 pop。
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Expanded(child: Text(l10n.syncFullPullRunning)),
+          ],
+        ),
+      ),
+    ));
+
+    String? errorMsg;
+    try {
+      final service = await ref.read(syncServiceProvider.future);
+      if (service is! IncrementalSyncService) {
+        throw StateError(
+          'Expected IncrementalSyncService after Supabase config saved, '
+          'got ${service.runtimeType}',
+        );
+      }
+      await service.fullPull();
+    } catch (e) {
+      errorMsg = e.toString();
+    }
+
+    if (!mounted) return;
+    // 关闭 loading dialog。
+    Navigator.of(context, rootNavigator: true).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          errorMsg == null
+              ? l10n.syncFullPullDone
+              : l10n.saveFailedWithError(errorMsg),
+        ),
+      ),
+    );
+  }
 }
 
 // --- 配置对话框 ---
@@ -621,11 +705,15 @@ class _SupabaseConfigDialog extends StatefulWidget {
   final String initialUrl;
   final String initialKey;
   final String initialCustomName;
+  final String initialEmail;
+  final String initialPassword;
 
   const _SupabaseConfigDialog({
     required this.initialUrl,
     required this.initialKey,
     this.initialCustomName = '',
+    this.initialEmail = '',
+    this.initialPassword = '',
   });
 
   @override
@@ -636,6 +724,8 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
   late final TextEditingController _urlController;
   late final TextEditingController _keyController;
   late final TextEditingController _customNameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
 
   @override
   void initState() {
@@ -645,6 +735,8 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
     _customNameController = TextEditingController(
       text: widget.initialCustomName,
     );
+    _emailController = TextEditingController(text: widget.initialEmail);
+    _passwordController = TextEditingController(text: widget.initialPassword);
   }
 
   @override
@@ -672,6 +764,18 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
               controller: _keyController,
               decoration: const InputDecoration(labelText: 'Anon Key'),
             ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: 'Email'),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
           ],
         ),
       ),
@@ -683,9 +787,11 @@ class _SupabaseConfigDialogState extends State<_SupabaseConfigDialog> {
         TextButton(
           onPressed: () {
             Navigator.of(context).pop({
-              'url': _urlController.text,
-              'key': _keyController.text,
-              'customName': _customNameController.text,
+              'url': _urlController.text.trim(),
+              'key': _keyController.text.trim(),
+              'customName': _customNameController.text.trim(),
+              'email': _emailController.text.trim(),
+              'password': _passwordController.text,
             });
           },
           child: Text(context.l10n.save),
@@ -967,6 +1073,7 @@ class _SyncStatusCard extends ConsumerWidget {
               ledgerId: ledgerId,
               backendName: active.name,
               backendLocation: active.obfuscatedUrl(),
+              backendType: active.type,
             ),
           ),
         ),
@@ -981,12 +1088,14 @@ class _SyncStatusBody extends ConsumerStatefulWidget {
     required this.ledgerId,
     required this.backendName,
     required this.backendLocation,
+    required this.backendType,
   });
 
   final SyncService service;
   final String ledgerId;
   final String backendName;
   final String backendLocation;
+  final CloudBackendType backendType;
 
   @override
   ConsumerState<_SyncStatusBody> createState() => _SyncStatusBodyState();
@@ -1037,56 +1146,63 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
     }
   }
 
-  Future<void> _upload() => _runWithBusy(
-    () => widget.service.upload(ledgerId: widget.ledgerId),
-    successMessage: context.l10n.syncUploaded,
-  );
-
-  /// 下载按钮的新语义：打开《云端备份》列表，让用户挑要恢复哪一份。
-  ///
-  /// 与原 `downloadAndRestore(ledgerId)` 的差异：原路径只能恢复"与本地 ledgerId
-  /// 完全相同的备份"——在卸载重装/换机这两个典型恢复场景里 ledgerId 必然
-  /// 是新生成的 UUID，永远 miss。新页面 list `users/` 前缀拿到所有备份，
-  /// 选中后 `restoreFromBackup` 走"追加为新账本"路径。
-  Future<void> _openBackupList() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const BackupListPage()));
-    // 回到本页时如果云端列表发生过删除/恢复，状态卡里的数字可能要刷新
-    // ——下载触达 DB 改动后 BackupListPage 已经 invalidate 过相关 provider，
-    // 这里只刷状态显示。
-    widget.service.clearCache();
-    _refresh(force: true);
-  }
-
-  Future<void> _deleteRemote() async {
+  Future<void> _forcePush() async {
     final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.syncDeleteCloudBackup),
-        content: Text(l10n.syncDeleteCloudConfirm),
+        title: Text(l10n.syncForcePush),
+        content: Text(l10n.syncForcePushConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
             child: Text(l10n.cancel),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.delete),
+            child: Text(l10n.confirm),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
     return _runWithBusy(
-      () => widget.service.deleteRemote(ledgerId: widget.ledgerId),
-      successMessage: l10n.syncCloudDeleted,
+      () => widget.service.forcePushAll(),
+      successMessage: l10n.syncForcePushDone,
+    );
+  }
+
+  Future<void> _forcePull() async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.syncForcePull),
+        content: Text(l10n.syncForcePullConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.confirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    return _runWithBusy(
+      () => widget.service.forcePullAll(),
+      successMessage: l10n.syncForcePullDone,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final syncTriggerState = ref.watch(syncTriggerProvider);
+    final isBackgroundSyncing = syncTriggerState.isRunning;
+    final isAnyBusy = _busy || isBackgroundSyncing;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1101,8 +1217,17 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (isAnyBusy)
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
             IconButton(
-              icon: _busy
+              icon: isAnyBusy
                   ? const SizedBox(
                       width: 20,
                       height: 20,
@@ -1110,10 +1235,27 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
                     )
                   : const Icon(Icons.refresh),
               tooltip: context.l10n.syncRefreshStatus,
-              onPressed: _busy ? null : () => _refresh(force: true),
+              onPressed: isAnyBusy ? null : () => _refresh(force: true),
             ),
           ],
         ),
+        if (isBackgroundSyncing) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                context.l10n.recordSyncing,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 8),
         FutureBuilder<SyncStatus>(
           future: _statusFuture,
@@ -1133,44 +1275,59 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
               );
             }
             final status = snap.data!;
-            return _StatusLine(status: status);
+            final isRealAuth = widget.backendType == CloudBackendType.supabase ||
+                widget.backendType == CloudBackendType.beecountCloud;
+            final isIncremental =
+                widget.backendType == CloudBackendType.supabase;
+            return _StatusLine(
+              status: status,
+              isRealAuth: isRealAuth,
+              isIncremental: isIncremental,
+            );
           },
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                icon: const Icon(Icons.cloud_upload_outlined),
-                label: Text(context.l10n.syncUpload),
-                onPressed: _busy ? null : _upload,
+        Builder(builder: (context) {
+          return Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: Text(context.l10n.syncForcePush),
+                  onPressed: isAnyBusy ? null : _forcePush,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.cloud_download_outlined),
-                label: Text(context.l10n.syncDownload),
-                onPressed: _busy ? null : _openBackupList,
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.cloud_download_outlined),
+                  label: Text(context.l10n.syncForcePull),
+                  onPressed: isAnyBusy ? null : _forcePull,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.delete_outline),
-              tooltip: context.l10n.syncDeleteCloudBackupShort,
-              onPressed: _busy ? null : _deleteRemote,
-            ),
-          ],
-        ),
+            ],
+          );
+        }),
       ],
     );
   }
 }
 
 class _StatusLine extends StatelessWidget {
-  const _StatusLine({required this.status});
+  const _StatusLine({
+    required this.status,
+    this.isRealAuth = false,
+    this.isIncremental = false,
+  });
 
   final SyncStatus status;
+  final bool isRealAuth;
+
+  /// Step 17(云同步 V2):增量模式开关。
+  /// - true(Supabase):用 [SyncStatus.localCount] 显示「待推送 N 条」,跳过
+  ///   「本地 N / 云端 M」对比(增量模式没有"云端 N"概念);
+  /// - false(V1 快照):走原本「本地 N / 云端 M」行。
+  final bool isIncremental;
 
   String _label(BuildContext context) {
     switch (status.state) {
@@ -1237,7 +1394,17 @@ class _StatusLine extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
-        if (status.localCount != null && status.cloudCount != null) ...[
+        // 增量模式: 仅显示「待推送 N 条」(队列 = sync_op 行数)。
+        // 快照模式: 显示「本地 N / 云端 M」对比。
+        if (isIncremental && status.localCount != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            context.l10n.syncPendingCount(status.localCount!),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ] else if (!isIncremental &&
+            status.localCount != null &&
+            status.cloudCount != null) ...[
           const SizedBox(height: 4),
           Text(
             context.l10n.syncLocalCloudCount(
@@ -1251,10 +1418,9 @@ class _StatusLine extends StatelessWidget {
           const SizedBox(height: 4),
           Text(status.message!, style: Theme.of(context).textTheme.bodySmall),
         ],
-        // localOnly = 当前账本路径下云端没文件——这并不代表整个 bucket 没备份。
-        // 跨设备 / 重装场景下旧 deviceId 的备份藏在 users/<其他 uid>/ledgers/ 下,
-        // 路径定位查不到,得通过「浏览备份」(listBackups 扫全 users/ 前缀) 找回。
-        if (status.state == SyncState.localOnly) ...[
+        // 非鉴权后端（S3/WebDAV/iCloud）：localOnly 时提示用户浏览备份找回旧数据。
+        // 鉴权后端（Supabase）：只能看自己的目录，浏览备份无意义，不显示此提示。
+        if (status.state == SyncState.localOnly && !isRealAuth) ...[
           const SizedBox(height: 4),
           Text(
             context.l10n.syncNoBackupHintBrowse,

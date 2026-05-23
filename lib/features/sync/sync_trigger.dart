@@ -3,7 +3,7 @@ import 'dart:io' show SocketException;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../data/repository/providers.dart' show currentLedgerIdProvider;
+import 'incremental_sync_service.dart';
 import 'sync_provider.dart';
 import 'sync_service.dart';
 
@@ -126,6 +126,20 @@ typedef SyncTriggerClock = DateTime Function();
 /// 任何意外异常（含 `MissingPluginException` 等测试环境下的平台报错）
 /// 都被外层 try/catch 兜住——保证调用方 `unawaited(trigger(...))` 永远
 /// 不冒烟。
+///
+/// ## Step 17（云同步 V2）：按 service 类型分发
+///
+/// 三种 SyncService 实现走不同路径：
+///
+/// - [IncrementalSyncService]（仅 Supabase）：调用 [IncrementalSyncService.pullThenPush]
+///   或 [IncrementalSyncService.pushOnly]（按 `pushOnly` 旗标）。`ledgerId`
+///   被忽略——整库同步无账本边界。
+/// - [SnapshotSyncService]（S3 / WebDAV / iCloud）：调用 [SyncService.upload]
+///   按账本上传 JSON 快照。`pushOnly` 旗标被忽略（快照模型只有"上传"）。
+/// - [LocalOnlySyncService]：直接 [SyncTriggerOutcome.notConfigured] 返回。
+///
+/// `pushOnly = true` 仅出现在 [scheduleDebounced] 的回调中——用户刚保存，
+/// 期待立即上云；pull 留给前台恢复 / 15min 定时器路径。
 class SyncTrigger extends Notifier<SyncTriggerState> {
   SyncTrigger({SyncTriggerClock? clock}) : _clock = clock ?? DateTime.now;
 
@@ -143,8 +157,16 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
     return SyncTriggerState.idle;
   }
 
-  /// 主入口：执行一次 upload。所有触发路径最终都汇聚到这里。
-  Future<SyncTriggerResult> trigger() async {
+  /// 主入口：执行一次同步。所有触发路径最终都汇聚到这里。
+  ///
+  /// [pushOnly]：仅对 [IncrementalSyncService] 生效。
+  /// - `true`：仅推送本地变更（[scheduleDebounced] 走这条——用户刚保存，
+  ///   期待立即上云，且本地必然新于云端，无需先 pull）。
+  /// - `false`（默认）：先拉云端再推本地（App 启动 / 前台恢复 / 15min /
+  ///   下拉刷新走这条——确保多设备互见最新版本）。
+  ///
+  /// [SnapshotSyncService] 没有"拉"概念，[pushOnly] 旗标对其无意义。
+  Future<SyncTriggerResult> trigger({bool pushOnly = false}) async {
     if (_running) {
       // i18n-exempt: needs refactoring for l10n (Notifier has no BuildContext)
       return const SyncTriggerResult(
@@ -168,8 +190,18 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
           message: '未配置云服务',
         );
       }
-      final ledgerId = await ref.read(currentLedgerIdProvider.future);
-      await service.upload(ledgerId: ledgerId);
+      if (service is IncrementalSyncService) {
+        // V2 整库同步：忽略 ledgerId，由 service 自己遍历所有表。
+        if (pushOnly) {
+          await service.pushOnly();
+        } else {
+          await service.pullThenPush();
+        }
+      } else {
+        // V1 快照模型：全部账本打包为单一文件上传。
+        // ledgerId 参数在 V1 多账本单文件模式下被忽略。
+        await service.upload(ledgerId: '');
+      }
       service.clearCache();
       state = state.copyWith(
         isRunning: false,
@@ -198,6 +230,10 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
   }
 
   /// 记账后调用：N 秒静默防抖。重复调用会重置计时器，连续记账只触发最后一次。
+  ///
+  /// 增量同步路径：debounce 触发的 [trigger] 走 `pushOnly: true`——用户刚保存，
+  /// 期待立即上云；pull 留给前台恢复 / 15min 定时器路径，避免拖慢"刚保存就
+  /// 看见已同步"的反馈。快照同步无影响（pushOnly 旗标对其忽略）。
   void scheduleDebounced({
     Duration delay = const Duration(seconds: 5),
   }) {
@@ -206,7 +242,7 @@ class SyncTrigger extends Notifier<SyncTriggerState> {
       // 故意不 await——防抖回调脱离调用栈、丢弃返回值即可。
       // 内部已 try/catch，所有异常被吞掉，不会冒烟。
       // ignore: discarded_futures
-      trigger();
+      trigger(pushOnly: true);
     });
   }
 

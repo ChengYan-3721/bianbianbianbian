@@ -1103,13 +1103,13 @@
   "syncProviderInitNull": "Provider 初始化返回空",
   "syncConfigSupabase": "配置 Supabase",
   "syncCustomName": "自定义名称",
-  "syncCustomNameHint": "用作卡片标题（可选）",
+  "syncCustomNameHint": "用作卡片标题",
   "syncConfigWebdav": "配置 WebDAV",
   "syncWebdavUsername": "用户名",
   "syncWebdavPassword": "密码",
   "syncWebdavRemotePath": "远程路径",
   "syncConfigS3": "配置 S3",
-  "syncS3CustomNameHint": "用作卡片标题与云端文件夹名(只能输入字母/数字/下划线/连字符)",
+  "syncS3CustomNameHint": "用作卡片标题",
   "syncLedgerLoadFailed": "账本加载失败：{error}",
   "@syncLedgerLoadFailed": {
     "placeholders": {
@@ -1157,7 +1157,7 @@
   "syncDeleteCloudBackupShort": "删除云端备份",
   "syncStatusNotConfigured": "未配置",
   "syncStatusNotLoggedIn": "未登录",
-  "syncStatusNoBackup": "当前账本云端无备份",
+  "syncStatusNoBackup": "云端无备份",
   "syncNoBackupHintBrowse": "其他设备的备份可在「浏览备份」中找到",
   "syncStatusSynced": "已同步",
   "syncStatusLocalNewer": "本地较新（建议上传）",
@@ -1186,6 +1186,19 @@
       }
     }
   },
+  "syncSyncNow": "立即同步",
+  "syncPendingCount": "待推送 {count} 条",
+  "@syncPendingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "syncFullPullTitle": "从云端恢复全部数据",
+  "syncFullPullPrompt": "检测到 Supabase 已登录,是否立即把云端全部账本与流水拉到本机?\n\n选「否」也可以,后续首次同步会自动全量拉取。",
+  "syncFullPullRunning": "正在从云端恢复…",
+  "syncFullPullDone": "云端数据已拉到本机",
   "syncTriggerInProgress": "同步进行中",
   "syncTriggerNotConfigured": "未配置云服务",
   "syncTriggerNetworkUnavailable": "网络不可用",
@@ -1822,5 +1835,11 @@
   "backupConflictOverwriteDesc": "用云端数据替换本地同名账本的全部流水与预算（本地原有数据将丢失）",
   "backupConflictRename": "重命名为新账本",
   "backupConflictRenameDesc": "以新名称创建独立账本，本地同名账本保持不动",
-  "backupConflictNewName": "新账本名称"
+  "backupConflictNewName": "新账本名称",
+  "syncForcePush": "强制推送",
+  "syncForcePushConfirm": "将本地全部数据强制推送到云端，可能覆盖云端已有数据。确定继续？",
+  "syncForcePushDone": "强制推送完成",
+  "syncForcePull": "强制拉取",
+  "syncForcePullConfirm": "从云端强制拉取全部数据，将覆盖本地数据。确定继续？",
+  "syncForcePullDone": "强制拉取完成"
 }

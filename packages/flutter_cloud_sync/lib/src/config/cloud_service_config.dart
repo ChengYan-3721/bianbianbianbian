@@ -92,7 +92,9 @@ class CloudServiceConfig {
         return (beecountCloudBaseUrl?.isNotEmpty ?? false);
       case CloudBackendType.supabase:
         return (supabaseUrl?.isNotEmpty ?? false) &&
-            (supabaseAnonKey?.isNotEmpty ?? false);
+            (supabaseAnonKey?.isNotEmpty ?? false) &&
+            (supabaseEmail?.isNotEmpty ?? false) &&
+            (supabasePassword?.isNotEmpty ?? false);
       case CloudBackendType.webdav:
         return (webdavUrl?.isNotEmpty ?? false) &&
             (webdavUsername?.isNotEmpty ?? false) &&

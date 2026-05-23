@@ -27,8 +27,11 @@ abstract class TransactionRepository {
   Future<List<TransactionEntry>> listDeleted();
 
   /// **垃圾桶恢复**（Phase 12 Step 12.2）。`deleted_at = null` + 刷新
-  /// `updated_at`；不存在则静默返回。**不**入队 `sync_op`——快照模型下
-  /// 同步走整体覆盖（`scheduleDebounced` 由调用方触发）。
+  /// `updated_at`；不存在则静默返回。
+  ///
+  /// Step 17（云同步 V2）：入队一条 `op='upsert'` 的 sync_op，payload 是
+  /// 恢复后的 entity JSON（`deleted_at = null`）。`scheduleDebounced` 仍由
+  /// 调用方触发。
   Future<void> restoreById(String id);
 
   /// **垃圾桶永久删除**（Phase 12 Step 12.2）。仅硬删 DB 行，**不**清理附件
@@ -178,18 +181,56 @@ class LocalTransactionRepository implements TransactionRepository {
             ..where((t) => t.id.equals(id)))
           .getSingleOrNull();
       if (row == null) return;
+      if (row.deletedAt == null) return; // 已活跃,幂等。
       await _dao.restoreById(id, updatedAt: nowMs);
-      // 同步路径：快照模型整体覆盖，无需 sync_op；触发由调用方负责。
+      // Step 17(云同步 V2):restore = deleted_at 清空的 upsert(走 Map spread
+      // 是因为 TransactionEntry.copyWith(deletedAt: null) 会被当作"不传"保留原值)。
+      final restorePayload = <String, dynamic>{
+        ...rowToTransactionEntry(row).toJson(),
+        'deleted_at': null,
+        'updated_at': now.toIso8601String(),
+        'device_id': _deviceId,
+      };
+      await _syncOp.enqueue(
+        entity: 'transaction',
+        entityId: id,
+        op: 'upsert',
+        payload: jsonEncode(restorePayload),
+        enqueuedAt: nowMs,
+      );
     });
   }
 
   @override
-  Future<int> purgeById(String id) {
+  Future<int> purgeById(String id) async {
+    final now = _clock();
+    final row = await (_db.select(_db.transactionEntryTable)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null) return 0;
+    await _syncOp.enqueue(
+      entity: 'transaction',
+      entityId: id,
+      op: 'delete',
+      payload: jsonEncode(rowToTransactionEntry(row).toJson()),
+      enqueuedAt: now.millisecondsSinceEpoch,
+    );
     return _dao.hardDeleteById(id);
   }
 
   @override
   Future<int> purgeAllDeleted() async {
+    final rows = await _dao.listDeleted();
+    final now = _clock();
+    for (final row in rows) {
+      await _syncOp.enqueue(
+        entity: 'transaction',
+        entityId: row.id,
+        op: 'delete',
+        payload: jsonEncode(rowToTransactionEntry(row).toJson()),
+        enqueuedAt: now.millisecondsSinceEpoch,
+      );
+    }
     return (_db.delete(_db.transactionEntryTable)
           ..where((t) => t.deletedAt.isNotNull()))
         .go();

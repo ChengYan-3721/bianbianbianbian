@@ -37,7 +37,9 @@
       "Bash(cat)",
       "Read(//tmp/**)",
       "Bash(unix2dos /tmp/append_content.txt)",
-      "Bash(sed -i 's/$/\\\\r/' /tmp/append_content.txt)"
+      "Bash(sed -i 's/$/\\\\r/' /tmp/append_content.txt)",
+      "Bash(xxd)",
+      "Bash(dd if=D:/Projects/bianbianbianbian/lib/features/sync/incremental_sync_service.dart)"
     ]
   }
 }

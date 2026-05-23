@@ -4172,3 +4172,87 @@ Navigator operation requested with a context that does not include a Navigator.
 - **`LedgerSnapshot` 没覆盖 `==`**：用 `decoded.toJson() == snap.toJson()` 而不是 `expect(decoded, snap)`。这一点已在 `snapshot_serializer_test.dart` 的 group 注释里说明。想换回直接 `==` 必须先给 `LedgerSnapshot` 加 `==` / `hashCode`（属于产线代码改动，超出本步 scope）。
 - **fingerprint stable map 含 ledger / categories / accounts**：见 `lib/features/sync/snapshot_serializer.dart:117-126`。本步用 3 条 mutation 测试锁住其中三个键的 SVG 敏感性；尚未单独测试"`exported_at` / `device_id` 不进入 stable map"——若后续重构 fingerprint 时需要更强保护，可补一条 negative 测试。
 - **相关 spec & plan**：`docs/superpowers/specs/2026-05-17-svg-icon-backup-sync-design.md` + `docs/superpowers/plans/2026-05-17-svg-icon-backup-sync.md`。
+
+---
+
+## ✅ Step 17 · 云同步 V2:整库增量同步（Supabase 专用）（2026-05-21）
+
+**背景**
+
+V1 同步是"按账本（ledger）粒度,每个账本一份 JSON 文件,整库上传/下载/覆盖"。用户痛点：
+- 上传慢（流水多了一次几百 KB JSON）、下载慢；
+- 不支持"整库一次同步所有账本";
+- 多设备同步必须按账本一个个上传/下载,体验粗糙。
+
+需求：记账后自动同步、换设备能完整恢复、多设备能互相同步。
+
+**设计决策（AskUserQuestion 锁定）**
+
+| 维度 | 决策 |
+| :-- | :-- |
+| 增量 backend 范围 | **仅 Supabase**（用 Postgres 表 + RLS）；S3 / WebDAV / iCloud 保留 V1 SnapshotSyncService |
+| 同步粒度 | **整库**（所有账本 + 所有流水）,按行同步 |
+| 冲突策略 | **纯 LWW**：`updated_at` 大者胜,平手按 `device_id` 字典序,无冲突副本 |
+| 触发节奏 | **写入 debounce 5s push**、**App 启动 / 切回前台 / 15min 定时 pull-then-push** |
+| 旧 V1 路径 | **硬切**：V1 对 Supabase 的代码路径全删；旧 `bbbb-backups` bucket 保留兼容旧客户端 |
+| Service 拓扑 | 三个 SyncService 共存：`IncrementalSyncService`（仅 Supabase）/ `SnapshotSyncService`（S3/WebDAV/iCloud）/ `LocalOnlySyncService` |
+
+**改动文件清单**
+
+新建（1 个生产 + 4 个测试）：
+- `lib/features/sync/incremental_sync_service.dart` — ~660 行,V2 核心服务 + `IncrementalCloudGateway` 抽象 + `SupabaseIncrementalGateway` 适配器 + `lwwDecide` 纯函数 + `MergeOutcome` 枚举。
+- `test/features/sync/lww_merge_test.dart` — 10 个用例,覆盖 LWW 决策表所有分支。
+- `test/features/sync/incremental_sync_service_test.dart` — 25 个集成用例,`_FakeGateway` + 内存 db,覆盖 push/pull/fullPull/软删传播/getStatus/UnsupportedError。
+- `test/data/local/app_database_migration_v13_test.dart` — 5 个用例,验 v12 → v13 `last_pulled_at_json` 列添加 + 老数据保留。
+- `test/data/local/sync_op_dao_test.dart` — 20 个用例,验 4 个新消费 API（listPendingBatch / markPushed / incrementTried / coalesceByEntity）。
+
+修改（13 个文件）：
+- `docs/supabase-setup.sql` — 加 5 张业务表（ledger / category / account / transaction_entry / budget）+ 6 个索引 + 20 条 RLS + V5/V6/V7 验证查询 + 回滚段。
+- `lib/data/local/tables/user_pref_table.dart` — 加 `last_pulled_at_json TEXT`（V2 逐表 pull 游标 JSON）。
+- `lib/data/local/app_database.dart` — `schemaVersion: 13` + v12→v13 migration。
+- `lib/data/local/dao/sync_op_dao.dart` — 加 4 个消费 API。
+- `lib/data/repository/{ledger,account,category,budget,transaction}_repository.dart` — `restoreById` 补 enqueue（5 处）+ Map 展开模式绕过 `copyWith` null-vs-absent 限制。
+- `packages/flutter_cloud_sync_supabase/lib/src/supabase_database_service.dart` — 加 `upsertBatch` 方法（Supabase 原生 PostgREST upsert）。
+- `lib/features/sync/sync_provider.dart` — `syncServiceProvider` 按 backend 分发：Supabase → IncrementalSyncService；其它 → SnapshotSyncService。
+- `lib/features/sync/sync_trigger.dart` — `trigger({bool pushOnly = false})` 按 service 类型三路分发；`scheduleDebounced` 回调传 `pushOnly: true`（debounce 路径只 push 不 pull）。
+- `lib/features/sync/cloud_service_page.dart` — `_StatusLine` 加 `isIncremental` 旗标显示"待推送 N 条"；upload 按钮文案 "立即同步"（Supabase）；隐藏 delete 按钮（Supabase）；新增 `_maybePromptFullPull` 在首次保存 Supabase 配置且测试通过后弹窗询问全量拉取。
+- `lib/l10n/app_zh.arb` — 加 6 个 i18n keys（syncSyncNow / syncPendingCount / syncFullPull{Title,Prompt,Running,Done}）。
+- `test/features/sync/sync_trigger_test.dart` — 加 3 个分发用例,用 `_CountingGateway` 验 trigger() / trigger(pushOnly:true) / scheduleDebounced 调用路径。
+- `test/data/repository/trash_repository_test.dart` — 加 4 个 Step 17 断言用例（restore 路径必须 enqueue upsert with `deleted_at=null`）。
+
+**验证**
+
+- `flutter analyze` → No issues found（全程 0 issue）；
+- `flutter test` → 900 个用例全部通过（V1 + V2 + 新加 ~60 个）；
+- 手测待用户在双设备真机走通：① 设备 A 装升级 App → 配 Supabase → 记 5 笔流水 + 改账本名 → 5s 后云端 Dashboard 可见 ledger/transaction_entry 行；② 设备 B 装升级 App → 配同账号 → 弹窗选"是" → fullPull 全部账本和流水到位；③ 双设备并发改同一笔 amount → LWW 解决最终一致；④ 软删传播；⑤ 拔网线断网 → sync_op 累积 → 恢复网络后下次 trigger 补推。
+
+**给后续开发者的备忘**
+
+- **V1 / V2 共存的路由真值源在 `sync_provider.dart`**：`config.type == CloudBackendType.supabase` → V2 IncrementalSyncService；其它（含 BeeCount Cloud / S3 / WebDAV / iCloud）→ V1 SnapshotSyncService。理由：Supabase 有真鉴权 + RLS + Postgres,适合做按行增量；其它后端只有对象存储,做不了 per-row LWW（每个 column 当 key 显然不现实）。BeeCount Cloud 是独立 `BeeCountCloudProvider`（不是 SupabaseProvider）,仍走 V1 — 切勿误以为 BeeCount 也走增量。
+- **`upsertBatch` 用 PostgREST 原生 upsert**：`SupabaseIncrementalGateway` 把 `_database.upsertBatch` 转发到 PostgREST `.upsert(payload, onConflict: 'id')`。服务端 ON CONFLICT DO UPDATE,单 RTT,无竞态。RLS 已隔离 `user_id`,不会出现 cross-user 冲突。
+- **`SyncOpDao.coalesceByEntity` 取 id-max 而非 delete-priority**：同一 `(entity, entity_id)` 5 秒内被改 3 次,取最大 id（最新 enqueue）即可,因为 V2 软删的 op 也是 `op='upsert'`（payload 里 `deleted_at` 非 null）,不是单独的 delete op。这与 design-doc §7.1 的语义一致。
+- **`restoreById` 必须用 Map 展开模式 enqueue**：`copyWith(deletedAt: null)` 在 Dart 里**不能区分** "传 null" 和 "不传" — 后者会保留原值。所以 5 个 repository 的 `restoreById` 都改成：
+  ```dart
+  final restorePayload = <String, dynamic>{
+    ...rowToXxx(row).toJson(),
+    'deleted_at': null,
+    'updated_at': now.toIso8601String(),
+    'device_id': _deviceId,
+  };
+  ```
+  确保云端收到的行 `deleted_at` 字面为 null。
+- **drain loop 第一次失败即退出**（`IncrementalSyncService._pushAll`）：早期写成"所有 entity 全失败才退出",会让单 entity 失败后 tried 在同一会话里累加多次（200/批 × 5 entity = 1000 次累计）。改成"任一 entity 失败即退出,留给下次 SyncTrigger 再试"。理由：失败大概率是临时网络抖动,等下次 trigger（debounce 5s / lifecycle resumed / 15min 定时器）天然指数退避,无需在同一会话内堆叠重试。
+- **云端 SQL 用 PostgreSQL 原生 `boolean`,不用 int 0/1**：本地 SQLite 存 int,Drift 实体 toJson 输出 bool。云端列若用 int 0/1,JSON 序列化时 PostgREST 会返回 1/0,`bool.fromJson` 直接抛 type cast error。所以 V2 段统一用 `boolean default false`（archived / is_favorite / include_in_total / carry_over 4 列）。如果将来本地表加新的 bool 列,云端 SQL 也得同步加 boolean,**不能用 int**。
+- **BLOB 字段（`note_encrypted` / `attachments_encrypted`）云端用 `text` 存 base64**：避免 PostgREST 对 bytea 列的 hex/base64 编码歧义。本地实体 toJson 已经走 base64,云端 TEXT 列直接接,无额外转换。如果后续要把这两列改回 bytea 节省空间,得加 `_entityJsonToCloudRow` / `_cloudRowToEntityJson` 的双向编码。
+- **fullPull 入口**：`_CloudServicePageState._maybePromptFullPull` 在 Supabase 保存且测试通过后弹窗。用户选"否"也没问题 — 首次自动同步（cursor=0）会把云端全部行一次拉下来。这个弹窗的价值是"换设备恢复"成为可发现的一步操作,而不必等下一次 trigger。
+- **`SyncTrigger.trigger({bool pushOnly})` 按 service 类型三路分发**：
+  - LocalOnly → `notConfigured`；
+  - IncrementalSyncService + `pushOnly: true` → `pushOnly()`（仅 debounce 走）；
+  - IncrementalSyncService + `pushOnly: false` → `pullThenPush()`（App resumed / 15min / 下拉刷新）；
+  - SnapshotSyncService → `upload(ledgerId)`（`pushOnly` 旗标对其无意义）。
+  V1 `currentLedgerIdProvider` 读取移到 SnapshotSyncService 分支内（V2 整库同步无账本边界）。
+- **测试技巧 `_FakeGateway` 与 `_CountingGateway`**：核心 IncrementalSyncService 测试用 `_FakeGateway`（in-memory 5 张表 + upsert/query 调用记录）；SyncTrigger 分发测试用更轻量的 `_CountingGateway`（只记录调用,不维护数据）。两者都 implements `IncrementalCloudGateway`,验证了抽象接口的价值。
+- **首次 fullPull 性能未做进度条优化**：5 万条流水 = 50 次分页查询 + 50 次 DB transaction batch insert,预估 10-30s 用户等待。当前只有一个 indeterminate `CircularProgressIndicator`。后续如真出现"用户报告卡住" 再加可取消 + 百分比进度,本步未实现。
+- **附件本体仍走对象存储 `attachments` bucket**：V2 增量只覆盖 5 张业务表 + 元数据。`AttachmentUploader` / `Downloader` 与 `_uploadPendingAttachments` 逻辑在 V1 `SnapshotSyncService._uploadPendingAttachments`。**V2 路径下,附件回填那段逻辑当前不会被执行** — 这是已知 gap,后续如要 V2 也支持附件,需把附件回填逻辑搬到 `IncrementalSyncService.pushOnly()` 之前,且回填后不动 `updated_at`（避免触发新一轮同步循环）。
+- **schema 演进警告**：本地新增列时,要同步改 Supabase 业务表 SQL；目前没有自动同步机制。建议在 `docs/supabase-setup.sql` 顶部注释里维护一份 "本地表 vs 云端表字段对照"（本步未做,留给后续）。
+- **相关 plan**：`C:\Users\yanch\.claude\plans\replicated-rolling-hopcroft.md`（V2 实施 11 步计划）。

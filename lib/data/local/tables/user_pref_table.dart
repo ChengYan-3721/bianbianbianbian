@@ -103,6 +103,19 @@ class UserPrefTable extends Table {
   TextColumn get reminderTime =>
       text().nullable().named('reminder_time')();
 
+  /// Step 17（云同步 V2）：增量同步的逐表 pull 游标。
+  ///
+  /// 值为 JSON 字符串，shape: `{"ledger": 1700000000000, "category": ...}`
+  /// 其中 value 是 epoch ms。下次 pull 时 `where updated_at > cursor`，
+  /// 命中行 merge 后把 cursor 推进到本批最大 `updated_at`。
+  ///
+  /// 用 JSON 而非每表一列：5 张表未来还可能扩，避免每次新表都加列 + 迁移；
+  /// drift 不直接支持 JSON 列类型，存 TEXT，业务层 jsonDecode / jsonEncode。
+  ///
+  /// null = 从未 pull 过（首次 pull 即全量）。
+  TextColumn get lastPulledAtJson =>
+      text().nullable().named('last_pulled_at_json')();
+
   @override
   Set<Column> get primaryKey => {id};
 }

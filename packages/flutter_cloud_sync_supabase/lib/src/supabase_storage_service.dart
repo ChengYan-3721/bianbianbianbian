@@ -190,9 +190,18 @@ class SupabaseStorageService implements CloudStorageService {
       final fullPath = _buildUserPath(user.id, path);
 
       // Get file list to retrieve metadata
-      final files = await _client.storage.from(_bucketName).list(
-            path: PathHelper.dirname(fullPath),
-          );
+      final List<supabase.FileObject> files;
+      try {
+        files = await _client.storage.from(_bucketName).list(
+              path: PathHelper.dirname(fullPath),
+            );
+      } on supabase.StorageException catch (e) {
+        // Empty directory or path not found → file doesn't exist
+        if (e.statusCode == '404' || e.message.contains('not found')) {
+          return null;
+        }
+        rethrow;
+      }
 
       final fileName = PathHelper.basename(fullPath);
       final file = files.firstWhere(

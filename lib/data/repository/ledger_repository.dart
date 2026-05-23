@@ -223,6 +223,7 @@ class LocalLedgerRepository implements LedgerRepository {
   Future<void> restoreById(String id) async {
     final now = _clock();
     final nowMs = now.millisecondsSinceEpoch;
+    final nowIso = now.toIso8601String();
     await _db.transaction(() async {
       final row = await (_db.select(_db.ledgerTable)
             ..where((t) => t.id.equals(id)))
@@ -230,6 +231,18 @@ class LocalLedgerRepository implements LedgerRepository {
       if (row == null) return;
       final cascadeAt = row.deletedAt;
       if (cascadeAt == null) return; // 已活跃，幂等
+
+      // 先 SELECT 出本次将级联恢复的子项,以便后面 enqueue restore payload。
+      // 必须在 UPDATE 之前 SELECT —— UPDATE 会把 deletedAt 清空,
+      // 再用 `deletedAt.equals(cascadeAt)` 就匹配不到了。
+      final cascadeTxRows = await (_db.select(_db.transactionEntryTable)
+            ..where((t) => t.ledgerId.equals(id))
+            ..where((t) => t.deletedAt.equals(cascadeAt)))
+          .get();
+      final cascadeBudgetRows = await (_db.select(_db.budgetTable)
+            ..where((t) => t.ledgerId.equals(id))
+            ..where((t) => t.deletedAt.equals(cascadeAt)))
+          .get();
 
       // 级联恢复同时间戳的流水（与软删事务中写入的 deleted_at 完全相等）。
       await (_db.update(_db.transactionEntryTable)
@@ -255,13 +268,98 @@ class LocalLedgerRepository implements LedgerRepository {
       );
       // 账本本身恢复。
       await _dao.restoreById(id, updatedAt: nowMs);
+
+      // Step 17(云同步 V2):账本 + 全部级联恢复的流水/预算逐条 enqueue
+      // op='upsert',payload deleted_at = null。云端按 LWW 把对应行恢复成
+      // 活跃态。Map spread 绕过 entity.copyWith(deletedAt: null) 限制。
+      await _syncOp.enqueue(
+        entity: 'ledger',
+        entityId: id,
+        op: 'upsert',
+        payload: jsonEncode(<String, dynamic>{
+          ...rowToLedger(row).toJson(),
+          'deleted_at': null,
+          'updated_at': nowIso,
+          'device_id': _deviceId,
+        }),
+        enqueuedAt: nowMs,
+      );
+      for (final txRow in cascadeTxRows) {
+        await _syncOp.enqueue(
+          entity: 'transaction',
+          entityId: txRow.id,
+          op: 'upsert',
+          payload: jsonEncode(<String, dynamic>{
+            ...rowToTransactionEntry(txRow).toJson(),
+            'deleted_at': null,
+            'updated_at': nowIso,
+            'device_id': _deviceId,
+          }),
+          enqueuedAt: nowMs,
+        );
+      }
+      for (final budgetRow in cascadeBudgetRows) {
+        await _syncOp.enqueue(
+          entity: 'budget',
+          entityId: budgetRow.id,
+          op: 'upsert',
+          payload: jsonEncode(<String, dynamic>{
+            ...rowToBudget(budgetRow).toJson(),
+            'deleted_at': null,
+            'updated_at': nowIso,
+            'device_id': _deviceId,
+          }),
+          enqueuedAt: nowMs,
+        );
+      }
     });
   }
 
   @override
   Future<int> purgeById(String id) async {
+    final now = _clock();
+    final nowMs = now.millisecondsSinceEpoch;
+
+    // 硬删前先 SELECT 全部级联行，逐条入队 delete sync_op。
+    final cascadeTxRows = await (_db.select(_db.transactionEntryTable)
+          ..where((t) => t.ledgerId.equals(id)))
+        .get();
+    final cascadeBudgetRows = await (_db.select(_db.budgetTable)
+          ..where((t) => t.ledgerId.equals(id)))
+        .get();
+    final ledgerRow = await (_db.select(_db.ledgerTable)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (ledgerRow == null) return 0;
+
+    for (final tx in cascadeTxRows) {
+      await _syncOp.enqueue(
+        entity: 'transaction',
+        entityId: tx.id,
+        op: 'delete',
+        payload: jsonEncode(rowToTransactionEntry(tx).toJson()),
+        enqueuedAt: nowMs,
+      );
+    }
+    for (final b in cascadeBudgetRows) {
+      await _syncOp.enqueue(
+        entity: 'budget',
+        entityId: b.id,
+        op: 'delete',
+        payload: jsonEncode(rowToBudget(b).toJson()),
+        enqueuedAt: nowMs,
+      );
+    }
+    await _syncOp.enqueue(
+      entity: 'ledger',
+      entityId: id,
+      op: 'delete',
+      payload: jsonEncode(rowToLedger(ledgerRow).toJson()),
+      enqueuedAt: nowMs,
+    );
+
+    // 硬删（事务内级联删除）。
     return _db.transaction(() async {
-      // 级联硬删该账本下全部流水（含已软删 + 活跃的——账本被永久删则其下流水皆为孤儿）。
       await (_db.delete(_db.transactionEntryTable)
             ..where((t) => t.ledgerId.equals(id)))
           .go();
@@ -272,7 +370,18 @@ class LocalLedgerRepository implements LedgerRepository {
   }
 
   @override
-  Future<int> purgeAllDeleted() {
+  Future<int> purgeAllDeleted() async {
+    final rows = await _dao.listDeleted();
+    final now = _clock();
+    for (final row in rows) {
+      await _syncOp.enqueue(
+        entity: 'ledger',
+        entityId: row.id,
+        op: 'delete',
+        payload: jsonEncode(rowToLedger(row).toJson()),
+        enqueuedAt: now.millisecondsSinceEpoch,
+      );
+    }
     return (_db.delete(_db.ledgerTable)
           ..where((t) => t.deletedAt.isNotNull()))
         .go();

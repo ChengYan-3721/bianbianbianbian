@@ -99,6 +99,11 @@ class QueryFilter {
     return QueryFilter(column: column, operator: 'in', value: values);
   }
 
+  /// Not-in filter (value not in list)
+  static QueryFilter notInList(String column, List<dynamic> values) {
+    return QueryFilter(column: column, operator: 'not.in', value: values);
+  }
+
   @override
   String toString() {
     return 'QueryFilter($column $operator $value)';

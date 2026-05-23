@@ -225,6 +225,17 @@ class $UserPrefTableTable extends UserPrefTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastPulledAtJsonMeta = const VerificationMeta(
+    'lastPulledAtJson',
+  );
+  @override
+  late final GeneratedColumn<String> lastPulledAtJson = GeneratedColumn<String>(
+    'last_pulled_at_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -246,6 +257,7 @@ class $UserPrefTableTable extends UserPrefTable
     iconPack,
     reminderEnabled,
     reminderTime,
+    lastPulledAtJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -414,6 +426,15 @@ class $UserPrefTableTable extends UserPrefTable
         ),
       );
     }
+    if (data.containsKey('last_pulled_at_json')) {
+      context.handle(
+        _lastPulledAtJsonMeta,
+        lastPulledAtJson.isAcceptableOrUnknown(
+          data['last_pulled_at_json']!,
+          _lastPulledAtJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -499,6 +520,10 @@ class $UserPrefTableTable extends UserPrefTable
         DriftSqlType.string,
         data['${effectivePrefix}reminder_time'],
       ),
+      lastPulledAtJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_pulled_at_json'],
+      ),
     );
   }
 
@@ -562,6 +587,18 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
   /// Step 16.1：每日记账提醒时间，格式 'HH:mm'（如 '20:00'）。
   /// null = 从未设置（默认）；开启提醒时 UI 应要求用户先选时间。
   final String? reminderTime;
+
+  /// Step 17（云同步 V2）：增量同步的逐表 pull 游标。
+  ///
+  /// 值为 JSON 字符串，shape: `{"ledger": 1700000000000, "category": ...}`
+  /// 其中 value 是 epoch ms。下次 pull 时 `where updated_at > cursor`，
+  /// 命中行 merge 后把 cursor 推进到本批最大 `updated_at`。
+  ///
+  /// 用 JSON 而非每表一列：5 张表未来还可能扩，避免每次新表都加列 + 迁移；
+  /// drift 不直接支持 JSON 列类型，存 TEXT，业务层 jsonDecode / jsonEncode。
+  ///
+  /// null = 从未 pull 过（首次 pull 即全量）。
+  final String? lastPulledAtJson;
   const UserPrefEntry({
     required this.id,
     required this.deviceId,
@@ -582,6 +619,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     this.iconPack,
     this.reminderEnabled,
     this.reminderTime,
+    this.lastPulledAtJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -638,6 +676,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     }
     if (!nullToAbsent || reminderTime != null) {
       map['reminder_time'] = Variable<String>(reminderTime);
+    }
+    if (!nullToAbsent || lastPulledAtJson != null) {
+      map['last_pulled_at_json'] = Variable<String>(lastPulledAtJson);
     }
     return map;
   }
@@ -697,6 +738,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       reminderTime: reminderTime == null && nullToAbsent
           ? const Value.absent()
           : Value(reminderTime),
+      lastPulledAtJson: lastPulledAtJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPulledAtJson),
     );
   }
 
@@ -731,6 +775,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       iconPack: serializer.fromJson<String?>(json['iconPack']),
       reminderEnabled: serializer.fromJson<int?>(json['reminderEnabled']),
       reminderTime: serializer.fromJson<String?>(json['reminderTime']),
+      lastPulledAtJson: serializer.fromJson<String?>(json['lastPulledAtJson']),
     );
   }
   @override
@@ -756,6 +801,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       'iconPack': serializer.toJson<String?>(iconPack),
       'reminderEnabled': serializer.toJson<int?>(reminderEnabled),
       'reminderTime': serializer.toJson<String?>(reminderTime),
+      'lastPulledAtJson': serializer.toJson<String?>(lastPulledAtJson),
     };
   }
 
@@ -779,6 +825,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     Value<String?> iconPack = const Value.absent(),
     Value<int?> reminderEnabled = const Value.absent(),
     Value<String?> reminderTime = const Value.absent(),
+    Value<String?> lastPulledAtJson = const Value.absent(),
   }) => UserPrefEntry(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
@@ -817,6 +864,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
         ? reminderEnabled.value
         : this.reminderEnabled,
     reminderTime: reminderTime.present ? reminderTime.value : this.reminderTime,
+    lastPulledAtJson: lastPulledAtJson.present
+        ? lastPulledAtJson.value
+        : this.lastPulledAtJson,
   );
   UserPrefEntry copyWithCompanion(UserPrefTableCompanion data) {
     return UserPrefEntry(
@@ -867,6 +917,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       reminderTime: data.reminderTime.present
           ? data.reminderTime.value
           : this.reminderTime,
+      lastPulledAtJson: data.lastPulledAtJson.present
+          ? data.lastPulledAtJson.value
+          : this.lastPulledAtJson,
     );
   }
 
@@ -891,7 +944,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ..write('fontSize: $fontSize, ')
           ..write('iconPack: $iconPack, ')
           ..write('reminderEnabled: $reminderEnabled, ')
-          ..write('reminderTime: $reminderTime')
+          ..write('reminderTime: $reminderTime, ')
+          ..write('lastPulledAtJson: $lastPulledAtJson')
           ..write(')'))
         .toString();
   }
@@ -917,6 +971,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     iconPack,
     reminderEnabled,
     reminderTime,
+    lastPulledAtJson,
   );
   @override
   bool operator ==(Object other) =>
@@ -943,7 +998,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           other.fontSize == this.fontSize &&
           other.iconPack == this.iconPack &&
           other.reminderEnabled == this.reminderEnabled &&
-          other.reminderTime == this.reminderTime);
+          other.reminderTime == this.reminderTime &&
+          other.lastPulledAtJson == this.lastPulledAtJson);
 }
 
 class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
@@ -966,6 +1022,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
   final Value<String?> iconPack;
   final Value<int?> reminderEnabled;
   final Value<String?> reminderTime;
+  final Value<String?> lastPulledAtJson;
   const UserPrefTableCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -986,6 +1043,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.iconPack = const Value.absent(),
     this.reminderEnabled = const Value.absent(),
     this.reminderTime = const Value.absent(),
+    this.lastPulledAtJson = const Value.absent(),
   });
   UserPrefTableCompanion.insert({
     this.id = const Value.absent(),
@@ -1007,6 +1065,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.iconPack = const Value.absent(),
     this.reminderEnabled = const Value.absent(),
     this.reminderTime = const Value.absent(),
+    this.lastPulledAtJson = const Value.absent(),
   }) : deviceId = Value(deviceId);
   static Insertable<UserPrefEntry> custom({
     Expression<int>? id,
@@ -1028,6 +1087,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Expression<String>? iconPack,
     Expression<int>? reminderEnabled,
     Expression<String>? reminderTime,
+    Expression<String>? lastPulledAtJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1051,6 +1111,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       if (iconPack != null) 'icon_pack': iconPack,
       if (reminderEnabled != null) 'reminder_enabled': reminderEnabled,
       if (reminderTime != null) 'reminder_time': reminderTime,
+      if (lastPulledAtJson != null) 'last_pulled_at_json': lastPulledAtJson,
     });
   }
 
@@ -1074,6 +1135,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Value<String?>? iconPack,
     Value<int?>? reminderEnabled,
     Value<String?>? reminderTime,
+    Value<String?>? lastPulledAtJson,
   }) {
     return UserPrefTableCompanion(
       id: id ?? this.id,
@@ -1095,6 +1157,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       iconPack: iconPack ?? this.iconPack,
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
       reminderTime: reminderTime ?? this.reminderTime,
+      lastPulledAtJson: lastPulledAtJson ?? this.lastPulledAtJson,
     );
   }
 
@@ -1162,6 +1225,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     if (reminderTime.present) {
       map['reminder_time'] = Variable<String>(reminderTime.value);
     }
+    if (lastPulledAtJson.present) {
+      map['last_pulled_at_json'] = Variable<String>(lastPulledAtJson.value);
+    }
     return map;
   }
 
@@ -1186,7 +1252,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
           ..write('fontSize: $fontSize, ')
           ..write('iconPack: $iconPack, ')
           ..write('reminderEnabled: $reminderEnabled, ')
-          ..write('reminderTime: $reminderTime')
+          ..write('reminderTime: $reminderTime, ')
+          ..write('lastPulledAtJson: $lastPulledAtJson')
           ..write(')'))
         .toString();
   }
@@ -5891,6 +5958,7 @@ typedef $$UserPrefTableTableCreateCompanionBuilder =
       Value<String?> iconPack,
       Value<int?> reminderEnabled,
       Value<String?> reminderTime,
+      Value<String?> lastPulledAtJson,
     });
 typedef $$UserPrefTableTableUpdateCompanionBuilder =
     UserPrefTableCompanion Function({
@@ -5913,6 +5981,7 @@ typedef $$UserPrefTableTableUpdateCompanionBuilder =
       Value<String?> iconPack,
       Value<int?> reminderEnabled,
       Value<String?> reminderTime,
+      Value<String?> lastPulledAtJson,
     });
 
 class $$UserPrefTableTableFilterComposer
@@ -6016,6 +6085,11 @@ class $$UserPrefTableTableFilterComposer
 
   ColumnFilters<String> get reminderTime => $composableBuilder(
     column: $table.reminderTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastPulledAtJson => $composableBuilder(
+    column: $table.lastPulledAtJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6123,6 +6197,11 @@ class $$UserPrefTableTableOrderingComposer
     column: $table.reminderTime,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get lastPulledAtJson => $composableBuilder(
+    column: $table.lastPulledAtJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserPrefTableTableAnnotationComposer
@@ -6218,6 +6297,11 @@ class $$UserPrefTableTableAnnotationComposer
     column: $table.reminderTime,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get lastPulledAtJson => $composableBuilder(
+    column: $table.lastPulledAtJson,
+    builder: (column) => column,
+  );
 }
 
 class $$UserPrefTableTableTableManager
@@ -6270,6 +6354,7 @@ class $$UserPrefTableTableTableManager
                 Value<String?> iconPack = const Value.absent(),
                 Value<int?> reminderEnabled = const Value.absent(),
                 Value<String?> reminderTime = const Value.absent(),
+                Value<String?> lastPulledAtJson = const Value.absent(),
               }) => UserPrefTableCompanion(
                 id: id,
                 deviceId: deviceId,
@@ -6290,6 +6375,7 @@ class $$UserPrefTableTableTableManager
                 iconPack: iconPack,
                 reminderEnabled: reminderEnabled,
                 reminderTime: reminderTime,
+                lastPulledAtJson: lastPulledAtJson,
               ),
           createCompanionCallback:
               ({
@@ -6312,6 +6398,7 @@ class $$UserPrefTableTableTableManager
                 Value<String?> iconPack = const Value.absent(),
                 Value<int?> reminderEnabled = const Value.absent(),
                 Value<String?> reminderTime = const Value.absent(),
+                Value<String?> lastPulledAtJson = const Value.absent(),
               }) => UserPrefTableCompanion.insert(
                 id: id,
                 deviceId: deviceId,
@@ -6332,6 +6419,7 @@ class $$UserPrefTableTableTableManager
                 iconPack: iconPack,
                 reminderEnabled: reminderEnabled,
                 reminderTime: reminderTime,
+                lastPulledAtJson: lastPulledAtJson,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

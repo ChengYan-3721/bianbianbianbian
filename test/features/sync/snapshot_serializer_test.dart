@@ -1,7 +1,9 @@
+import 'dart:convert';
+import 'dart:io' show GZipCodec;
+
 import 'package:bianbianbianbian/domain/entity/account.dart';
 import 'package:bianbianbianbian/domain/entity/category.dart';
 import 'package:bianbianbianbian/domain/entity/ledger.dart';
-import 'package:bianbianbianbian/features/import_export/export_service.dart';
 import 'package:bianbianbianbian/features/sync/snapshot_serializer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -145,6 +147,75 @@ void main() {
         accountIconSvg: svg,
       );
       expect(await fp(a), await fp(b));
+    });
+  });
+
+  /// gzip 压缩（2026-05-21 起）—— 验证体积节省、round-trip、向下兼容、
+  /// fingerprint 跨格式稳定四个不变量。
+  group('LedgerSnapshotSerializer · gzip 压缩', () {
+    const serializer = LedgerSnapshotSerializer();
+
+    // 构造一个含较多重复字段的较大 snapshot,验证 gzip 实际有压缩收益。
+    LedgerSnapshot bigSnap() => LedgerSnapshot(
+          version: LedgerSnapshot.kVersion,
+          exportedAt: DateTime.utc(2026, 5, 4, 12),
+          deviceId: _devId,
+          ledger: _ledger(),
+          categories: List.generate(20, (i) => _category()),
+          accounts: List.generate(10, (i) => _account()),
+          transactions: const [],
+          budgets: const [],
+        );
+
+    test('serialize 输出以 "gz:" 前缀开头', () async {
+      final out = await serializer.serialize(bigSnap());
+      expect(out.startsWith('gz:'), isTrue);
+    });
+
+    test('serialize 输出体积明显小于原 JSON（>= 30% 节省）', () async {
+      final snap = bigSnap();
+      final rawJson = jsonEncode(snap.toJson());
+      final compressed = await serializer.serialize(snap);
+      // 实测 20 categories + 10 accounts 重复字段名,gzip+base64 净节省
+      // 通常 > 50%;保守阈值 30% 防止环境差异 flakiness。
+      expect(
+        compressed.length,
+        lessThan((rawJson.length * 0.7).floor()),
+        reason: 'raw=${rawJson.length} compressed=${compressed.length}',
+      );
+    });
+
+    test('serialize → deserialize round-trip 数据一致', () async {
+      final snap = bigSnap();
+      final encoded = await serializer.serialize(snap);
+      final decoded = await serializer.deserialize(encoded);
+      expect(decoded.toJson(), snap.toJson());
+    });
+
+    test('向下兼容:deserialize 老 JSON 格式(无 gz: 前缀)仍工作', () async {
+      final snap = bigSnap();
+      // 老格式 = 直接 jsonEncode,无 gz: 前缀
+      final legacyJson = jsonEncode(snap.toJson());
+      final decoded = await serializer.deserialize(legacyJson);
+      expect(decoded.toJson(), snap.toJson());
+    });
+
+    test('fingerprint 跨格式稳定:gzip 与老 JSON 同数据 → 同 fingerprint', () {
+      final snap = bigSnap();
+      final legacyJson = jsonEncode(snap.toJson());
+      // 同步触发 _encodeGzipBase64(jsonEncode(...))——绕过 await 拿同样的字节。
+      // 通过 serializer.serialize 路径拿压缩字符串。
+      // 这里直接对 legacyJson 做一次 gzip+base64 包装,模拟"升级后的客户端"
+      // 输出格式。
+      final compressed =
+          'gz:${base64Encode(GZipCodec().encode(utf8.encode(legacyJson)))}';
+      final fpLegacy = serializer.fingerprint(legacyJson);
+      final fpGzipped = serializer.fingerprint(compressed);
+      expect(
+        fpGzipped,
+        fpLegacy,
+        reason: '升级后的 fingerprint 不能突变,否则会触发 spurious upload',
+      );
     });
   });
 }

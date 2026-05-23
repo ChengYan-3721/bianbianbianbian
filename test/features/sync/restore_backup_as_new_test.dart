@@ -14,6 +14,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// 覆盖 [restoreBackupAsNew]:把 [RemoteBackup] 拉回云端 JSON 并以新 ledger
 /// 形式落到本地 DB,确保 wiring 正确——download → deserialize → 调
 /// [importLedgerSnapshotAsNew]。
+///
+/// 多账本快照模式下，[restoreBackupAsNew] 返回逗号分隔的 ledgerId 列表。
 void main() {
   late AppDatabase db;
 
@@ -23,69 +25,81 @@ void main() {
 
   tearDown(() => db.close());
 
-  test('正常路径:下载 → 导入为新账本,返回新 ledgerId', () async {
+  test('正常路径:下载 → 导入为新账本,返回新 ledgerId 列表', () async {
     final t = DateTime.utc(2026, 5, 1, 12);
-    final snap = LedgerSnapshot(
-      version: LedgerSnapshot.kVersion,
+    final snap = MultiLedgerSnapshot(
+      version: MultiLedgerSnapshot.kVersion,
       exportedAt: t,
       deviceId: 'dev-old',
-      ledger: Ledger(
-        id: 'cloud-L',
-        name: '云端账本',
-        createdAt: t,
-        updatedAt: t,
-        deviceId: 'dev-old',
-      ),
-      categories: [
-        Category(
-          id: 'food',
-          name: '餐饮',
-          parentKey: 'food',
-          updatedAt: t,
+      ledgers: [
+        LedgerSnapshot(
+          version: LedgerSnapshot.kVersion,
+          exportedAt: t,
           deviceId: 'dev-old',
+          ledger: Ledger(
+            id: 'cloud-L',
+            name: '云端账本',
+            createdAt: t,
+            updatedAt: t,
+            deviceId: 'dev-old',
+          ),
+          categories: [
+            Category(
+              id: 'food',
+              name: '餐饮',
+              parentKey: 'food',
+              updatedAt: t,
+              deviceId: 'dev-old',
+            ),
+          ],
+          accounts: [
+            Account(
+              id: 'cash',
+              name: '现金',
+              type: 'cash',
+              updatedAt: t,
+              deviceId: 'dev-old',
+            ),
+          ],
+          transactions: [
+            TransactionEntry(
+              id: 'cloud-tx',
+              ledgerId: 'cloud-L',
+              type: 'expense',
+              amount: 10,
+              currency: 'CNY',
+              occurredAt: t,
+              updatedAt: t,
+              deviceId: 'dev-old',
+            ),
+          ],
+          budgets: const [],
         ),
       ],
-      accounts: [
-        Account(
-          id: 'cash',
-          name: '现金',
-          type: 'cash',
-          updatedAt: t,
-          deviceId: 'dev-old',
-        ),
-      ],
-      transactions: [
-        TransactionEntry(
-          id: 'cloud-tx',
-          ledgerId: 'cloud-L',
-          type: 'expense',
-          amount: 10,
-          currency: 'CNY',
-          occurredAt: t,
-          updatedAt: t,
-          deviceId: 'dev-old',
-        ),
-      ],
-      budgets: const [],
     );
-    final serialized = await const LedgerSnapshotSerializer().serialize(snap);
+    final serialized =
+        await const MultiLedgerSnapshotSerializer().serialize(snap);
     final storage = _FakeStorage(downloads: {
-      'users/dev-old/ledgers/cloud-L.json': serialized,
+      'users/dev-old/snapshot.json': serialized,
     });
     final backup = RemoteBackup(
-      ledgerId: 'cloud-L',
-      ledgerName: '云端账本',
+      ledgers: const [
+        RemoteBackupLedger(
+          ledgerId: 'cloud-L',
+          ledgerName: '云端账本',
+          transactionCount: 1,
+          accountCount: 1,
+          categoryCount: 1,
+        ),
+      ],
       sourceDeviceId: 'dev-old',
-      cloudPath: 'users/dev-old/ledgers/cloud-L.json',
+      cloudPath: 'users/dev-old/snapshot.json',
       exportedAt: t,
-      transactionCount: 1,
-      accountCount: 1,
-      categoryCount: 1,
       sizeBytes: 100,
     );
 
     // 无冲突 → 保留原始 ledgerId 'cloud-L',tx 需要新 UUID
-    final newId = await restoreBackupAsNew(
+    final newIds = await restoreBackupAsNew(
       storage: storage,
       backup: backup,
       db: db,
@@ -93,7 +107,7 @@ void main() {
       conflictStrategy: null,
     );
 
-    expect(newId, 'cloud-L');
+    expect(newIds, 'cloud-L');
     final txs = await db.select(db.transactionEntryTable).get();
     expect(txs.single.ledgerId, 'cloud-L');
     expect(txs.single.id, 'new-tx');
@@ -102,14 +116,18 @@ void main() {
   test('云端文件已不存在(download 返回 null)抛 StateError', () async {
     final storage = _FakeStorage(downloads: const {});
     final backup = RemoteBackup(
-      ledgerId: 'L',
-      ledgerName: '账本',
+      ledgers: const [
+        RemoteBackupLedger(
+          ledgerId: 'L',
+          ledgerName: '账本',
+          transactionCount: 0,
+          accountCount: 0,
+          categoryCount: 0,
+        ),
+      ],
       sourceDeviceId: 'd',
-      cloudPath: 'users/d/ledgers/L.json',
+      cloudPath: 'users/d/snapshot.json',
       exportedAt: DateTime.utc(2026, 5, 1),
-      transactionCount: 0,
-      accountCount: 0,
-      categoryCount: 0,
     );
 
     expect(

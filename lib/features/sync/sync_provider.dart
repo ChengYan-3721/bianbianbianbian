@@ -1,8 +1,10 @@
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
+import 'package:flutter_cloud_sync_supabase/flutter_cloud_sync_supabase.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart' as repo;
+import 'incremental_sync_service.dart';
 import 'snapshot_serializer.dart';
 import 'sync_service.dart';
 
@@ -76,11 +78,21 @@ final authServiceProvider = FutureProvider<CloudAuthService>((ref) async {
   return provider?.auth ?? NoopAuthService();
 });
 
-/// 当前 sync service：未配置则 [LocalOnlySyncService]，已激活则
-/// [SnapshotSyncService]（V1 快照模型）。
+/// 当前 sync service:按 backend 类型分发。
+///
+/// - 未配置或初始化失败 → [LocalOnlySyncService];
+/// - **Supabase**(Step 17 / 云同步 V2):[IncrementalSyncService] —— 按行
+///   增量同步整库(5 张云端表),走 `sync_op` 队列 + LWW;
+/// - 其它后端(S3 / WebDAV / iCloud / BeeCount-Cloud):[SnapshotSyncService]
+///   —— V1 整库 JSON 快照,按账本上传/下载。
+///
+/// 三个 service 实现共存的理由:Supabase 有真鉴权 + RLS + Postgres,适合做
+/// 增量;其它后端只有对象存储,做不了 per-row LWW(每个 column 当 key 显然
+/// 不现实),保留 V1 快照模型最稳。
 ///
 /// 依赖 5 个 repository provider + appDatabase + deviceId——这些都是
-/// `keepAlive: true`，所以重建 sync service 不会导致重复打开 DB。
+/// `keepAlive: true`,所以重建 sync service 不会导致重复打开 DB。Supabase
+/// 路径不读 repo provider(增量 service 直接走 db),仅 V1 分支需要。
 final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   final cloudProv = await ref.watch(cloudProviderInstanceProvider.future);
   if (cloudProv == null) {
@@ -90,6 +102,25 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   final config = await ref.watch(activeCloudConfigProvider.future);
   final db = ref.watch(local.appDatabaseProvider);
   final deviceId = await ref.watch(local.deviceIdProvider.future);
+
+  // Step 17(云同步 V2):Supabase 走增量同步。
+  if (config.type == CloudBackendType.supabase) {
+    final dbSvc =
+        (cloudProv as SupabaseProvider).databaseService
+            as SupabaseDatabaseService?;
+    if (dbSvc == null) {
+      // 理论上 cloudProviderInstanceProvider 初始化成功就一定有 databaseService;
+      // 兜底走 local-only 避免 UI 抛异常。
+      return const LocalOnlySyncService();
+    }
+    return IncrementalSyncService(
+      gateway: SupabaseIncrementalGateway(dbSvc),
+      db: db,
+      deviceId: deviceId,
+    );
+  }
+
+  // V1 快照路径:S3 / WebDAV / iCloud / BeeCount-Cloud。
   final ledgerRepo = await ref.watch(repo.ledgerRepositoryProvider.future);
   final categoryRepo = await ref.watch(repo.categoryRepositoryProvider.future);
   final accountRepo = await ref.watch(repo.accountRepositoryProvider.future);
@@ -97,9 +128,9 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
       await ref.watch(repo.transactionRepositoryProvider.future);
   final budgetRepo = await ref.watch(repo.budgetRepositoryProvider.future);
 
-  final manager = CloudSyncManager<LedgerSnapshot>(
+  final manager = CloudSyncManager<MultiLedgerSnapshot>(
     provider: cloudProv,
-    serializer: const LedgerSnapshotSerializer(),
+    serializer: const MultiLedgerSnapshotSerializer(),
   );
 
   return SnapshotSyncService(

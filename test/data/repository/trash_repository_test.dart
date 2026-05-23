@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bianbianbianbian/data/local/app_database.dart';
 import 'package:bianbianbianbian/data/repository/account_repository.dart';
 import 'package:bianbianbianbian/data/repository/category_repository.dart';
@@ -15,11 +17,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// 关键不变量：
 /// 1. listDeleted 仅返回软删行，按 deleted_at 倒序；
 /// 2. restoreById 清 deleted_at + 刷新 updated_at；不存在静默；
-/// 3. purgeById 物理删除；不写 sync_op（快照模型走整体覆盖）；
+///    Step 17（云同步 V2）后还要入队一条 `op='upsert'` 的 sync_op,
+///    payload `deleted_at = null`,让云端 LWW 把对应行恢复成活跃态;
+/// 3. purgeById 物理删除；**不**写 sync_op——硬删不需要远端传播,云端的
+///    对应行靠"30 天后软删 cron 清理"独立维护;
 /// 4. purgeAllDeleted 不影响活跃行；
 /// 5. listExpired(cutoff) 仅返回 deleted_at <= cutoff；
 /// 6. **Ledger 级联恢复**：restoreById 同步把同一时间戳软删的子流水/预算
-///    一并恢复，但不误恢复 deletedAt 不同的单独软删项。
+///    一并恢复，但不误恢复 deletedAt 不同的单独软删项;级联恢复的子项
+///    各自入队 sync_op upsert(Step 17 增补)。
 /// 7. **Ledger 级联硬删**：purgeById 把该 ledger 下全部流水/预算物理删除。
 void main() {
   late AppDatabase db;
@@ -179,6 +185,47 @@ void main() {
       final expired = await txRepo.listExpired(cutoff);
       expect(expired.map((t) => t.id), ['old-tx']);
     });
+
+    test('Step 17(云同步 V2):restoreById 入队 op=upsert, payload deleted_at = null',
+        () async {
+      await seedLedger('L1');
+      await seedTx('tx-1', 'L1');
+      await txRepo.softDeleteById('tx-1');
+
+      final beforeCount = (await db.syncOpDao.listAll()).length;
+      currentTs += 7000;
+      await txRepo.restoreById('tx-1');
+
+      final after = await db.syncOpDao.listAll();
+      expect(after.length, beforeCount + 1,
+          reason: 'restoreById 应入队恰好 1 条 sync_op');
+      final lastOp = after.last;
+      expect(lastOp.entity, 'transaction');
+      expect(lastOp.entityId, 'tx-1');
+      expect(lastOp.op, 'upsert');
+      final payload = jsonDecode(lastOp.payload) as Map<String, dynamic>;
+      expect(payload['deleted_at'], isNull,
+          reason: 'restore payload deleted_at 必须显式置 null');
+    });
+
+    test('restoreById 对已活跃 id 幂等:不入队 sync_op', () async {
+      await seedLedger('L1');
+      await seedTx('tx-1', 'L1');
+      // 没软删,直接 restore = no-op
+      final before = (await db.syncOpDao.listAll()).length;
+      await txRepo.restoreById('tx-1');
+      expect((await db.syncOpDao.listAll()).length, before);
+    });
+
+    test('purgeById 入队 sync_op(硬删本地，云端同步删除)', () async {
+      await seedLedger('L1');
+      await seedTx('tx-1', 'L1');
+      await txRepo.softDeleteById('tx-1');
+
+      final before = (await db.syncOpDao.listAll()).length;
+      await txRepo.purgeById('tx-1');
+      expect((await db.syncOpDao.listAll()).length, before + 1);
+    });
   });
 
   group('CategoryRepository / AccountRepository: 基础 trash 路径', () {
@@ -283,6 +330,36 @@ void main() {
       // L2 下流水保持不变
       final l2 = allRows.where((r) => r.ledgerId == 'L2').toList();
       expect(l2.length, 1);
+    });
+
+    test(
+        'Step 17(云同步 V2):账本级联恢复时,ledger + 同时间戳级联子项各自入队 upsert',
+        () async {
+      // 用户单独软删 tx-l1-a(它的 deletedAt 与 L1 不同,不参与级联)
+      currentTs = 5000;
+      await txRepo.softDeleteById('tx-l1-a');
+      // 级联软删 L1(L1 + tx-l1-b 同时间戳)
+      currentTs = 10000;
+      await ledgerRepo.softDeleteById('L1');
+
+      final beforeCount = (await db.syncOpDao.listAll()).length;
+      currentTs = 20000;
+      await ledgerRepo.restoreById('L1');
+
+      final after = await db.syncOpDao.listAll();
+      final newOps = after.skip(beforeCount).toList();
+
+      // 恢复路径应入队:L1 自身 + tx-l1-b(级联子项),但不入队 tx-l1-a(单独软删)
+      expect(
+        newOps.map((o) => '${o.entity}:${o.entityId}').toSet(),
+        {'ledger:L1', 'transaction:tx-l1-b'},
+        reason: 'tx-l1-a 不在本次级联恢复中,不应被 enqueue',
+      );
+      for (final op in newOps) {
+        expect(op.op, 'upsert');
+        final payload = jsonDecode(op.payload) as Map<String, dynamic>;
+        expect(payload['deleted_at'], isNull);
+      }
     });
   });
 }

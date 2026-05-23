@@ -48,51 +48,7 @@ class BackupDateRange {
   }
 }
 
-/// 多账本备份快照——JSON 输出的顶层信封。
-///
-/// 之所以再包一层而不直接导出 `List<LedgerSnapshot>`：① 给版本号留位置；
-/// ② Step 13.3 导入时可由顶层 version 决定走哪条解析路径；③ device_id +
-/// exported_at 让用户能从备份文件本身判断来源。
-///
-/// **不持久化任何数据库**——仅用于导出/导入的内存表达。
-@immutable
-class MultiLedgerSnapshot {
-  static const int kVersion = 1;
-
-  const MultiLedgerSnapshot({
-    required this.version,
-    required this.exportedAt,
-    required this.deviceId,
-    required this.ledgers,
-  });
-
-  final int version;
-  final DateTime exportedAt;
-  final String deviceId;
-  final List<LedgerSnapshot> ledgers;
-
-  Map<String, dynamic> toJson() => {
-        'version': version,
-        'exported_at': exportedAt.toIso8601String(),
-        'device_id': deviceId,
-        'ledgers': ledgers.map((l) => l.toJson()).toList(),
-      };
-
-  factory MultiLedgerSnapshot.fromJson(Map<String, dynamic> json) {
-    final version = (json['version'] as num?)?.toInt() ?? 1;
-    if (version > kVersion) {
-      throw FormatException('Unsupported backup version: $version');
-    }
-    return MultiLedgerSnapshot(
-      version: version,
-      exportedAt: DateTime.parse(json['exported_at'] as String),
-      deviceId: json['device_id'] as String,
-      ledgers: (json['ledgers'] as List<dynamic>)
-          .map((e) => LedgerSnapshot.fromJson(e as Map<String, dynamic>))
-          .toList(growable: false),
-    );
-  }
-}
+// MultiLedgerSnapshot 已移至 snapshot_serializer.dart，此处通过 import 引用。
 
 const _csvBom = '\uFEFF';
 

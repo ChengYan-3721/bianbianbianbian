@@ -3,27 +3,6 @@ library;
 import 'package:flutter_cloud_sync/flutter_cloud_sync.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
-/// Supabase implementation of [CloudDatabaseService].
-///
-/// Provides CRUD operations and realtime subscriptions for Supabase PostgreSQL database.
-///
-/// Example:
-/// ```dart
-/// final client = supabase.Supabase.instance.client;
-/// final dbService = SupabaseDatabaseService(client);
-///
-/// // Insert
-/// final record = await dbService.insert(
-///   table: 'transactions',
-///   data: {'amount': 100, 'note': 'Test'},
-/// );
-///
-/// // Query
-/// final records = await dbService.query(
-///   table: 'transactions',
-///   filters: [QueryFilter.eq('user_id', userId)],
-/// );
-/// ```
 class SupabaseDatabaseService implements CloudDatabaseService {
   final supabase.SupabaseClient _client;
 
@@ -36,19 +15,16 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     bool autoInjectUserId = true,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // 自动注入 user_id
       final insertData = Map<String, dynamic>.from(data);
       if (autoInjectUserId && !insertData.containsKey('user_id')) {
         insertData['user_id'] = user.id;
       }
 
-      // Insert and return the created record
       final response = await _client
           .from(table)
           .insert(insertData)
@@ -64,19 +40,16 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     }
   }
 
-  /// Batch insert multiple records
   Future<List<Map<String, dynamic>>> insertBatch({
     required String table,
     required List<Map<String, dynamic>> data,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Batch insert and return created records
       final response = await _client
           .from(table)
           .insert(data)
@@ -99,24 +72,20 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     bool autoFilterByUser = true,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Build query
       var query = _client
           .from(table)
           .update(data)
           .eq('id', id);
 
-      // 自动添加用户过滤
       if (autoFilterByUser) {
         query = query.eq('user_id', user.id);
       }
 
-      // Update and return the updated record
       final response = await query.select().single();
 
       return response as Map<String, dynamic>;
@@ -135,24 +104,20 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     bool autoFilterByUser = true,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Build query
       var query = _client
           .from(table)
           .delete()
           .eq('id', id);
 
-      // 自动添加用户过滤
       if (autoFilterByUser) {
         query = query.eq('user_id', user.id);
       }
 
-      // Delete record
       await query;
     } on supabase.PostgrestException catch (e) {
       throw CloudStorageException('Delete failed: ${e.message}', e);
@@ -173,33 +138,27 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     bool autoFilterByUser = true,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Build query
       dynamic query = _client.from(table).select();
 
-      // 自动添加用户过滤
       if (autoFilterByUser) {
         query = query.eq('user_id', user.id);
       }
 
-      // Apply filters
       if (filters != null) {
         for (final filter in filters) {
           query = _applyFilter(query, filter);
         }
       }
 
-      // Apply ordering
       if (orderBy != null) {
         query = query.order(orderBy, ascending: !descending);
       }
 
-      // Apply pagination
       if (limit != null) {
         query = query.limit(limit);
       }
@@ -207,7 +166,6 @@ class SupabaseDatabaseService implements CloudDatabaseService {
         query = query.range(offset, offset + (limit ?? 1000) - 1);
       }
 
-      // Execute query
       final response = await query;
 
       return List<Map<String, dynamic>>.from(response as List);
@@ -225,13 +183,11 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     required String id,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Get single record
       final response = await _client
           .from(table)
           .select()
@@ -253,8 +209,6 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     List<QueryFilter>? filters,
     String event = '*',
   }) {
-    // Note: Realtime subscriptions should be handled by SupabaseRealtimeService
-    // This method is kept for interface compatibility but delegates to realtime service
     throw UnimplementedError(
       'Use SupabaseRealtimeService for realtime subscriptions',
     );
@@ -266,13 +220,11 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     required List<Map<String, dynamic>> data,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Batch insert
       final response = await _client
           .from(table)
           .insert(data)
@@ -294,14 +246,11 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     String idField = 'id',
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Supabase doesn't support batch update directly
-      // We need to update records one by one
       for (final record in data) {
         final id = record[idField];
         if (id == null) {
@@ -327,13 +276,11 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     required List<QueryFilter> filters,
   }) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Build delete query with filters
       var query = _client.from(table).delete();
 
       for (final filter in filters) {
@@ -349,17 +296,69 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     }
   }
 
-  @override
-  Future<List<Map<String, dynamic>>> rawQuery(String query) async {
+  Future<void> deleteAllUserData({required String table}) async {
     try {
-      // Check authentication
       final user = _client.auth.currentUser;
       if (user == null) {
         throw CloudNotAuthenticatedException('User not authenticated');
       }
 
-      // Execute raw RPC call
-      // Note: This requires a custom PostgreSQL function to be created
+      await _client.from(table).delete().eq('user_id', user.id);
+    } on supabase.PostgrestException catch (e) {
+      throw CloudStorageException('Delete all from $table failed: ${e.message}', e);
+    } catch (e) {
+      if (e is CloudNotAuthenticatedException) rethrow;
+      throw CloudStorageException('Delete all from $table failed: $e', e);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> upsertBatch({
+    required String table,
+    required List<Map<String, dynamic>> data,
+    String onConflict = 'id',
+    bool autoInjectUserId = true,
+  }) async {
+    if (data.isEmpty) return const [];
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        throw CloudNotAuthenticatedException('User not authenticated');
+      }
+
+      final List<Map<String, dynamic>> payload;
+      if (autoInjectUserId) {
+        payload = data.map((row) {
+          if (row.containsKey('user_id') && row['user_id'] != null) {
+            return row;
+          }
+          return {...row, 'user_id': user.id};
+        }).toList(growable: false);
+      } else {
+        payload = data;
+      }
+
+      final response = await _client
+          .from(table)
+          .upsert(payload, onConflict: onConflict)
+          .select();
+
+      return List<Map<String, dynamic>>.from(response as List);
+    } on supabase.PostgrestException catch (e) {
+      throw CloudStorageException('Upsert batch failed: ${e.message}', e);
+    } catch (e) {
+      if (e is CloudNotAuthenticatedException) rethrow;
+      throw CloudStorageException('Upsert batch failed: $e', e);
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> rawQuery(String query) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        throw CloudNotAuthenticatedException('User not authenticated');
+      }
+
       final response = await _client.rpc('execute_raw_query', params: {
         'query_text': query,
       });
@@ -373,7 +372,6 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     }
   }
 
-  /// Apply filter to query
   dynamic _applyFilter(dynamic query, QueryFilter filter) {
     switch (filter.operator) {
       case 'eq':
@@ -394,6 +392,8 @@ class SupabaseDatabaseService implements CloudDatabaseService {
         return query.ilike(filter.column, filter.value);
       case 'in':
         return query.inFilter(filter.column, filter.value as List);
+      case 'not.in':
+        return query.not(filter.column, 'in', '(${(filter.value as List).map((v) => "'${v.toString().replaceAll("'", "''")}'").join(',')})');
       case 'is':
         return query.isFilter(filter.column, filter.value);
       case 'contains':

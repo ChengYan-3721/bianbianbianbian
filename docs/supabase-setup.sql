@@ -6,11 +6,20 @@
 --       任何后端配置。
 --
 -- 覆盖：
---   1. 账本快照备份 bucket（bbbb-backups，Phase 10 已上线）
---   2. 附件本体 bucket（attachments，Phase 11 新增）
+--   1. 账本快照备份 bucket（bbbb-backups，Phase 10 已上线；V2 后仅未升级旧 App 使用）
+--   2. 附件本体 bucket（attachments，Phase 11 新增；V2 仍在用，附件继续走对象存储）
 --   3. 上述两个 bucket 的 SELECT / INSERT / UPDATE / DELETE 共 8 条 RLS 策略
---   4. 验证查询：用两个测试账户跑一遍，确认跨用户访问被挡
---   5. 回滚段（DROP POLICY + DELETE FROM storage.buckets）
+--   4. **V2 增量同步业务表（Phase 17 新增）**：ledger / category / account /
+--      transaction_entry / budget 共 5 张 Postgres 表 + 6 个索引 + 20 条 RLS 策略
+--   5. 验证查询：用两个测试账户跑一遍，确认跨用户访问被挡（bucket + 业务表都验）
+--   6. 回滚段（DROP POLICY + DROP TABLE + DELETE FROM storage.buckets）
+--
+-- V1 → V2 升级提示：
+--   - 旧 App（V1 快照模式）只读写 bbbb-backups bucket，本脚本保留该段不动；
+--   - 新 App（V2 增量模式）只读写下面 5 张业务表 + attachments bucket，不再碰
+--     bbbb-backups；
+--   - 升级用户必须**重新跑一次本脚本**，确保 V2 段（业务表 + RLS）已创建；
+--     脚本幂等，重复跑不会破坏现有数据。
 --
 -- 加密说明：
 --   本脚本与 App 均**不做云端加密**。账本快照是明文 JSON、附件是原始格式
@@ -198,6 +207,197 @@ create policy "attachments: owner can delete"
 
 
 -- =============================================================================
+-- 5. V2 增量同步业务表（Phase 17 新增）
+-- =============================================================================
+-- 设计要点：
+--   - 字段以本地 drift 表为真值源（lib/data/local/tables/*.dart）；新增本地列
+--     时必须同步在此追加 ALTER TABLE 段。
+--   - id 列类型 = text（与本地 TextColumn 一致；不用 uuid，避免 PostgREST 把
+--     uuid 列包装成对象，简化 push/pull 序列化）。
+--   - user_id 列类型 = uuid（对接 auth.users.id），是 RLS 隔离的唯一依据。
+--   - 时间戳列（updated_at / occurred_at / created_at / start_date /
+--     last_settled_at）= bigint（epoch ms，与本地 IntColumn 一致）。
+--   - note_encrypted / attachments_encrypted = text 存 base64 字符串
+--     （本地 BLOB 通过 toJson 已经 base64 化，roundtrip 不需要 PostgREST bytea
+--     编码，简化数倍）。
+--   - bool 字段（archived / is_favorite / include_in_total / carry_over）= boolean
+--     而非 int 0/1，因为 PostgREST 自动 bool ↔ JSON bool，与本地 entity 层
+--     的 Dart bool 直接对接，避免增量同步路径里多一层 int↔bool 归一化。
+--     本地 drift 仍用 IntColumn 0/1，由 entity_mappers 在 row↔entity 时做转换。
+--   - 5 张表均无外键 references，仅靠应用层维护引用一致性。理由：多设备同步时
+--     pull 顺序无法保证（先拉到 transaction，后才拉到 ledger），FK CASCADE 会
+--     导致 INSERT 失败或意外清空数据。
+--   - 索引：(user_id, updated_at) 是增量 pull 的 hot path（where user_id =
+--     ? and updated_at > ?）；transaction_entry 额外补 (user_id, ledger_id,
+--     occurred_at desc) 给后续 server-side 查询用。
+-- -----------------------------------------------------------------------------
+
+-- 5.1 ledger（账本）
+create table if not exists public.ledger (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  cover_emoji text,
+  cover_svg text,
+  default_currency text default 'CNY',
+  archived boolean default false,
+  created_at bigint not null,
+  updated_at bigint not null,
+  deleted_at bigint,
+  device_id text not null
+);
+create index if not exists ledger_user_updated_idx on public.ledger(user_id, updated_at);
+
+-- 5.2 category（分类，全局共享，跨账本可见）
+create table if not exists public.category (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  icon text,
+  icon_svg text,
+  color text,
+  parent_key text not null,
+  sort_order int default 0,
+  is_favorite boolean default false,
+  updated_at bigint not null,
+  deleted_at bigint,
+  device_id text not null
+);
+create index if not exists category_user_updated_idx on public.category(user_id, updated_at);
+
+-- 5.3 account（资产账户，全局共享）
+create table if not exists public.account (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  type text not null,
+  icon text,
+  icon_svg text,
+  color text,
+  initial_balance double precision default 0,
+  include_in_total boolean default true,
+  currency text default 'CNY',
+  billing_day int,
+  repayment_day int,
+  updated_at bigint not null,
+  deleted_at bigint,
+  device_id text not null
+);
+create index if not exists account_user_updated_idx on public.account(user_id, updated_at);
+
+-- 5.4 transaction_entry（流水，按 ledger_id 软引用，无 FK）
+create table if not exists public.transaction_entry (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  ledger_id text not null,
+  type text not null,
+  amount double precision not null,
+  currency text not null,
+  fx_rate double precision default 1.0,
+  category_id text,
+  account_id text,
+  to_account_id text,
+  occurred_at bigint not null,
+  note_encrypted text,
+  attachments_encrypted text,
+  tags text,
+  content_hash text,
+  updated_at bigint not null,
+  deleted_at bigint,
+  device_id text not null
+);
+create index if not exists tx_user_updated_idx on public.transaction_entry(user_id, updated_at);
+create index if not exists tx_user_ledger_occurred_idx on public.transaction_entry(user_id, ledger_id, occurred_at desc);
+
+-- 5.5 budget（预算）
+create table if not exists public.budget (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  ledger_id text not null,
+  period text not null,
+  category_id text,
+  amount double precision not null,
+  carry_over boolean default false,
+  carry_balance double precision default 0,
+  last_settled_at bigint,
+  start_date bigint not null,
+  updated_at bigint not null,
+  deleted_at bigint,
+  device_id text not null
+);
+create index if not exists budget_user_updated_idx on public.budget(user_id, updated_at);
+
+
+-- -----------------------------------------------------------------------------
+-- 6. V2 业务表 RLS：5 张表 × 4 op = 20 条策略
+-- -----------------------------------------------------------------------------
+-- 与 Storage RLS 不同，业务表的 RLS 走 user_id = auth.uid() 直接判定。
+-- - SELECT / DELETE：USING 子句校验旧行 user_id == auth.uid()；
+-- - INSERT：WITH CHECK 子句校验新行 user_id == auth.uid()，禁止伪造 user_id；
+-- - UPDATE：USING（旧行）+ WITH CHECK（新行）双校验，防止把别人的行改成自己的。
+--
+-- 客户端 push 路径必须显式把 user_id 设为 auth.uid()——见
+-- packages/flutter_cloud_sync_supabase 的 upsertBatch 实现：调用方注入 user_id，
+-- 或由该方法读取 auth.currentUser.id 自动注入。
+
+alter table public.ledger enable row level security;
+alter table public.category enable row level security;
+alter table public.account enable row level security;
+alter table public.transaction_entry enable row level security;
+alter table public.budget enable row level security;
+
+-- 6.1 ledger
+drop policy if exists "ledger: owner can read"   on public.ledger;
+create policy "ledger: owner can read"   on public.ledger for select to authenticated using       (user_id = auth.uid());
+drop policy if exists "ledger: owner can insert" on public.ledger;
+create policy "ledger: owner can insert" on public.ledger for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "ledger: owner can update" on public.ledger;
+create policy "ledger: owner can update" on public.ledger for update to authenticated using       (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "ledger: owner can delete" on public.ledger;
+create policy "ledger: owner can delete" on public.ledger for delete to authenticated using       (user_id = auth.uid());
+
+-- 6.2 category
+drop policy if exists "category: owner can read"   on public.category;
+create policy "category: owner can read"   on public.category for select to authenticated using       (user_id = auth.uid());
+drop policy if exists "category: owner can insert" on public.category;
+create policy "category: owner can insert" on public.category for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "category: owner can update" on public.category;
+create policy "category: owner can update" on public.category for update to authenticated using       (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "category: owner can delete" on public.category;
+create policy "category: owner can delete" on public.category for delete to authenticated using       (user_id = auth.uid());
+
+-- 6.3 account
+drop policy if exists "account: owner can read"   on public.account;
+create policy "account: owner can read"   on public.account for select to authenticated using       (user_id = auth.uid());
+drop policy if exists "account: owner can insert" on public.account;
+create policy "account: owner can insert" on public.account for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "account: owner can update" on public.account;
+create policy "account: owner can update" on public.account for update to authenticated using       (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "account: owner can delete" on public.account;
+create policy "account: owner can delete" on public.account for delete to authenticated using       (user_id = auth.uid());
+
+-- 6.4 transaction_entry
+drop policy if exists "transaction_entry: owner can read"   on public.transaction_entry;
+create policy "transaction_entry: owner can read"   on public.transaction_entry for select to authenticated using       (user_id = auth.uid());
+drop policy if exists "transaction_entry: owner can insert" on public.transaction_entry;
+create policy "transaction_entry: owner can insert" on public.transaction_entry for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "transaction_entry: owner can update" on public.transaction_entry;
+create policy "transaction_entry: owner can update" on public.transaction_entry for update to authenticated using       (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "transaction_entry: owner can delete" on public.transaction_entry;
+create policy "transaction_entry: owner can delete" on public.transaction_entry for delete to authenticated using       (user_id = auth.uid());
+
+-- 6.5 budget
+drop policy if exists "budget: owner can read"   on public.budget;
+create policy "budget: owner can read"   on public.budget for select to authenticated using       (user_id = auth.uid());
+drop policy if exists "budget: owner can insert" on public.budget;
+create policy "budget: owner can insert" on public.budget for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "budget: owner can update" on public.budget;
+create policy "budget: owner can update" on public.budget for update to authenticated using       (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "budget: owner can delete" on public.budget;
+create policy "budget: owner can delete" on public.budget for delete to authenticated using       (user_id = auth.uid());
+
+
+-- =============================================================================
 -- 验证段 · 跑这些查询确认 RLS 真的挡住了跨用户访问
 -- =============================================================================
 -- 准备工作：
@@ -248,6 +448,60 @@ where schemaname = 'storage' and tablename = 'objects'
   and (policyname like 'backups:%' or policyname like 'attachments:%')
 order by policyname;
 -- 期望返回 8 行：backups SELECT/INSERT/UPDATE/DELETE + attachments 同上。
+
+-- V5. 列出 V2 业务表的 RLS 策略，确认全部 20 条已生效
+select schemaname, tablename, policyname, cmd, roles
+from pg_policies
+where schemaname = 'public'
+  and tablename in ('ledger', 'category', 'account', 'transaction_entry', 'budget')
+order by tablename, policyname;
+-- 期望返回 20 行：5 张表 × (read/insert/update/delete) 各 4 条。
+
+-- V6. 列出 V2 业务表本身 + 索引，确认全部 5 张表 + 6 个索引已创建
+select tablename from pg_tables
+where schemaname = 'public'
+  and tablename in ('ledger', 'category', 'account', 'transaction_entry', 'budget')
+order by tablename;
+-- 期望返回 5 行
+
+select indexname, tablename from pg_indexes
+where schemaname = 'public'
+  and tablename in ('ledger', 'category', 'account', 'transaction_entry', 'budget')
+  and indexname not like '%_pkey'
+order by tablename, indexname;
+-- 期望返回 6 行（不含主键索引）：
+--   account_user_updated_idx           on account
+--   budget_user_updated_idx            on budget
+--   category_user_updated_idx          on category
+--   ledger_user_updated_idx            on ledger
+--   tx_user_ledger_occurred_idx        on transaction_entry
+--   tx_user_updated_idx                on transaction_entry
+-- 4 张表各 1 个 (user_id, updated_at) + transaction_entry 多 1 个
+-- (user_id, ledger_id, occurred_at desc) = 共 6 个。
+
+-- V7. 验业务表 RLS：模拟跨用户访问被挡
+-- 准备：用 SQL Editor 顶部的 "Run as" 选 a@test.local（或在客户端用 a 的 token）。
+-- 先以 a 身份插一行 ledger：
+-- insert into public.ledger
+--   (id, user_id, name, default_currency, created_at, updated_at, device_id)
+-- values
+--   ('test-ledger-a', auth.uid(), '测试账本A', 'CNY',
+--    extract(epoch from now())::bigint * 1000,
+--    extract(epoch from now())::bigint * 1000, 'test-device-a');
+-- 期望：成功插入。
+--
+-- 然后切到 b@test.local 身份查询：
+-- select * from public.ledger where id = 'test-ledger-a';
+-- 期望：返回 0 行（RLS 挡住）。
+--
+-- 仍以 b 身份尝试伪造 user_id = a.uid 插入：
+-- insert into public.ledger
+--   (id, user_id, name, default_currency, created_at, updated_at, device_id)
+-- values
+--   ('test-ledger-fake', '<UID_A>'::uuid, '伪造账本', 'CNY', 0, 0, 'b');
+-- 期望：报 "new row violates row-level security policy for table 'ledger'"。
+--
+-- 清理：以 a 身份 delete from public.ledger where id = 'test-ledger-a';
 
 
 -- =============================================================================
@@ -301,3 +555,32 @@ order by policyname;
 -- -- 2. 删 bucket（必须先清空对象，否则报错）
 -- delete from storage.objects where bucket_id in ('bbbb-backups', 'attachments');
 -- delete from storage.buckets where id in ('bbbb-backups', 'attachments');
+--
+-- -- 3. 删 V2 业务表的 RLS 策略（按表分组，共 20 条）
+-- drop policy if exists "ledger: owner can read"            on public.ledger;
+-- drop policy if exists "ledger: owner can insert"          on public.ledger;
+-- drop policy if exists "ledger: owner can update"          on public.ledger;
+-- drop policy if exists "ledger: owner can delete"          on public.ledger;
+-- drop policy if exists "category: owner can read"          on public.category;
+-- drop policy if exists "category: owner can insert"        on public.category;
+-- drop policy if exists "category: owner can update"        on public.category;
+-- drop policy if exists "category: owner can delete"        on public.category;
+-- drop policy if exists "account: owner can read"           on public.account;
+-- drop policy if exists "account: owner can insert"         on public.account;
+-- drop policy if exists "account: owner can update"         on public.account;
+-- drop policy if exists "account: owner can delete"         on public.account;
+-- drop policy if exists "transaction_entry: owner can read"   on public.transaction_entry;
+-- drop policy if exists "transaction_entry: owner can insert" on public.transaction_entry;
+-- drop policy if exists "transaction_entry: owner can update" on public.transaction_entry;
+-- drop policy if exists "transaction_entry: owner can delete" on public.transaction_entry;
+-- drop policy if exists "budget: owner can read"            on public.budget;
+-- drop policy if exists "budget: owner can insert"          on public.budget;
+-- drop policy if exists "budget: owner can update"          on public.budget;
+-- drop policy if exists "budget: owner can delete"          on public.budget;
+--
+-- -- 4. 删 V2 业务表（CASCADE 会自动连带索引；如有其他对象依赖请先排查）
+-- drop table if exists public.transaction_entry cascade;
+-- drop table if exists public.budget cascade;
+-- drop table if exists public.category cascade;
+-- drop table if exists public.account cascade;
+-- drop table if exists public.ledger cascade;

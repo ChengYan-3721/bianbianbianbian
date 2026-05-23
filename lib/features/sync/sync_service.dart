@@ -12,26 +12,34 @@ import 'attachment/attachment_uploader.dart';
 import 'cloud_backup_discovery.dart';
 import 'snapshot_serializer.dart';
 
-/// V1 同步服务：账本快照模型（整库 upload / 整库 download / 指纹比对）。
+/// V1 同步服务：多账本快照模型（整库 upload / 整库 download / 指纹比对）。
 ///
 /// **不**实现 implementation-plan §10.2 的 sync_op 队列 + LWW 增量合并；
 /// 那是 V2 多设备双向同步的形态。V1 选择与"参考方案"（蜜蜂记账）一致的
-/// 简化：账本视为一个 JSON 文件，每次上传/下载是整体覆盖。
+/// 简化：本地所有账本视为一个 JSON 文件，每次上传/下载是整体覆盖。
 abstract class SyncService {
-  /// 上传当前账本快照到云端（覆盖现有备份）。
+  /// 上传本地全部账本快照到云端（覆盖现有备份）。
+  ///
+  /// [ledgerId] 参数在 V1 多账本单文件模式下被忽略——始终上传全部账本。
   Future<void> upload({required String ledgerId});
 
   /// 从云端下载快照并恢复到本地（覆盖式）。
   /// 返回写入的流水条数；云端不存在备份时返回 0。
+  ///
+  /// [ledgerId] 参数在 V1 多账本单文件模式下被忽略——始终下载全部账本。
   Future<int> downloadAndRestore({required String ledgerId});
 
-  /// 当前账本的同步状态。`forceRefresh=true` 跳过 cache 重新拉云端。
+  /// 当前本地全部数据的同步状态。`forceRefresh=true` 跳过 cache 重新拉云端。
+  ///
+  /// [ledgerId] 参数在 V1 多账本单文件模式下被忽略。
   Future<SyncStatus> getStatus({
     required String ledgerId,
     bool forceRefresh = false,
   });
 
   /// 删除云端备份。云端无备份视为成功（幂等）。
+  ///
+  /// [ledgerId] 参数在 V1 多账本单文件模式下被忽略。
   Future<void> deleteRemote({required String ledgerId});
 
   /// 清除内部状态缓存。本地数据变更后调用，强制下次 [getStatus] 重算。
@@ -39,7 +47,7 @@ abstract class SyncService {
 
   /// 枚举云端所有可恢复备份。
   ///
-  /// - 鉴权后端（Supabase）：仅扫 `users/<auth.uid()>/ledgers/`，RLS 必须；
+  /// - 鉴权后端（Supabase）：仅扫 `users/<auth.uid()>/`，RLS 必须；
   /// - 非鉴权后端（S3 / WebDAV / iCloud）：扫 `users/` 全前缀，可以发现历史
   ///   deviceId 下的老备份——这是"重装后找回备份"的核心能力。
   ///
@@ -49,13 +57,15 @@ abstract class SyncService {
   /// 从指定备份恢复到本地——**追加为新账本**：为云端 ledger 分配新 UUID，
   /// 流水/预算的 ledgerId 全部 remap，本地原有账本保持不动。
   ///
+  /// 多账本快照模式下，[backup] 包含的所有账本都会被恢复。
+  ///
   /// [conflictStrategy] 控制同名账本冲突时的行为：
   /// - [LedgerNameConflictStrategy.merge]:合并到本地同名账本;
   /// - [LedgerNameConflictStrategy.overwrite]:覆盖本地同名账本;
   /// - [LedgerNameConflictStrategy.rename]:以 [renameTo] 新建账本;
   /// - null:自动生成新 UUID 保留原名(旧行为)。
   ///
-  /// 返回新建的本地 ledger.id。
+  /// 返回恢复的账本数量（字符串形式，逗号分隔的 ledgerId 列表）。
   Future<String> restoreFromBackup(
     RemoteBackup backup, {
     LedgerNameConflictStrategy? conflictStrategy,
@@ -69,6 +79,20 @@ abstract class SyncService {
   /// 删除云端指定路径的备份（用于 BackupListPage 里逐条删除）。
   /// 不存在视为幂等成功。
   Future<void> deleteBackupAt(String cloudPath);
+
+  /// 强制推送：将本地全部数据覆盖到云端，使云端与本地完全一致。
+  ///
+  /// 与 [upload] 的区别：
+  /// - [upload] 是增量/快照同步，可能因 LWW 或冲突策略保留云端数据；
+  /// - [forcePushAll] 是"本地为准"的全量覆盖，云端旧数据会被清除或覆盖。
+  Future<void> forcePushAll();
+
+  /// 强制拉取：将云端全部数据覆盖到本地，使本地与云端完全一致。
+  ///
+  /// 与 [downloadAndRestore] 的区别：
+  /// - [downloadAndRestore] 按单个账本恢复；
+  /// - [forcePullAll] 是"云端为准"的全量覆盖，本地所有数据被云端替换。
+  Future<void> forcePullAll();
 }
 
 /// 未配置或未激活云服务时的兜底实现——所有操作抛 [UnsupportedError]，
@@ -128,12 +152,24 @@ class LocalOnlySyncService implements SyncService {
 
   @override
   void clearCache() {}
+
+  @override
+  Future<void> forcePushAll() async {
+    throw UnsupportedError('Cloud sync not configured');
+  }
+
+  @override
+  Future<void> forcePullAll() async {
+    throw UnsupportedError('Cloud sync not configured');
+  }
 }
 
-/// 快照模式同步服务（V1）：把账本视作一个文件，整体上传/下载/对比。
+/// 快照模式同步服务（V1）：把所有账本视作一个文件，整体上传/下载/对比。
+///
+/// 云端路径为单一 `snapshot.json` 文件，包含本地全部活跃账本的完整数据。
 class SnapshotSyncService implements SyncService {
   SnapshotSyncService({
-    required CloudSyncManager<LedgerSnapshot> manager,
+    required CloudSyncManager<MultiLedgerSnapshot> manager,
     required AppDatabase db,
     required String deviceId,
     required CloudBackendType backendType,
@@ -152,7 +188,7 @@ class SnapshotSyncService implements SyncService {
         _transactionRepo = transactionRepo,
         _budgetRepo = budgetRepo;
 
-  final CloudSyncManager<LedgerSnapshot> _manager;
+  final CloudSyncManager<MultiLedgerSnapshot> _manager;
   final AppDatabase _db;
   final String _deviceId;
   final CloudBackendType _backendType;
@@ -170,30 +206,24 @@ class SnapshotSyncService implements SyncService {
       _backendType == CloudBackendType.supabase ||
       _backendType == CloudBackendType.beecountCloud;
 
-  /// 云端路径。
+  /// 云端路径——单一 `snapshot.json` 文件包含全部账本。
   ///
-  /// - 鉴权后端（Supabase）：`users/<auth.uid()>/ledgers/<ledgerId>.json`，
+  /// - 鉴权后端（Supabase）：`users/<auth.uid()>/snapshot.json`，
   ///   RLS 强制 userId 必须等于 auth.uid()。
-  /// - 非鉴权后端（S3/WebDAV/iCloud）：`users/ledgers/<ledgerId>.json`，
-  ///   整桶都是同一用户的，使用固定目录 + ledgerId（UUID）构建路径：
-  ///   ① UUID 纯 ASCII，避免 S3 `_encodeKey` 对中文双重编码导致 LIST 可见
-  ///      但 download 404 的问题；
-  ///   ② UUID 不随账本改名变化，改名后仍能找到原有云端备份；
-  ///   ③ 配合 `importLedgerSnapshotAsNew` 的"保留原始 ledgerId"策略，
-  ///      多设备恢复同一备份后 ledgerId 相同，自然共享同一云端路径。
-  Future<String> _path(String ledgerId) async {
+  /// - 非鉴权后端（S3/WebDAV/iCloud）：`users/snapshot.json`，
+  ///   整桶都是同一用户的，使用固定路径。
+  Future<String> _path() async {
     if (_hasRealAuth) {
       final user = await _manager.provider.auth.currentUser;
       final userId = user?.id ?? _deviceId;
-      return 'users/$userId/ledgers/$ledgerId.json';
+      return 'users/$userId/snapshot.json';
     }
-    // 非鉴权后端：直接用 ledgerId（UUID），纯 ASCII 无编码问题
-    return 'users/ledgers/$ledgerId.json';
+    return 'users/snapshot.json';
   }
 
-  Future<LedgerSnapshot> _exportLocal(String ledgerId) {
-    return exportLedgerSnapshot(
-      ledgerId: ledgerId,
+  /// 导出本地全部活跃账本为 [MultiLedgerSnapshot]。
+  Future<MultiLedgerSnapshot> _exportAll() {
+    return exportMultiLedgerSnapshot(
       deviceId: _deviceId,
       ledgerRepo: _ledgerRepo,
       categoryRepo: _categoryRepo,
@@ -205,19 +235,19 @@ class SnapshotSyncService implements SyncService {
 
   @override
   Future<void> upload({required String ledgerId}) async {
-    // Step 11.2：上传 JSON 快照前先把所有 remoteKey == null 的附件上云。
+    // 上传 JSON 快照前先把所有 remoteKey == null 的附件上云。
     // 顺序：附件先 → 快照后。这样 B 设备拉到的快照里所有 attachmentsEncrypted
-    // 已含 remoteKey，可以走 lazy download 路径（Step 11.3）。
+    // 已含 remoteKey，可以走 lazy download 路径。
     // 单个附件失败不阻塞快照——uploadPending 会把失败的 meta 留 remoteKey 为
     // null，下次同步重试。
-    await _uploadPendingAttachments(ledgerId);
+    await _uploadPendingAttachments();
 
-    final snapshot = await _exportLocal(ledgerId);
-    final path = await _path(ledgerId);
+    final snapshot = await _exportAll();
+    final path = await _path();
     await _manager.upload(data: snapshot, path: path);
   }
 
-  /// Step 11.2：扫描指定账本下所有流水的附件元数据，把 `remoteKey == null`
+  /// 扫描所有活跃账本下所有流水的附件元数据，把 `remoteKey == null`
   /// 的项上传到云端，然后把回填的元数据写回 DB。仅在云端可写时调用。
   ///
   /// 实现细节：
@@ -226,13 +256,12 @@ class SnapshotSyncService implements SyncService {
   /// 2. 单条流水内的多个附件串行上传——已是 fast path（小于 3 张图）；
   /// 3. 写回时对 `attachments_encrypted` 走 customStatement，**不**改
   ///    `updated_at`——避免因 metadata 回填触发额外的快照「本地较新」判定。
-  Future<void> _uploadPendingAttachments(String ledgerId) async {
+  Future<void> _uploadPendingAttachments() async {
     final storage = _manager.provider.storage;
     final user = await _manager.provider.auth.currentUser;
     final uid = user?.id ?? _deviceId;
 
     final txRows = await (_db.select(_db.transactionEntryTable)
-          ..where((t) => t.ledgerId.equals(ledgerId))
           ..where((t) => t.attachmentsEncrypted.isNotNull()))
         .get();
 
@@ -274,16 +303,10 @@ class SnapshotSyncService implements SyncService {
 
   @override
   Future<int> downloadAndRestore({required String ledgerId}) async {
-    final path = await _path(ledgerId);
+    final path = await _path();
     final snapshot = await _manager.download(path: path);
     if (snapshot == null) return 0;
-    if (snapshot.ledger.id != ledgerId) {
-      throw StateError(
-        'Snapshot ledger id mismatch: expected $ledgerId, '
-        'got ${snapshot.ledger.id}',
-      );
-    }
-    return importLedgerSnapshot(snapshot: snapshot, db: _db);
+    return importMultiLedgerSnapshot(snapshot: snapshot, db: _db);
   }
 
   @override
@@ -291,8 +314,8 @@ class SnapshotSyncService implements SyncService {
     required String ledgerId,
     bool forceRefresh = false,
   }) async {
-    final snapshot = await _exportLocal(ledgerId);
-    final path = await _path(ledgerId);
+    final snapshot = await _exportAll();
+    final path = await _path();
     return _manager.getStatus(
       data: snapshot,
       path: path,
@@ -303,7 +326,7 @@ class SnapshotSyncService implements SyncService {
 
   @override
   Future<void> deleteRemote({required String ledgerId}) async {
-    final path = await _path(ledgerId);
+    final path = await _path();
     try {
       await _manager.deleteRemote(path: path);
     } on CloudStorageException {
@@ -315,7 +338,7 @@ class SnapshotSyncService implements SyncService {
   Future<List<RemoteBackup>> listBackups() async {
     // 伪鉴权后端（S3 / WebDAV / iCloud）的 currentUser.id 实为 customName /
     // accessKey 派生值,并非真账号。如果照旧把它当 authUid 传下去,会让
-    // discoverBackups 只扫 `users/<当前 customName>/ledgers/`,导致换设备时
+    // discoverBackups 只扫 `users/<当前 customName>/`,导致换设备时
     // 哪怕 customName 差一个字符也找不回旧备份——伪鉴权后端整桶都是自己的,
     // 应该扫全 `users/` 前缀。
     final authUid = _hasRealAuth
@@ -368,4 +391,23 @@ class SnapshotSyncService implements SyncService {
 
   @override
   void clearCache() => _manager.clearCache();
+
+  @override
+  Future<void> forcePushAll() async {
+    await _uploadPendingAttachments();
+    final snapshot = await _exportAll();
+    final path = await _path();
+    await _manager.upload(data: snapshot, path: path);
+    await _db.syncOpDao.clearAll();
+  }
+
+  @override
+  Future<void> forcePullAll() async {
+    final path = await _path();
+    final snapshot = await _manager.download(path: path);
+    if (snapshot != null) {
+      await importMultiLedgerSnapshot(snapshot: snapshot, db: _db, clearAllFirst: true);
+    }
+    await _db.syncOpDao.clearAll();
+  }
 }

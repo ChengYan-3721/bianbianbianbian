@@ -77,6 +77,9 @@ part 'app_database.g.dart';
 /// - v11（Step 15.3）：`user_pref` 追加 `icon_pack TEXT DEFAULT 'sticker'`。
 /// - v12（Step 16.1）：`user_pref` 追加 `reminder_enabled INTEGER DEFAULT 0` 与
 ///   `reminder_time TEXT`（'HH:mm' 格式，null = 从未设置）。
+/// - v13（Step 17·云同步 V2）：`user_pref` 追加 `last_pulled_at_json TEXT`
+///   （nullable，默认 null）——增量同步的逐表 pull 游标，shape 详见
+///   [UserPrefTable.lastPulledAtJson]。无数据迁移，仅 ALTER TABLE ADD COLUMN。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -105,7 +108,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -212,6 +215,14 @@ class AppDatabase extends _$AppDatabase {
             // reminder_time 两列。默认关闭 + null 时间（与新装行为一致）。
             await m.addColumn(userPrefTable, userPrefTable.reminderEnabled);
             await m.addColumn(userPrefTable, userPrefTable.reminderTime);
+          }
+
+          if (from < 13) {
+            // v12 → v13（Step 17·云同步 V2）：user_pref 追加
+            // last_pulled_at_json 列（nullable，默认 null）。
+            // 增量同步引擎首次启动时 cursor 为 null → 视为 0 → 首次 pull
+            // 即全量；之后由 IncrementalSyncService 推进游标。
+            await m.addColumn(userPrefTable, userPrefTable.lastPulledAtJson);
           }
         },
       );

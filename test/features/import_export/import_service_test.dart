@@ -10,7 +10,6 @@ import 'package:bianbianbianbian/domain/entity/ledger.dart';
 import 'package:bianbianbianbian/domain/entity/transaction_entry.dart';
 import 'package:bianbianbianbian/features/import_export/bbbak_codec.dart';
 import 'package:bianbianbianbian/features/import_export/csv/csv_lexer.dart';
-import 'package:bianbianbianbian/features/import_export/export_service.dart';
 import 'package:bianbianbianbian/features/import_export/import_service.dart';
 import 'package:bianbianbianbian/features/sync/snapshot_serializer.dart';
 import 'package:drift/native.dart';
@@ -738,13 +737,15 @@ void main() {
       final cats = await db.select(db.categoryTable).get();
       expect(cats.where((c) => c.name == '私房菜').first.parentKey, 'food');
       expect(cats.where((c) => c.name == '玄学').first.parentKey, 'other');
-      // sync_op:2 条 category upsert
+      // sync_op:2 条 category upsert + 3 条 transaction upsert
       final ops = await db.syncOpDao.listAll();
       final catOps = ops.where((o) => o.entity == 'category').toList();
       expect(catOps.length, 2);
       expect(catOps.every((o) => o.op == 'upsert'), true);
-      // 流水不进 sync_op
-      expect(ops.where((o) => o.entity == 'transaction'), isEmpty);
+      // 流水也进 sync_op（增量同步需要推送 CSV 导入的流水）
+      final txOps = ops.where((o) => o.entity == 'transaction').toList();
+      expect(txOps.length, 3);
+      expect(txOps.every((o) => o.op == 'upsert'), true);
     });
 
     test('分类复活（deletedAt 清空）', () async {
@@ -794,11 +795,13 @@ void main() {
           .getSingle();
       expect(revived.deletedAt, isNull);
       expect(revived.parentKey, 'food');
-      // sync_op: 1 条 category upsert
+      // sync_op: 1 条 category upsert + 1 条 transaction upsert
       final ops = await db.syncOpDao.listAll();
-      expect(ops.length, 1);
-      expect(ops.first.entity, 'category');
-      expect(ops.first.op, 'upsert');
+      expect(ops.length, 2);
+      final catOp = ops.firstWhere((o) => o.entity == 'category');
+      expect(catOp.op, 'upsert');
+      final txOp = ops.firstWhere((o) => o.entity == 'transaction');
+      expect(txOp.op, 'upsert');
     });
   });
 

@@ -28,24 +28,32 @@ void main() {
   testWidgets('列表状态:渲染每个备份的账本名 + 流水数', (tester) async {
     final svc = _FakeSyncService(backups: [
       RemoteBackup(
-        ledgerId: 'L1',
-        ledgerName: '生活',
+        ledgers: const [
+          RemoteBackupLedger(
+            ledgerId: 'L1',
+            ledgerName: '生活',
+            transactionCount: 42,
+            accountCount: 2,
+            categoryCount: 5,
+          ),
+        ],
         sourceDeviceId: 'dev-old-aaaa',
-        cloudPath: 'users/dev-old/ledgers/L1.json',
+        cloudPath: 'users/dev-old/snapshot.json',
         exportedAt: DateTime.utc(2026, 5, 1, 12),
-        transactionCount: 42,
-        accountCount: 2,
-        categoryCount: 5,
       ),
       RemoteBackup(
-        ledgerId: 'L2',
-        ledgerName: '工作',
+        ledgers: const [
+          RemoteBackupLedger(
+            ledgerId: 'L2',
+            ledgerName: '工作',
+            transactionCount: 7,
+            accountCount: 1,
+            categoryCount: 3,
+          ),
+        ],
         sourceDeviceId: 'dev-new-bbbb',
-        cloudPath: 'users/dev-new/ledgers/L2.json',
+        cloudPath: 'users/dev-new/snapshot.json',
         exportedAt: DateTime.utc(2026, 5, 2, 9),
-        transactionCount: 7,
-        accountCount: 1,
-        categoryCount: 3,
       ),
     ]);
     await _pumpPage(tester, svc);
@@ -126,4 +134,10 @@ class _FakeSyncService implements SyncService {
 
   @override
   void clearCache() {}
+
+  @override
+  Future<void> forcePushAll() async {}
+
+  @override
+  Future<void> forcePullAll() async {}
 }

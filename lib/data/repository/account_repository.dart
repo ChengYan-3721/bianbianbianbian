@@ -122,16 +122,63 @@ class LocalAccountRepository implements AccountRepository {
   @override
   Future<void> restoreById(String id) async {
     final now = _clock();
-    await _dao.restoreById(id, updatedAt: now.millisecondsSinceEpoch);
+    final nowMs = now.millisecondsSinceEpoch;
+    await _db.transaction(() async {
+      final row = await (_db.select(_db.accountTable)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (row == null) return;
+      if (row.deletedAt == null) return; // 已活跃,幂等。
+      await _dao.restoreById(id, updatedAt: nowMs);
+      // Step 17(云同步 V2):恢复 = 把 deleted_at 清空的 upsert。
+      // 因为 Account.copyWith(deletedAt: null) 会被当作"不传"而保留原值,
+      // 这里走 Map spread + 显式字段覆盖,直接构造 V2 push payload。
+      final restorePayload = <String, dynamic>{
+        ...rowToAccount(row).toJson(),
+        'deleted_at': null,
+        'updated_at': now.toIso8601String(),
+        'device_id': _deviceId,
+      };
+      await _syncOp.enqueue(
+        entity: 'account',
+        entityId: id,
+        op: 'upsert',
+        payload: jsonEncode(restorePayload),
+        enqueuedAt: nowMs,
+      );
+    });
   }
 
   @override
-  Future<int> purgeById(String id) {
+  Future<int> purgeById(String id) async {
+    final now = _clock();
+    final row = await (_db.select(_db.accountTable)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null) return 0;
+    await _syncOp.enqueue(
+      entity: 'account',
+      entityId: id,
+      op: 'delete',
+      payload: jsonEncode(rowToAccount(row).toJson()),
+      enqueuedAt: now.millisecondsSinceEpoch,
+    );
     return _dao.hardDeleteById(id);
   }
 
   @override
-  Future<int> purgeAllDeleted() {
+  Future<int> purgeAllDeleted() async {
+    final rows = await _dao.listDeleted();
+    final now = _clock();
+    for (final row in rows) {
+      await _syncOp.enqueue(
+        entity: 'account',
+        entityId: row.id,
+        op: 'delete',
+        payload: jsonEncode(rowToAccount(row).toJson()),
+        enqueuedAt: now.millisecondsSinceEpoch,
+      );
+    }
     return (_db.delete(_db.accountTable)
           ..where((t) => t.deletedAt.isNotNull()))
         .go();

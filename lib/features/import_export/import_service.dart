@@ -20,6 +20,7 @@ import '../../domain/entity/ledger.dart';
 import '../../domain/entity/transaction_entry.dart';
 import 'bbbak_codec.dart';
 import 'export_service.dart';
+import '../sync/snapshot_serializer.dart';
 
 /// 导入文件类型——按文件后缀分流（用户选文件后立刻识别决定 UI 文案）。
 ///
@@ -910,6 +911,11 @@ class BackupImportService {
         return null;
       }
 
+      // 先收集所有流水 companion + sync_op companion，再批量写入。
+      // 5000 条流水 = 2 次 batch 操作（而非 10000 次逐条 INSERT），
+      // 在事务内性能提升显著。
+      final txCompanions = <TransactionEntryTableCompanion>[];
+      final syncOpCompanions = <SyncOpTableCompanion>[];
       for (final row in rows) {
         var ledgerId = resolveLedgerId(row.ledgerLabel);
         if (ledgerId == null) {
@@ -947,12 +953,25 @@ class BackupImportService {
           updatedAt: now,
           deviceId: currentDeviceId,
         );
-        await db.into(db.transactionEntryTable).insert(
-              transactionEntryToCompanion(tx),
-              mode: InsertMode.insertOrAbort,
-            );
+        txCompanions.add(transactionEntryToCompanion(tx));
+        syncOpCompanions.add(SyncOpTableCompanion.insert(
+          entity: 'transaction',
+          entityId: tx.id,
+          op: 'upsert',
+          payload: jsonEncode(tx.toJson()),
+          enqueuedAt: nowMs,
+        ));
         transactionsWritten++;
       }
+      // 批量写入流水
+      if (txCompanions.isNotEmpty) {
+        await db.batch((b) {
+          for (final c in txCompanions) {
+            b.insert(db.transactionEntryTable, c, mode: InsertMode.insertOrAbort);
+          }
+        });
+      }
+      await db.syncOpDao.batchEnqueue(syncOpCompanions);
     });
 
     return BackupImportResult(

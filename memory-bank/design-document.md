@@ -243,6 +243,7 @@
 - 多设备并发写：后上传者覆盖前者；本地数据不丢（用户可手动从某台设备重新上传）。
 - 软删除（`deleted_at`）状态在快照内**不**保留——只保留活跃实体。这意味着：在 A 设备删了一条流水后从 B 设备恢复，A 设备会把它找回来。设计上的简化，V2 增量队列模型解决。
 - 每条记录仍保留 `id (uuid) / updated_at / deleted_at / device_id` 字段——为 V2 切换增量模型预留。
+- **V2 已落地（Phase 17）**：Supabase 后端走 `IncrementalSyncService` + 纯 LWW 决策表（见 §5.5.7）,以上"快照整体覆盖"的限制对 Supabase 不再适用；S3 / WebDAV / iCloud 后端仍是 V1 行为。
 
 #### 5.5.4 数据加密策略（V1 仅本地 DB at-rest）
 
@@ -278,6 +279,44 @@
 - **GC**：流水软删时只清本地 cache，保留 documents 与远端对象（垃圾桶可恢复）；30 天后硬删时统一删 documents 与远端。每周一次孤儿对象 sweep（远端有但 DB 无的、超 30 天宽限期）。
 - **跨 backend 切换**：弹确认对话框选择是否迁移已有附件到新 backend；旧 backend 上的对象由孤儿 sweep 清理。
 - **大小约束**：客户端单文件 ≤ 10MB（超出转 JPEG q=85 压缩）；服务端不重复约束。
+
+#### 5.5.7 V2 增量同步（Phase 17 已实施 · 仅 Supabase）
+
+**背景**：V1 快照模型上传慢（每个账本一个几百 KB JSON）、不支持整库一次同步、多设备同步要逐账本操作。Phase 17（2026-05-21）针对 Supabase 后端做了**按行增量整库同步**的重写。其它 3 个后端（S3 / WebDAV / iCloud）仍走 V1 SnapshotSyncService。
+
+**核心决策（不可逆）**：
+
+| 维度 | 决策 |
+| :-- | :-- |
+| 增量 backend 范围 | **仅 Supabase**（用 Postgres 表 + RLS）；S3 / WebDAV / iCloud 保留 V1 SnapshotSyncService |
+| 同步粒度 | **整库**（所有账本 + 所有流水）,按行同步 |
+| 冲突策略 | **纯 LWW**：`updated_at` 大者胜,平手按 `device_id` 字典序,无冲突副本 |
+| 触发节奏 | **写入 debounce 5s push**、**App 启动 / 切回前台 / 15min 定时 pull-then-push** |
+| 旧 V1 路径 | **硬切**：V1 对 Supabase 的代码路径全删；旧 `bbbb-backups` bucket 保留兼容旧客户端 |
+
+**5 张云端表（参见 `docs/supabase-setup.sql` V2 段）**：与本地业务表一对一对应——`ledger / category / account / transaction_entry / budget`,每张含 `user_id (uuid, FK to auth.users) / updated_at (bigint, epoch ms) / deleted_at (bigint nullable) / device_id (text) / content_hash (text)` 五件套。每张 6 个索引：`(user_id, updated_at)` 主增量游标 + 业务列。共 20 条 RLS（5 张表 × 4 op）。**字段类型规范**：bool 列用 PostgreSQL 原生 `boolean` 不用 int 0/1（避免 PostgREST JSON 序列化时 bool fromJson cast error）；BLOB 列（`note_encrypted` / `attachments_encrypted`）用 `text` 存 base64（避免 bytea hex/base64 编码歧义）。
+
+**LWW 决策表（`lwwDecide` 纯函数 + `MergeOutcome` 枚举）**：
+1. `remoteUpdatedAt > localUpdatedAt` → `useRemote`；
+2. `remoteUpdatedAt < localUpdatedAt` → `useLocal`；
+3. 平手按 `device_id` 字典序大者胜（完全相等保守 `useLocal`,避免无意义重写）。
+
+**逐表 pull 游标 `last_pulled_at_json`**：本地 `user_pref.last_pulled_at_json TEXT` 列（schema v13 加）存 JSON `{"ledger": 1700000000000, "category": 1700000001234, ...}`,每表一个 epoch ms 游标。下次 pull `WHERE updated_at > <cursor>`,按 1000 行分页直到耗尽。`fullPull` 把所有游标重置为 0 后跑一遍。
+
+**Push 路径（drain loop）**：`sync_op` 队列 `listPendingBatch(limit=200)` → `coalesceByEntity` 同一 `(entity, entity_id)` 取 id-max（最新版本）→ 按 entity 分组 `upsertBatch`（PostgREST 原生 `.upsert(payload, onConflict: 'id')`,单 RTT,无竞态）→ 成功 `markPushed(allRawIds)`,失败 `incrementTried(coalesced.id, error)`。任一 entity 失败即 break 退出,留给下次 SyncTrigger 重试（天然指数退避）。`_kMaxDrainRounds=50` 兜底防死循环（200 × 50 = 10000 ops）。
+
+**Service 拓扑（`syncServiceProvider` 按 backend 分发）**：
+- `LocalOnlySyncService`（未配置）：所有写操作抛 UnsupportedError；
+- **`IncrementalSyncService`（仅 Supabase）**：V2 整库增量 + LWW,提供 `pullThenPush()` / `pushOnly()` / `fullPull()` 三个公开 API；
+- **`SnapshotSyncService`（S3 / WebDAV / iCloud / BeeCount Cloud）**：V1 整库 JSON 快照,按账本上传/下载。
+
+**触发器分发**：`SyncTrigger.trigger({bool pushOnly = false})` 按 service 类型三路分发——IncrementalSyncService + `pushOnly: true` → `pushOnly()`（仅 debounce 路径,用户刚保存,期待立即上云）；IncrementalSyncService + `pushOnly: false` → `pullThenPush()`（App resumed / 15min / 下拉刷新,先 pull 让远端新数据 merge 后再 push）；SnapshotSyncService → `upload(ledgerId)`（V1 整库 JSON）。`scheduleDebounced` 回调固定传 `pushOnly: true`。
+
+**首次登录恢复入口**：`_CloudServicePageState._maybePromptFullPull` 在 Supabase 保存且连接测试通过后弹确认对话框,用户选"是" → `service.fullPull()` 把云端全部账本与流水拉到本机。选"否"也没问题——首次自动同步（cursor=0）会全量拉取。
+
+**软删传播**：所有删除都是软删（`deleted_at != null`）；V2 push 路径**只用 upsert** 不用 delete API。云端记录永远保留软删,30 天硬删时机本地/云端独立维护（垃圾桶 30 天后清扫）。`restoreById` 用 Map 展开模式 enqueue,绕过 `copyWith(deletedAt: null)` 无法区分 "传 null" 与 "不传" 的限制。
+
+**附件本体仍走对象存储**：V2 增量只覆盖 5 张业务表 + 元数据;附件本体（`attachments` bucket）继续走 V1 `AttachmentUploader` / `Downloader`。**已知 gap**：V2 路径下,V1 `SnapshotSyncService._uploadPendingAttachments` 的"上传 → 回填 remoteKey"逻辑当前不会被执行,后续如要 V2 也支持附件需把回填搬到 `IncrementalSyncService.pushOnly()` 之前,且回填后不动 `updated_at`（避免触发新一轮同步循环）。
 
 ### 5.6 资产账户（V1 轻量版）
 

@@ -124,12 +124,13 @@ bianbianbianbian/
 │     │  ├─ account_list_page.dart      AccountListPage（资产+净资产+负债三值卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单 + 点击进详情页）
 │     │  ├─ account_detail_page.dart    AccountDetailPage（顶部 success 色卡片：余额 + 年份切换器 + 年度流出/流入 + 右上"设置"入口；下方 12→1 月卡片：默认当月展开，余月折叠；展开后按日聚簇 + 复用 openRecordTileActions 编辑/复制/删除）
 │     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/初始余额/币种/计入总资产，新建+编辑双模式）
-│     ├─ sync/                  Phase 10 已完成 + Phase 11.2 附件上传管线 + Phase 11.3 附件懒下载与本地缓存 + Phase 11.4 软删 / GC / 孤儿 sweep / 跨 backend 迁移
+│     ├─ sync/                  Phase 10 + Phase 11 + **Phase 17（云同步 V2 · Supabase 整库增量同步）** 已完成
 │     │  ├─ sync_service.dart        SyncService 抽象 + LocalOnlySyncService + SnapshotSyncService（V1，upload 内部已接入附件上传前置：扫表 → uploadPending → 写回 BLOB → 上传 JSON 快照）
+│     │  ├─ incremental_sync_service.dart  **Phase 17** IncrementalCloudGateway 抽象 + SupabaseIncrementalGateway 适配器 + IncrementalSyncService（pullThenPush / pushOnly / fullPull）+ lwwDecide 纯函数 + MergeOutcome 枚举
 │     │  ├─ snapshot_serializer.dart  LedgerSnapshot 数据类 + LedgerSnapshotSerializer + exportLedgerSnapshot/importLedgerSnapshot 纯函数
-│     │  ├─ sync_provider.dart       Riverpod 顶层 provider 链（store→config→cloudProvider→authService→syncService）
-│     │  ├─ sync_trigger.dart        Step 10.7 SyncTrigger Notifier + SyncTriggerState + 5 触发源调度（trigger/scheduleDebounced/startPeriodic/stopPeriodic/cancelTimers）
-│     │  ├─ cloud_service_page.dart  「我的→云服务」页（_SyncStatusCard 状态条 + iCloud/WebDAV/S3/Supabase 4 个后端卡 + 配置对话框；Step 11.4 _switchService 加附件迁移确认对话框）
+│     │  ├─ sync_provider.dart       Riverpod 顶层 provider 链（store→config→cloudProvider→authService→syncService）；**Phase 17** syncServiceProvider 按 backend 分发：Supabase → IncrementalSyncService；其它 → SnapshotSyncService
+│     │  ├─ sync_trigger.dart        Step 10.7 SyncTrigger Notifier + SyncTriggerState + 5 触发源调度（trigger/scheduleDebounced/startPeriodic/stopPeriodic/cancelTimers）；**Phase 17** trigger({pushOnly}) 按 service 类型三路分发
+│     │  ├─ cloud_service_page.dart  「我的→云服务」页（_SyncStatusCard 状态条 + iCloud/WebDAV/S3/Supabase 4 个后端卡 + 配置对话框；Step 11.4 _switchService 加附件迁移确认对话框；**Phase 17** _StatusLine 加 isIncremental 旗标 + _maybePromptFullPull 首次登录全量拉取弹窗）
 │     │  └─ attachment/
 │     │     ├─ attachment_uploader.dart   Step 11.2 AttachmentUploader（uploadPending：sha256 计算 / exists 幂等 / 错误隔离 / remoteKey 回填）
 │     │     ├─ attachment_downloader.dart Step 11.3 AttachmentDownloader（ensureLocal 三态契约 / in-memory cache + inflight 复用 / 3 路并发限流 / writeback 钩子）+ defaultAttachmentLocalPathWriteback 顶层函数
@@ -329,12 +330,14 @@ bianbianbianbian/
 数据访问层，按"数据源"分三个子目录：
 - **`local/`**：drift 数据库定义与 DAO。Step 1.1（user_pref 表）、Step 1.2（SQLCipher + 密钥）、Step 1.3（其余 6 张业务表 + v1→v2 migration）已落地；Step 1.4（5 个 DAO 分层）已落地；并在 Phase 3 对 `category` 做了 v3 不兼容重构（全局二级分类）。
   - **`app_database.dart`**：`AppDatabase extends _$AppDatabase`，`@DriftDatabase(tables: [UserPrefTable, LedgerTable, CategoryTable, AccountTable, TransactionEntryTable, BudgetTable, SyncOpTable], daos: [LedgerDao, CategoryDao, AccountDao, TransactionEntryDao, BudgetDao])`。生产构造 `AppDatabase()` → `_openEncrypted()`：① 先在主 isolate 跑 `applyWorkaroundToOpenSqlCipherOnOldAndroidVersions()`；② 从 `DbCipherKeyStore().loadOrCreate()` 取 hex 密钥；③ `NativeDatabase.createInBackground(file, isolateSetup: ..., setup: ...)`——`isolateSetup` 在后台 isolate 再跑一次 Android workaround，`setup` 里执行 `PRAGMA key = "x'<hex>'"` 并用 `PRAGMA cipher_version` 断言 SQLCipher 真的加载（未加载即 `StateError`，防止"看似加密实则明文落盘"）。测试构造 `AppDatabase.forTesting(NativeDatabase.memory())` 不变。顶层 `export 'package:drift/drift.dart' show Value;`。DAO 作为 `late final xxxDao = XxxDao(this as AppDatabase)` 字段由 drift_dev 生成在 `app_database.g.dart`——调用方通过 `db.ledgerDao` / `db.categoryDao` / `db.accountDao` / `db.transactionEntryDao` / `db.budgetDao` 访问。
-    - **`schemaVersion = 5`（Phase 7 Step 7.3）**：
+    - **`schemaVersion = 13`（Phase 17 · 云同步 V2）**：
       - v1：`user_pref`
       - v2：新增 `ledger/category/account/transaction_entry/budget/sync_op` + transaction 索引
-      - v3：`category` 改为“全局二级分类”模型（`parent_key` + `is_favorite`，移除 `ledger_id` + `type`）
+      - v3：`category` 改为"全局二级分类"模型（`parent_key` + `is_favorite`，移除 `ledger_id` + `type`）
       - v4：`budget` 追加 `carry_balance` / `last_settled_at`（预算结转）
       - v5：`account` 追加 `billing_day` / `repayment_day`（信用卡专属，1-28，仅展示）
+      - v6-v12：陆续追加业务字段（参见 `lib/data/local/app_database.dart` `onUpgrade` 真值源——含 ledger.cover_emoji / cover_svg、account.include_in_total / icon_svg、category.icon_svg 等）
+      - **v13（Phase 17）**：`user_pref` 追加 `last_pulled_at_json TEXT`（V2 增量同步逐表 pull 游标 JSON，结构 `{"ledger": 1700000000000, ...}` 每表一个 epoch ms 游标）
     - **`MigrationStrategy`**：
       - `onCreate`：`m.createAll()` + `_createTransactionIndexes()`
       - `onUpgrade`：`from < 2` 时创建 v2 业务表；`from < 3` 时按产品要求**不兼容旧分类结构**，执行 `deleteTable('category')` 后 `createTable(categoryTable)` 重建；`from < 4` 时给 `budget` `addColumn` 两列；`from < 5` 时给 `account` `addColumn` 两列。
@@ -1213,6 +1216,22 @@ UI 层：
   - `downloadAndRestore`：manager.download → 校验 `snapshot.ledger.id == ledgerId`（防错恢复别人的备份）→ `importLedgerSnapshot`。
   - `getStatus`：拉本地快照（带 `exportedAt` 时间戳）→ manager.getStatus（指纹比对 + cache）。
   - `deleteRemote`：catch `CloudStorageException` 视为幂等成功（云端已不存在）。
+- ****Phase 17（云同步 V2）后** 该文件仅用于 V1 后端（S3 / WebDAV / iCloud / BeeCount Cloud）；Supabase 后端走 `incremental_sync_service.dart`。
+
+#### `lib/features/sync/incremental_sync_service.dart`（Phase 17 · 云同步 V2）
+
+V2 增量同步服务,仅 Supabase 后端使用。**不是** `SnapshotSyncService` 的扩展,而是完全独立实现：V1 整库 JSON 上传/下载/覆盖；V2 5 张本地业务表对应 5 张云端表,按行 LWW 增量同步整库。
+
+- **`IncrementalCloudGateway`** 抽象：最小化云端操作接口,只暴露 `upsertBatch(table, data)` 与 `queryUpdatedSince(table, updatedAtGt, limit)` 两个动作。抽接口的目的：① 测试无需依赖 SupabaseClient（后者要求真实 endpoint + auth）；② 未来给其它后端做增量,只需新增 gateway 实现,服务核心不变。
+- **`SupabaseIncrementalGateway implements IncrementalCloudGateway`**：生产路径适配器,把抽象动作翻译成 `SupabaseDatabaseService.upsertBatch` / `query`。
+- **`IncrementalSyncService implements SyncService`** 三个公开 V2 API：
+  - **`pullThenPush()`**：先 `_pullAll`（按 cursor 拉云端 5 张表 → LWW 合并到本地）,再 `_pushAll`（drain sync_op 队列 → 折叠后批量 upsert）,然后写 `user_pref.last_sync_at`。顺序原因：先 pull 后 push 让远端更新的行先 merge,本地 unchanged 行不会被错误 push 覆盖云端。前台恢复 / 15min 定时 / 下拉刷新路径调用。
+  - **`pushOnly()`**：仅 `_pushAll`（debounce 路径走）。用户刚保存,期待立即上云,且本地必然新于云端,无需先 pull。
+  - **`fullPull()`**：重置所有 entity 的 `last_pulled_at` 游标为 0,再调 `_pullAll`。首次 Supabase 登录后通过 `_maybePromptFullPull` 调用,把云端全部历史拉到本机。
+- **`lwwDecide`** 纯函数 + **`MergeOutcome`** 枚举：LWW 决策表小内核,无 db / 网络依赖,3 条分支：① `remoteUpdatedAt > localUpdatedAt` → `useRemote`；② `remoteUpdatedAt < localUpdatedAt` → `useLocal`；③ 平手按 `device_id` 字典序大者胜（完全相等保守 `useLocal`,避免无意义重写）。`test/features/sync/lww_merge_test.dart` 用 10 个纯函数用例 100% 覆盖。
+- **drain loop**：`_pushAll` 内部一个 while 循环,每轮 `listPendingBatch(limit=200)` → `coalesceByEntity` 折叠 → 按 entity 分组 `upsertBatch`。任一 entity 失败即 break,留给下次 `SyncTrigger` 重试（天然指数退避,避免在同一会话内堆叠 tried）。`_kMaxDrainRounds=50` 兜底防死循环（200 × 50 = 10000 ops 足够任何现实场景）。
+- **覆盖的 SyncService 接口里增量模式无意义的方法**：`downloadAndRestore` / `listBackups` / `restoreFromBackup` / `checkLedgerNameConflict` / `deleteBackupAt` / `deleteRemote` 全部抛 `UnsupportedError`,UI 层 `_SyncStatusBody` 据此隐藏相关入口。
+- **`getStatus`**：增量模式无需 round-trip,直接看本地 `sync_op` 队列 + `user_pref.last_sync_at`。队列非空 → `SyncState.outOfSync` + `direction=localNewer` + `localCount=pendingCount`；空 + 有 `lastSyncedAt` → `SyncState.synced`；空 + 无 `lastSyncedAt` → `SyncState.localOnly`。
 
 #### `lib/features/sync/snapshot_serializer.dart`
 - **`LedgerSnapshot`** 不可变数据类（V1 = `version: 1`）：`ledger / categories / accounts / transactions / budgets` + `exportedAt / deviceId`。`fromJson` 校验版本号——大于 `kVersion` 抛 `FormatException`，避免新版备份被旧版误读出错。
@@ -1227,7 +1246,7 @@ UI 层：
 - `supabaseConfigProvider` / `webdavConfigProvider` / `s3ConfigProvider`（UI 配置对话框预填用）
 - `cloudProviderInstanceProvider`（FutureProvider<CloudProvider?>，根据 active config 调 `createCloudServices` 实例化；初始化失败返回 null 让上层走 LocalOnly 兜底；`ref.onDispose` 清理连接）
 - `authServiceProvider`（无云服务时返回 `NoopAuthService`）
-- `syncServiceProvider`（FutureProvider<SyncService>，组合 5 个 repository + DB + deviceId 构造 `SnapshotSyncService`）
+- `syncServiceProvider`（FutureProvider<SyncService>）：**Phase 17 按 backend 类型分发**：① 未配置 → `LocalOnlySyncService`；② `config.type == CloudBackendType.supabase` → `IncrementalSyncService`（V2,组合 `SupabaseIncrementalGateway` + db + deviceId）；③ 其它后端（含 BeeCount Cloud / S3 / WebDAV / iCloud）→ `SnapshotSyncService`（V1,组合 5 个 repository + DB + deviceId）。
 
 切换激活后端 / 保存配置后调 `ref.invalidate(activeCloudConfigProvider)` 即可下游链式重建。
 

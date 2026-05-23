@@ -1,24 +1,12 @@
 import 'package:drift/drift.dart';
 
 import '../app_database.dart';
-import '../tables/sync_op_table.dart';
 
 part 'sync_op_dao.g.dart';
 
-/// `sync_op` 队列表 DAO——仓库层（Step 2.2）写入、同步引擎（Phase 10 Step 10.4）消费。
-///
-/// Step 1.4 把这张表刻意排除在 5 个业务表 DAO 之外——它不是实体表、不走"4 类方法"
-/// 模式。Step 2.2 仓库层需要 `enqueue` API 写待同步记录，因此补这个 DAO。
-///
-/// `[op]` 取 `'upsert'` | `'delete'`；`[entity]` 取 `'ledger'` | `'category'` |
-/// `'account'` | `'transaction'` | `'budget'`（**注意**最后一个是 `'transaction'` 而
-/// 非 `'transaction_entry'`——与 design-document §7.1 DDL 注释字面一致）。
-/// `[payload]` 为 `jsonEncode(entity.toJson())` 产出的 JSON 字符串。
-@DriftAccessor(tables: [SyncOpTable])
 class SyncOpDao extends DatabaseAccessor<AppDatabase> with _$SyncOpDaoMixin {
   SyncOpDao(super.db);
 
-  /// 入队一条待同步记录。返回 AUTOINCREMENT 产出的 `id`。
   Future<int> enqueue({
     required String entity,
     required String entityId,
@@ -37,9 +25,66 @@ class SyncOpDao extends DatabaseAccessor<AppDatabase> with _$SyncOpDaoMixin {
     );
   }
 
-  /// 按入队顺序列出所有待同步记录。Phase 10 同步引擎拉取；Step 2.2 测试用于断言队列快照。
+  Future<void> batchEnqueue(List<SyncOpTableCompanion> companions) async {
+    if (companions.isEmpty) return;
+    await batch((b) {
+      for (final c in companions) {
+        b.insert(syncOpTable, c, mode: InsertMode.insert);
+      }
+    });
+  }
+
+  Future<void> clearAll() async {
+    await delete(syncOpTable).go();
+  }
+
   Future<List<SyncOpEntry>> listAll() {
     return (select(syncOpTable)..orderBy([(t) => OrderingTerm.asc(t.id)]))
         .get();
+  }
+
+  Future<List<SyncOpEntry>> listPendingBatch({
+    int limit = 200,
+    int maxTried = 5,
+  }) {
+    return (select(syncOpTable)
+          ..where((t) => t.tried.isNull() | t.tried.isSmallerThanValue(maxTried))
+          ..orderBy([(t) => OrderingTerm.asc(t.id)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<void> markPushed(List<int> ids) async {
+    if (ids.isEmpty) return;
+    await (delete(syncOpTable)..where((t) => t.id.isIn(ids))).go();
+  }
+
+  Future<void> incrementTried(int id, String? error) async {
+    await customStatement(
+      'UPDATE sync_op SET tried = COALESCE(tried, 0) + 1, last_error = ? '
+      'WHERE id = ?',
+      [error, id],
+    );
+  }
+
+  Future<int> countPending({int maxTried = 5}) {
+    return (select(syncOpTable)
+          ..where((t) => t.tried.isNull() | t.tried.isSmallerThanValue(maxTried)))
+        .get()
+        .then((rows) => rows.length);
+  }
+
+  List<SyncOpEntry> coalesceByEntity(List<SyncOpEntry> raw) {
+    if (raw.isEmpty) return const [];
+    final byKey = <String, SyncOpEntry>{};
+    for (final op in raw) {
+      final key = '${op.entity}:${op.entityId}';
+      final existing = byKey[key];
+      if (existing == null || op.id > existing.id) {
+        byKey[key] = op;
+      }
+    }
+    final result = byKey.values.toList()..sort((a, b) => a.id.compareTo(b.id));
+    return result;
   }
 }

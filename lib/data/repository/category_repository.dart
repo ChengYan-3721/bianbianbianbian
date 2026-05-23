@@ -145,16 +145,61 @@ class LocalCategoryRepository implements CategoryRepository {
   Future<void> restoreById(String id) async {
     final now = _clock();
     final nowMs = now.millisecondsSinceEpoch;
-    await _dao.restoreById(id, updatedAt: nowMs);
+    await _db.transaction(() async {
+      final row = await (_db.select(_db.categoryTable)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (row == null) return;
+      if (row.deletedAt == null) return; // 已活跃,幂等。
+      await _dao.restoreById(id, updatedAt: nowMs);
+      // Step 17(云同步 V2):restore = deleted_at 清空的 upsert(走 Map spread
+      // 是因为 Category.copyWith(deletedAt: null) 会被当作"不传"保留原值)。
+      final restorePayload = <String, dynamic>{
+        ...rowToCategory(row).toJson(),
+        'deleted_at': null,
+        'updated_at': now.toIso8601String(),
+        'device_id': _deviceId,
+      };
+      await _syncOp.enqueue(
+        entity: 'category',
+        entityId: id,
+        op: 'upsert',
+        payload: jsonEncode(restorePayload),
+        enqueuedAt: nowMs,
+      );
+    });
   }
 
   @override
-  Future<int> purgeById(String id) {
+  Future<int> purgeById(String id) async {
+    final now = _clock();
+    final row = await (_db.select(_db.categoryTable)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (row == null) return 0;
+    await _syncOp.enqueue(
+      entity: 'category',
+      entityId: id,
+      op: 'delete',
+      payload: jsonEncode(rowToCategory(row).toJson()),
+      enqueuedAt: now.millisecondsSinceEpoch,
+    );
     return _dao.hardDeleteById(id);
   }
 
   @override
-  Future<int> purgeAllDeleted() {
+  Future<int> purgeAllDeleted() async {
+    final rows = await _dao.listDeleted();
+    final now = _clock();
+    for (final row in rows) {
+      await _syncOp.enqueue(
+        entity: 'category',
+        entityId: row.id,
+        op: 'delete',
+        payload: jsonEncode(rowToCategory(row).toJson()),
+        enqueuedAt: now.millisecondsSinceEpoch,
+      );
+    }
     return (_db.delete(_db.categoryTable)
           ..where((t) => t.deletedAt.isNotNull()))
         .go();

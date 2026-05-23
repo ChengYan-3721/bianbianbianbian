@@ -3259,7 +3259,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncCustomNameHint.
   ///
   /// In zh, this message translates to:
-  /// **'用作卡片标题（可选）'**
+  /// **'用作卡片标题'**
   String get syncCustomNameHint;
 
   /// No description provided for @syncConfigWebdav.
@@ -3295,7 +3295,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncS3CustomNameHint.
   ///
   /// In zh, this message translates to:
-  /// **'用作卡片标题与云端文件夹名(只能输入字母/数字/下划线/连字符)'**
+  /// **'用作卡片标题'**
   String get syncS3CustomNameHint;
 
   /// No description provided for @syncLedgerLoadFailed.
@@ -3415,7 +3415,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncStatusNoBackup.
   ///
   /// In zh, this message translates to:
-  /// **'当前账本云端无备份'**
+  /// **'云端无备份'**
   String get syncStatusNoBackup;
 
   /// No description provided for @syncNoBackupHintBrowse.
@@ -3483,6 +3483,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地 {local} · 云端 {cloud}'**
   String syncLocalCloudCount(int local, int cloud);
+
+  /// No description provided for @syncSyncNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即同步'**
+  String get syncSyncNow;
+
+  /// No description provided for @syncPendingCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'待推送 {count} 条'**
+  String syncPendingCount(int count);
+
+  /// No description provided for @syncFullPullTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'从云端恢复全部数据'**
+  String get syncFullPullTitle;
+
+  /// No description provided for @syncFullPullPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测到 Supabase 已登录,是否立即把云端全部账本与流水拉到本机?\n\n选「否」也可以,后续首次同步会自动全量拉取。'**
+  String get syncFullPullPrompt;
+
+  /// No description provided for @syncFullPullRunning.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在从云端恢复…'**
+  String get syncFullPullRunning;
+
+  /// No description provided for @syncFullPullDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端数据已拉到本机'**
+  String get syncFullPullDone;
 
   /// No description provided for @syncTriggerInProgress.
   ///
@@ -5035,6 +5071,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'新账本名称'**
   String get backupConflictNewName;
+
+  /// No description provided for @syncForcePush.
+  ///
+  /// In zh, this message translates to:
+  /// **'强制推送'**
+  String get syncForcePush;
+
+  /// No description provided for @syncForcePushConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'将本地全部数据强制推送到云端，可能覆盖云端已有数据。确定继续？'**
+  String get syncForcePushConfirm;
+
+  /// No description provided for @syncForcePushDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'强制推送完成'**
+  String get syncForcePushDone;
+
+  /// No description provided for @syncForcePull.
+  ///
+  /// In zh, this message translates to:
+  /// **'强制拉取'**
+  String get syncForcePull;
+
+  /// No description provided for @syncForcePullConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'从云端强制拉取全部数据，将覆盖本地数据。确定继续？'**
+  String get syncForcePullConfirm;
+
+  /// No description provided for @syncForcePullDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'强制拉取完成'**
+  String get syncForcePullDone;
 }
 
 class _AppLocalizationsDelegate
