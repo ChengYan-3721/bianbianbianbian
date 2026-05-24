@@ -123,7 +123,7 @@ bianbianbianbian/
 │     │  ├─ account_providers.g.dart    riverpod_generator 产物
 │     │  ├─ account_list_page.dart      AccountListPage（资产+净资产+负债三值卡片 + 账户卡片列表 + 信用卡负余额红色 + FAB 新建 + 长按编辑/删除菜单 + 点击进详情页）
 │     │  ├─ account_detail_page.dart    AccountDetailPage（顶部 success 色卡片：余额 + 年份切换器 + 年度流出/流入 + 右上"设置"入口；下方 12→1 月卡片：默认当月展开，余月折叠；展开后按日聚簇 + 复用 openRecordTileActions 编辑/复制/删除）
-│     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/初始余额/币种/计入总资产，新建+编辑双模式）
+│     │  └─ account_edit_page.dart      AccountEditPage（名称/类型/图标/余额/币种/计入总资产，新建+编辑双模式；余额变更生成调整流水）
 │     ├─ sync/                  Phase 10 + Phase 11 + **Phase 17（云同步 V2 · Supabase 整库增量同步）** 已完成
 │     │  ├─ sync_service.dart        SyncService 抽象 + LocalOnlySyncService + SnapshotSyncService（V1，upload 内部已接入附件上传前置：扫表 → uploadPending → 写回 BLOB → 上传 JSON 快照）
 │     │  ├─ incremental_sync_service.dart  **Phase 17** IncrementalCloudGateway 抽象 + SupabaseIncrementalGateway 适配器 + IncrementalSyncService（pullThenPush / pushOnly / fullPull）+ lwwDecide 纯函数 + MergeOutcome 枚举
@@ -356,7 +356,7 @@ bianbianbianbian/
     - 一级分类不落库，仅由 `parent_key` 归属（如 `income/food/shopping/...`）；
     - 二级分类通过 `is_favorite` 标记收藏（全局共享）；
     - 已移除 `ledger_id` 与 `type`，并通过 `parent_key` 约束保证值域合法。
-  - **`tables/account_table.dart`**（Step 1.3 / Step 7.3）：`AccountTable` + `@DataClassName('AccountEntry')`。`type` ∈ `cash` / `debit` / `credit` / `third_party` / `other`；`initial_balance` REAL 默认 0（信用卡可为负）；`include_in_total` 默认 1；`currency` 默认 `'CNY'`。账户不绑定账本——全局资源。**Step 7.3** 追加两列 `billing_day INTEGER` / `repayment_day INTEGER`（均 nullable，UI 校验取值 1-28），仅信用卡使用，仅展示用、不生成提醒。
+  - **`tables/account_table.dart`**（Step 1.3 / Step 7.3）：`AccountTable` + `@DataClassName('AccountEntry')`。`type` ∈ `cash` / `debit` / `credit` / `third_party` / `other`；账户余额不落账户表，完全由流水净额计算；`include_in_total` 默认 1；`currency` 默认 `'CNY'`。账户不绑定账本——全局资源。**Step 7.3** 追加两列 `billing_day INTEGER` / `repayment_day INTEGER`（均 nullable，UI 校验取值 1-28），仅信用卡使用，仅展示用、不生成提醒。
   - **`tables/transaction_entry_table.dart`**（Step 1.3）：`TransactionEntryTable` + `@DataClassName('TransactionEntryRow')`——**刻意不叫 `TransactionEntry`**，让位给 Step 2.1 的领域实体同名。`ledger_id` 声 FK，`amount` / `currency` / `occurred_at` NOT NULL，`fx_rate` 默认 1.0，`note_encrypted` / `attachments_encrypted` 为 BLOB（**列名是历史遗留**——v1 设计曾打算装字段级加密密文，Phase 11 决策后改为明文：`note_encrypted` 暂未消费、`attachments_encrypted` 装附件元数据 JSON 数组明文 bytes，Phase 11 schema v10 升级后 shape 从 `["path"]` 升级为 `[{remote_key, sha256, ...}]`。详见 implementation-plan §11.2）。两索引 `idx_tx_ledger_time (ledger_id, occurred_at DESC)` 与 `idx_tx_updated (updated_at)` 在 `MigrationStrategy` 里用 `customStatement` 建。
   - **`tables/budget_table.dart`**（Step 1.3）：`BudgetTable` + `@DataClassName('BudgetEntry')`。`period` ∈ `monthly` / `yearly`；`category_id = NULL` 表示"总预算"（该账本该周期的总盘子）；`carry_over` 默认 0（Phase 6 Step 6.4 才真正使用）。
   - **`tables/sync_op_table.dart`**（Step 1.3）：`SyncOpTable` + `@DataClassName('SyncOpEntry')`——本机出站同步队列。`id` 用 `integer().autoIncrement()`（隐式主键，**不**再覆写 `primaryKey`；重复覆写会触发 drift_dev 的 `primary_key_and_auto_increment` 报错）。无 `updated_at` / `deleted_at` / `device_id` 三件套——这是队列而非实体，push 成功就物理删除条目。
@@ -396,7 +396,7 @@ bianbianbianbian/
   - `toJson()` / `fromJson(Map)`：键名统一 snake_case（与设计文档 §7.1 DDL 以及 Phase 10 Supabase 列名一致）；`DateTime` 用 ISO 8601 字符串；`Uint8List?`（仅 `TransactionEntry` 有）用 **base64 字符串**；`bool` / `double` / `int` / `String?` 走原生 JSON 类型。`fromJson` 对可空字段显式 `??` 应用默认值，保证默认值在序列化-反序列化链路上不丢（比如 `defaultCurrency='CNY'`、`fxRate=1.0`、`carryOver=false`）。
   - `==` / `hashCode` 手写。对 `TransactionEntry.noteEncrypted` / `attachmentsEncrypted` 走**深比较**（`_bytesEqual` / `_bytesHash` 位于 `transaction_entry.dart` 底部的 top-level 私有函数）——原因：`Uint8List` 在 Dart 默认是引用相等，`Uint8List.fromList([1,2,3]) == Uint8List.fromList([1,2,3])` 为 `false`，若不深比较，`fromJson(toJson(x)) == x` 的验收会假阴。
   - `toString()` 列出所有字段（bytes 字段仅打印 length），`expect(..., equals(...))` 失败时能直接看出哪个字段不匹配。
-  - **类型收紧**相对于 drift 数据类（也即"一一对应"的语义解释）：`archived` / `includeInTotal` / `carryOver` 用 `bool` 而非 `int?`；`defaultCurrency` / `currency` / `fxRate` / `initialBalance` / `sortOrder` 用非空 + 默认值；`created_at` / `updated_at` / `deleted_at` / `occurred_at` / `start_date` 用 `DateTime?`。仓库层（Step 2.2）承担 drift `int epoch ms` ↔ `DateTime` 与 `int?` ↔ `bool` 的桥接。
+  - **类型收紧**相对于 drift 数据类（也即"一一对应"的语义解释）：`archived` / `includeInTotal` / `carryOver` 用 `bool` 而非 `int?`；`defaultCurrency` / `currency` / `fxRate` / `sortOrder` 用非空 + 默认值；账户余额不属于 Account 实体；`created_at` / `updated_at` / `deleted_at` / `occurred_at` / `start_date` 用 `DateTime?`。仓库层（Step 2.2）承担 drift `int epoch ms` ↔ `DateTime` 与 `int?` ↔ `bool` 的桥接。
   - **`TransactionEntry` 的命名**：drift 数据类叫 `TransactionEntryRow`（Step 1.3 备忘有记录），此命名差异是为了让领域层享有纯粹 `TransactionEntry` 这个名字。仓库层同时引入两个类型时可用 `import 'package:.../transaction_entry_table.dart' show TransactionEntryRow;` + `import 'package:.../transaction_entry.dart' show TransactionEntry;` 避免重名冲突。
 - **`usecase/`**：预留给需要跨多个仓库协调的业务动作；简单场景可直接在仓库中完成，不强求每个功能都建一个 usecase。
 
@@ -478,7 +478,7 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
 - Step 1.3 落地的 7 个用例（6 张业务表 + 1 个索引存在性）：
   1. `ledger` · insert → update(`updated_at`) → soft-delete(`deleted_at`)；校验默认值 `defaultCurrency='CNY'` / `archived=0`。
   2. `category` · 同上；先插父 ledger 演练真实路径（FK 未强制，但当作最佳实践）。
-  3. `account` · 同上；校验 `initialBalance=-1200.0`（信用卡欠款为负）、`includeInTotal=1`、`currency='CNY'`。
+  3. `account` · 同上；校验账户表不含余额列、`includeInTotal=1`、`currency='CNY'`。
   4. `transaction_entry` · 同上；校验 `fxRate=1.0` 默认值、tags 明文、`noteEncrypted` 为 null（Phase 11 才写密文）。
   5. `idx_tx_ledger_time` / `idx_tx_updated` 两索引存在性——直接查 `sqlite_master WHERE type='index' AND tbl_name='transaction_entry'`。
   6. `budget` · 同上；`categoryId=null` 表示总预算。
@@ -518,14 +518,14 @@ UI + 状态管理的纵向切分，每个子目录对应一块用户可见功能
 
 ### `test/data/local/seeder_test.dart`
 - Step 1.7 落地的 3 个用例：
-  1. **空库路径**：单次 `seedIfEmpty()` 后断言 1 ledger（含 emoji `📒`、`default_currency='CNY'`、`archived=0`、`device_id='device-a'`、时间戳 = 注入的 `fixedInstant`）+ 28 categories（18 `expense` + 10 `income`，各自按 `sort_order` 升序首个是「餐饮」/「工资」；末个都叫「其他」且颜色按 `i%6` 循环）+ 5 accounts（5 种预期 type、`includeInTotal=1`、`currency='CNY'`、`initialBalance=0.0`）。
+  1. **空库路径**：单次 `seedIfEmpty()` 后断言 1 ledger（含 emoji `📒`、`default_currency='CNY'`、`archived=0`、`device_id='device-a'`、时间戳 = 注入的 `fixedInstant`）+ 28 categories（18 `expense` + 10 `income`，各自按 `sort_order` 升序首个是「餐饮」/「工资」；末个都叫「其他」且颜色按 `i%6` 循环）+ 5 accounts（5 种预期 type、`includeInTotal=1`、`currency='CNY'`，账户余额由流水计算）。
   2. **幂等**：连续两次调用（第二次 `counterStart=1000` 确保不会意外重复生成同 UUID），对比前后两次 `ledger/category/account` 的 id 集合应完全相等——证明第二次整体跳过。
   3. **预置账本跳过**：手动插入一个 `'工作'` 账本，然后 `seedIfEmpty()` → 仍只剩那一个账本、分类与账户表保持空，确认 seeder 不越权"补齐"任何数据。
 - 辅助 `makeSeeder({counterStart})` 封装确定性 `clock`（固定 `fixedInstant = 1714000000000`）+ 确定性 UUID 工厂（`uuid-0001`, `uuid-0002`, ... 递增）——让"第一个 UUID 属于 ledger"之类的断言可以精确到 id 字符串。
 
 ### `test/domain/entity/entities_test.dart`
 - Step 2.1 落地的 17 个用例（每个实体 3-4 条 + 1 条依赖隔离）：
-  - **Ledger / Category / Account / Budget**：各 3 条——全字段 roundtrip、部分可空字段为 null 的 roundtrip（同时验证默认值落地：`defaultCurrency='CNY'`、`sortOrder=0`、`initialBalance=0`、`carryOver=false` 等）、`copyWith` 改一字段其它不动。
+  - **Ledger / Category / Account / Budget**：各 3 条——全字段 roundtrip、部分可空字段为 null 的 roundtrip（同时验证默认值落地：`defaultCurrency='CNY'`、`sortOrder=0`、`carryOver=false` 等；Account JSON 不含余额字段）、`copyWith` 改一字段其它不动。
   - **TransactionEntry**：4 条——前两条同上，加上 `Uint8List` 深等断言（`identical` 是 `false` 但 `==` 是 `true`，证明 `_bytesEqual` 生效）+ 一条反面用例（换一组 bytes 后必须 `!=`，防止 `_bytesEqual` 被改成 trivially true 时无人察觉）。
   - **domain 依赖隔离**：1 条——递归扫 `lib/domain/**.dart`，只检查 `import ` / `export ` 开头的行，禁止出现 `'package:drift/` 或 `"package:drift/`。注释 / 字符串里的 `package:drift/` 字面量不会误伤。
 - 所有测试用固定时间戳（`DateTime.utc(2026, 4, 21, ...)`）构造实体，不依赖 `DateTime.now()`，CI 可重复。
@@ -871,7 +871,7 @@ features/*  →  domain/entity/*  →  data/repository/（抽象接口） →  d
   - 接口新增 `Future<Account?> getById(String id)`——**不**过滤 `deleted_at`。
   - `LocalAccountRepository.getById`：`select(accountTable)..where(id == id)..getSingleOrNull()` → `rowToAccount`；调用方按 `account.deletedAt != null` 自行决定如何渲染。这是流水详情显示"（已删账户）"占位的实现路径——`listActive` 不能给出软删账户，但流水的 `accountId` 仍指向历史 id，必须能拿到历史名 / 软删标记。
 
-- `lib/features/account/account_edit_page.dart`（新建）：`AccountEditPage`（`ConsumerStatefulWidget`，`accountId` 可选）。字段：名称（`TextFormField`，必填校验）、类型（下拉，`cash` / `debit` / `credit` / `third_party` / `other`）、图标 emoji（`TextFormField`，可空）、初始余额（`TextFormField` + `numberWithOptions(decimal: true, signed: true)` + 正则 `^-?\d*\.?\d{0,2}` 限两位小数 + 可负号）、默认币种（下拉同账本编辑页 7 种）、计入总资产（`SwitchListTile`）。`initState` 启动 `_loadFuture`；`_hydrate(acc)` 守 `_initialized` flag 仅首次写入字段。`_save()` 编辑模式走 `existing.copyWith(...)` 路径（避免裸构造遗漏字段）；新建模式走 `Account(id: const Uuid().v4(), ..., deviceId: '')` 让 repo 覆写 deviceId/updatedAt。保存成功后 `ref.invalidate(accountsListProvider)` / `accountBalancesProvider` / `totalAssetsProvider` 三连击，再 `Navigator.pop(true)`。`_saving` 守按钮防双击。
+- `lib/features/account/account_edit_page.dart`（新建）：`AccountEditPage`（`ConsumerStatefulWidget`，`accountId` 可选）。字段：名称（`TextFormField`，必填校验）、类型（下拉，`cash` / `debit` / `credit` / `third_party` / `other`）、图标 emoji（`TextFormField`，可空）、余额（`TextFormField` + `numberWithOptions(decimal: true, signed: true)` + 正则 `^-?\d*\.?\d{0,2}` 限两位小数 + 可负号）、默认币种（下拉同账本编辑页 7 种）、计入总资产（`SwitchListTile`）。编辑模式从 `accountBalancesProvider` 读取当前余额回填；保存时通过 `AccountSaveService` 在同一事务中保存账户，并按新旧余额差额生成无分类的“余额调整”收入或支出流水。保存成功后 `ref.invalidate(accountsListProvider)` / `accountBalancesProvider` / `totalAssetsProvider` 三连击，再 `Navigator.pop(true)`。`_saving` 守按钮防双击。
 
 - `lib/features/account/account_list_page.dart`：
   - 新增 `FloatingActionButton.extended('新建账户')` → `context.push<bool>('/accounts/edit')`，返回 `true` 触发 3 个 provider invalidate。
@@ -2681,7 +2681,7 @@ file bytes
 
 ### 故意不做的事
 
-- **不**做铅笔快捷调整余额：用户明确暂不实现；点设置进编辑页改 `initialBalance` 是现成路径。
+- **不**做铅笔快捷调整余额：用户明确暂不实现；点设置进编辑页改“余额”会生成可追溯的“余额调整”流水。
 - **不**实现"转账"按钮：参考图有，但属于独立功能（流水 + 双账户更新），留专项任务。
 - **不**为详情数据再造 family provider：`accountId / year` 直接走页面 state；流水拉取走全账本级 `currentLedgerTransactionsProvider`（与 `accountBalancesProvider` 一样的口径，缓存语义一致）。
 - **不**对单条流水做直达编辑：复用 `openRecordTileActions`——一是和首页/搜索页交互一致，二是 sheet 顶部已展示完整字段，"先看再改"对照编辑更友好；用户期望"点击跳转编辑"的字面诉求由 sheet 的"编辑"按钮一键满足。

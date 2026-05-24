@@ -108,19 +108,13 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
     );
     if (picked == null) return;
     setState(() {
-      _query = _query.copyWith(
-        startDate: picked.start,
-        endDate: picked.end,
-      );
+      _query = _query.copyWith(startDate: picked.start, endDate: picked.end);
     });
   }
 
   void _clearDateRange() {
     setState(() {
-      _query = _query.copyWith(
-        clearStartDate: true,
-        clearEndDate: true,
-      );
+      _query = _query.copyWith(clearStartDate: true, clearEndDate: true);
     });
   }
 
@@ -178,77 +172,77 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.translucent,
         child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              key: const Key('search_keyword_field'),
-              controller: _keywordController,
-              focusNode: _keywordFocus,
-              autofocus: true,
-              onChanged: _onKeywordChanged,
-              decoration: InputDecoration(
-                hintText: context.l10n.recordSearchHint,
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: TextField(
+                key: const Key('search_keyword_field'),
+                controller: _keywordController,
+                focusNode: _keywordFocus,
+                autofocus: true,
+                onChanged: _onKeywordChanged,
+                decoration: InputDecoration(
+                  hintText: context.l10n.recordSearchHint,
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  suffixIcon: _query.keyword.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: context.l10n.clear,
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () {
+                            _keywordController.clear();
+                            _onKeywordChanged('');
+                          },
+                        ),
                 ),
-                suffixIcon: _query.keyword.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: context.l10n.clear,
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () {
-                          _keywordController.clear();
-                          _onKeywordChanged('');
-                        },
-                      ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: ExpansionTile(
-              key: const Key('search_filters_expansion'),
-              initiallyExpanded: _filtersExpanded,
-              onExpansionChanged: (v) => setState(() => _filtersExpanded = v),
-              tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-              shape: const Border(),
-              collapsedShape: const Border(),
-              title: Text(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ExpansionTile(
+                key: const Key('search_filters_expansion'),
+                initiallyExpanded: _filtersExpanded,
+                onExpansionChanged: (v) => setState(() => _filtersExpanded = v),
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                shape: const Border(),
+                collapsedShape: const Border(),
+                title: Text(
                   context.l10n.recordSearchFilter,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurface.withAlpha(180),
-                    ),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurface.withAlpha(180),
+                  ),
+                ),
+                children: [
+                  _buildDateRangeRow(),
+                  const SizedBox(height: 8),
+                  _buildTypeRow(),
+                  const SizedBox(height: 8),
+                  _buildAmountRow(),
+                  const SizedBox(height: 8),
+                ],
               ),
-              children: [
-                _buildDateRangeRow(),
-                const SizedBox(height: 8),
-                _buildTypeRow(),
-                const SizedBox(height: 8),
-                _buildAmountRow(),
-                const SizedBox(height: 8),
-              ],
             ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _ResultsView(
-              query: _query,
-              ledgerIdAsync: ledgerIdAsync,
-              txRepoAsync: txRepoAsync,
-              catRepoAsync: catRepoAsync,
-              accRepoAsync: accRepoAsync,
-              dateFmt: _dateFmt,
-              amountFmt: _amountFmt,
-              onActionStart: _disableSearchFieldFocus,
-              onActionEnd: _enableSearchFieldFocus,
+            const Divider(height: 1),
+            Expanded(
+              child: _ResultsView(
+                query: _query,
+                ledgerIdAsync: ledgerIdAsync,
+                txRepoAsync: txRepoAsync,
+                catRepoAsync: catRepoAsync,
+                accRepoAsync: accRepoAsync,
+                dateFmt: _dateFmt,
+                amountFmt: _amountFmt,
+                onActionStart: _disableSearchFieldFocus,
+                onActionEnd: _enableSearchFieldFocus,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 
@@ -323,9 +317,7 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
             selected: {_query.typeFilter},
             onSelectionChanged: (s) => _setTypeFilter(s.first),
             showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
           ),
         ),
       ],
@@ -348,14 +340,15 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
             controller: _minAmountController,
             focusNode: _minAmountFocus,
             onChanged: _onMinAmountChanged,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               hintText: context.l10n.recordSearchAmountMin,
               isDense: true,
               border: OutlineInputBorder(),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
+              ),
             ),
           ),
         ),
@@ -369,14 +362,15 @@ class _RecordSearchPageState extends ConsumerState<RecordSearchPage> {
             controller: _maxAmountController,
             focusNode: _maxAmountFocus,
             onChanged: _onMaxAmountChanged,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               hintText: context.l10n.recordSearchAmountMax,
               isDense: true,
               border: OutlineInputBorder(),
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
+              ),
             ),
           ),
         ),
@@ -454,15 +448,17 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
     return FutureBuilder<_SearchData>(
       // key 用 query + tick 拼装：query 改变 / 编辑后强制刷新都会替换 key，
       // 触发 FutureBuilder 丢弃旧 future 重新拉取。
-      key: ValueKey(Object.hash(
-        widget.query.keyword,
-        widget.query.startDate,
-        widget.query.endDate,
-        widget.query.typeFilter,
-        widget.query.minAmount,
-        widget.query.maxAmount,
-        _refreshTick,
-      )),
+      key: ValueKey(
+        Object.hash(
+          widget.query.keyword,
+          widget.query.startDate,
+          widget.query.endDate,
+          widget.query.typeFilter,
+          widget.query.minAmount,
+          widget.query.maxAmount,
+          _refreshTick,
+        ),
+      ),
       future: _loadAndSearch(
         ledgerId: ledgerId,
         txRepo: txRepo,
@@ -473,6 +469,12 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
           for (final key in CategoryManagePage.parentKeys)
             key: CategoryManagePage.parentLabelFor(context, key),
         },
+        uncategorizedLabels: [
+          context.l10n.txTypeUncategorized,
+          '未分类',
+          '无分类',
+          'uncategorized',
+        ],
       ),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
@@ -483,7 +485,7 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
           return _buildHint(
             context,
             icon: Icons.sentiment_dissatisfied,
-                text: context.l10n.recordSearchNoResult,
+            text: context.l10n.recordSearchNoResult,
           );
         }
         return ListView.builder(
@@ -513,8 +515,10 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
     required dynamic accRepo,
     required SearchQuery query,
     required Map<String, String> parentKeyLabels,
+    required List<String> uncategorizedLabels,
   }) async {
-    final txs = await txRepo.listActiveByLedger(ledgerId) as List<TransactionEntry>;
+    final txs =
+        await txRepo.listActiveByLedger(ledgerId) as List<TransactionEntry>;
     final cats = await catRepo.listActiveAll() as List<Category>;
     final accs = await accRepo.listActive() as List<Account>;
     final results = searchTransactions(
@@ -525,13 +529,10 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
       // 一级分类是常量、不落库——这里把 key→中文标签字典注入过滤器，
       // 让"餐饮 / 购物 / 收入"这种一级分类名也能命中。
       parentKeyLabels: parentKeyLabels,
+      uncategorizedLabels: uncategorizedLabels,
     )..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
-    final categoryById = <String, Category>{
-      for (final c in cats) c.id: c,
-    };
-    final accountById = <String, Account>{
-      for (final a in accs) a.id: a,
-    };
+    final categoryById = <String, Category>{for (final c in cats) c.id: c};
+    final accountById = <String, Account>{for (final a in accs) a.id: a};
     return _SearchData(
       results: results,
       categoryById: categoryById,
@@ -539,8 +540,11 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
     );
   }
 
-  Widget _buildHint(BuildContext context,
-      {required IconData icon, required String text}) {
+  Widget _buildHint(
+    BuildContext context, {
+    required IconData icon,
+    required String text,
+  }) {
     final colors = Theme.of(context).colorScheme;
     return Center(
       child: Column(
@@ -551,8 +555,8 @@ class _ResultsViewState extends ConsumerState<_ResultsView> {
           Text(
             text,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colors.onSurface.withAlpha(160),
-                ),
+              color: colors.onSurface.withAlpha(160),
+            ),
           ),
         ],
       ),
@@ -609,17 +613,22 @@ class _ResultTile extends ConsumerWidget {
         ? const Color(0xFF6C8CC8)
         : (isExpense ? const Color(0xFFE76F51) : const Color(0xFFA8D8B9));
 
-    final cat = tx.categoryId == null ? null : data.categoryById[tx.categoryId!];
+    final cat = tx.categoryId == null
+        ? null
+        : data.categoryById[tx.categoryId!];
     final iconText = isTransfer
         ? '🔁'
         : (cat?.icon ?? (isExpense ? '💸' : '💰'));
     final iconSvg = isTransfer ? null : cat?.iconSvg;
-    final name = isTransfer ? context.l10n.txTypeTransfer : (cat?.name ?? context.l10n.txTypeUncategorized);
+    final name = isTransfer
+        ? context.l10n.txTypeTransfer
+        : (cat?.name ?? context.l10n.txTypeUncategorized);
 
     final acc = tx.accountId == null ? null : data.accountById[tx.accountId!];
     final accName = acc?.name ?? context.l10n.recordNewWallet;
-    final toAcc =
-        tx.toAccountId == null ? null : data.accountById[tx.toAccountId!];
+    final toAcc = tx.toAccountId == null
+        ? null
+        : data.accountById[tx.toAccountId!];
     final toAccName = toAcc?.name;
     final note = tx.tags;
     final subtitleParts = <String>[
@@ -641,15 +650,15 @@ class _ResultTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
-            ),
+          color: Theme.of(context).colorScheme.onSurface.withAlpha(150),
+        ),
       ),
       trailing: Text(
         '$sign${amountFmt.format(tx.amount)}',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: amountColor,
-            ),
+          fontWeight: FontWeight.w600,
+          color: amountColor,
+        ),
       ),
       // Step 3.6 续：搜索结果点击复用首页流水 tile 的「详情底部表单 → 编辑 /
       // 复制 / 删除」交互。完成后 `onChanged` 触发 _ResultsView 重拉数据。

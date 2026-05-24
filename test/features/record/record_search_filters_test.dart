@@ -68,10 +68,7 @@ void main() {
     });
 
     test('关键词匹配备注：搜索"午餐"命中备注为"和同事的午餐"的流水', () {
-      final txs = [
-        _tx(id: 't1', note: '和同事的午餐'),
-        _tx(id: 't2', note: '打车'),
-      ];
+      final txs = [_tx(id: 't1', note: '和同事的午餐'), _tx(id: 't2', note: '打车')];
       final result = searchTransactions(
         transactions: txs,
         categories: const [],
@@ -83,10 +80,7 @@ void main() {
 
     test('关键词匹配分类名', () {
       final cat = _cat('c1', '餐饮');
-      final txs = [
-        _tx(id: 't1', categoryId: 'c1'),
-        _tx(id: 't2'),
-      ];
+      final txs = [_tx(id: 't1', categoryId: 'c1'), _tx(id: 't2')];
       final result = searchTransactions(
         transactions: txs,
         categories: [cat],
@@ -94,6 +88,42 @@ void main() {
         query: const SearchQuery(keyword: '餐饮'),
       );
       expect(result.map((e) => e.id), ['t1']);
+    });
+
+    test('关键词匹配未分类流水', () {
+      final cat = _cat('c1', '餐饮');
+      final txs = [
+        _tx(id: 'uncategorized-expense'),
+        _tx(id: 'categorized-expense', categoryId: 'c1'),
+        _tx(id: 'uncategorized-income', type: 'income'),
+      ];
+      final result = searchTransactions(
+        transactions: txs,
+        categories: [cat],
+        accounts: const [],
+        query: const SearchQuery(keyword: '未分类'),
+      );
+      expect(result.map((e) => e.id).toSet(), {
+        'uncategorized-expense',
+        'uncategorized-income',
+      });
+    });
+
+    test('未分类关键词与类型筛选取交集', () {
+      final txs = [
+        _tx(id: 'expense', type: 'expense'),
+        _tx(id: 'income', type: 'income'),
+      ];
+      final result = searchTransactions(
+        transactions: txs,
+        categories: const [],
+        accounts: const [],
+        query: const SearchQuery(
+          keyword: '未分类',
+          typeFilter: SearchTypeFilter.income,
+        ),
+      );
+      expect(result.map((e) => e.id), ['income']);
     });
 
     test('关键词匹配一级分类中文标签：搜"餐饮" 命中所有 parentKey=food 的流水', () {
@@ -112,10 +142,7 @@ void main() {
         categories: [breakfast, lunch, clothes],
         accounts: const [],
         query: const SearchQuery(keyword: '餐饮'),
-        parentKeyLabels: const {
-          'food': '餐饮',
-          'shopping': '购物',
-        },
+        parentKeyLabels: const {'food': '餐饮', 'shopping': '购物'},
       );
       expect(result.map((e) => e.id).toSet(), {'t1', 't2'});
     });
@@ -132,10 +159,7 @@ void main() {
         categories: [breakfast, clothes],
         accounts: const [],
         query: const SearchQuery(keyword: 'food'),
-        parentKeyLabels: const {
-          'food': '餐饮',
-          'shopping': '购物',
-        },
+        parentKeyLabels: const {'food': '餐饮', 'shopping': '购物'},
       );
       expect(result.map((e) => e.id), ['t1']);
     });
@@ -145,12 +169,7 @@ void main() {
       final txs = [
         _tx(id: 't1', accountId: 'a1'),
         _tx(id: 't2', accountId: 'a2'),
-        _tx(
-          id: 't3',
-          type: 'transfer',
-          accountId: 'a1',
-          toAccountId: 'a2',
-        ),
+        _tx(id: 't3', type: 'transfer', accountId: 'a1', toAccountId: 'a2'),
       ];
       final result = searchTransactions(
         transactions: txs,
@@ -284,11 +303,7 @@ void main() {
     });
 
     test('SearchQuery.copyWith 支持 clear 标志位置空', () {
-      const q = SearchQuery(
-        keyword: 'x',
-        minAmount: 10,
-        maxAmount: 100,
-      );
+      const q = SearchQuery(keyword: 'x', minAmount: 10, maxAmount: 100);
       final cleared = q.copyWith(clearMinAmount: true, clearMaxAmount: true);
       expect(cleared.keyword, 'x');
       expect(cleared.minAmount, isNull);

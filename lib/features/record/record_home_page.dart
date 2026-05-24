@@ -131,7 +131,8 @@ class RecordHomePage extends ConsumerWidget {
                     heightFactor: 0.58,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(20)),
+                        top: Radius.circular(20),
+                      ),
                       child: Material(
                         color: Theme.of(sheetContext).colorScheme.surface,
                         child: const _RecordBottomSheetPage(),
@@ -187,7 +188,9 @@ class _TopBar extends ConsumerWidget {
                 offset: const Offset(0, 6),
                 onSelected: (selected) async {
                   if (selected.id == id) return;
-                  await ref.read(currentLedgerIdProvider.notifier).switchTo(selected.id);
+                  await ref
+                      .read(currentLedgerIdProvider.notifier)
+                      .switchTo(selected.id);
                   ref.invalidate(recordMonthSummaryProvider);
                   ref.invalidate(ledgerTxCountsProvider);
                   ref.invalidate(statsLinePointsProvider);
@@ -198,7 +201,8 @@ class _TopBar extends ConsumerWidget {
                   ref.invalidate(budgetProgressForProvider);
                 },
                 itemBuilder: (_) {
-                  final active = ledgersAsync.valueOrNull?.active ?? const <Ledger>[];
+                  final active =
+                      ledgersAsync.valueOrNull?.active ?? const <Ledger>[];
                   return [
                     for (final l in active)
                       PopupMenuItem<Ledger>(
@@ -212,14 +216,18 @@ class _TopBar extends ConsumerWidget {
                             ),
                             const SizedBox(width: 8),
                             Expanded(child: Text(l.name)),
-                            if (l.id == id) const Icon(Icons.check_circle, size: 18),
+                            if (l.id == id)
+                              const Icon(Icons.check_circle, size: 18),
                           ],
                         ),
                       ),
                   ];
                 },
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 2,
+                  ),
                   child: Row(
                     children: [
                       SvgOrEmojiIcon(
@@ -230,9 +238,8 @@ class _TopBar extends ConsumerWidget {
                       const SizedBox(width: 6),
                       Text(
                         name,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const Icon(Icons.arrow_drop_down, size: 20),
                     ],
@@ -254,8 +261,9 @@ class _TopBar extends ConsumerWidget {
                     builder: (sheetContext) => FractionallySizedBox(
                       heightFactor: 0.58,
                       child: ClipRRect(
-                        borderRadius:
-                            const BorderRadius.vertical(top: Radius.circular(20)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(20),
+                        ),
                         child: Material(
                           color: Theme.of(sheetContext).colorScheme.surface,
                           child: const _RecordTransferBottomSheetPage(),
@@ -283,7 +291,6 @@ class _TopBar extends ConsumerWidget {
       },
     );
   }
-
 }
 
 // ---- 同步状态徽标（Step 10.7）----
@@ -323,10 +330,15 @@ class _SyncStatusBadge extends ConsumerWidget {
     } else if (state.lastSyncedAt != null) {
       icon = Icon(Icons.cloud_done_outlined, size: 18, color: colors.tertiary);
       tint = colors.tertiary;
-      tooltip = l10n.recordLastSyncedAt(_formatRelative(context, state.lastSyncedAt!));
+      tooltip = l10n.recordLastSyncedAt(
+        _formatRelative(context, state.lastSyncedAt!),
+      );
     } else {
-      icon = Icon(Icons.cloud_outlined,
-          size: 18, color: colors.onSurface.withAlpha(140));
+      icon = Icon(
+        Icons.cloud_outlined,
+        size: 18,
+        color: colors.onSurface.withAlpha(140),
+      );
       tint = colors.onSurface.withAlpha(140);
       tooltip = l10n.recordNeverSynced;
     }
@@ -351,9 +363,9 @@ class _SyncStatusBadge extends ConsumerWidget {
                   const SizedBox(width: 4),
                   Text(
                     tsLabel,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: tint,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: tint),
                   ),
                 ],
               ],
@@ -396,8 +408,7 @@ class _MonthBar extends StatelessWidget {
           IconButton(
             tooltip: context.l10n.a11yRecordHomePrevMonth,
             icon: const Icon(Icons.chevron_left, size: 24),
-            onPressed: () =>
-                ref.read(recordMonthProvider.notifier).previous(),
+            onPressed: () => ref.read(recordMonthProvider.notifier).previous(),
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
@@ -422,8 +433,8 @@ class _MonthBar extends StatelessWidget {
                   child: Text(
                     monthLabel,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
@@ -432,8 +443,7 @@ class _MonthBar extends StatelessWidget {
           IconButton(
             tooltip: context.l10n.a11yRecordHomeNextMonth,
             icon: const Icon(Icons.chevron_right, size: 24),
-            onPressed: () =>
-                ref.read(recordMonthProvider.notifier).next(),
+            onPressed: () => ref.read(recordMonthProvider.notifier).next(),
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
@@ -523,25 +533,27 @@ class _CardChip extends StatelessWidget {
         : '$symbol--.--';
 
     return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        decoration: BoxDecoration(
-          color: chipColor.withAlpha(48),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: chipColor.withAlpha(80), width: 1),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: Theme.of(context).textTheme.labelSmall),
-            Text(display, style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: chipColor,
-                  ),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      decoration: BoxDecoration(
+        color: chipColor.withAlpha(48),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: chipColor.withAlpha(80), width: 1),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
+          Text(
+            display,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: chipColor,
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -604,10 +616,7 @@ class _QuickInputBarState extends ConsumerState<_QuickInputBar> {
     setState(() => _busy = true);
     final parser = ref.read(quickTextParserProvider);
     final parsed = parser.parse(text);
-    final saved = await showQuickConfirmSheet(
-      context: context,
-      parsed: parsed,
-    );
+    final saved = await showQuickConfirmSheet(context: context, parsed: parsed);
     if (!mounted) return;
     setState(() => _busy = false);
     if (saved) {
@@ -633,8 +642,7 @@ class _QuickInputBarState extends ConsumerState<_QuickInputBar> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeOut,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: colors.surface,
                 borderRadius: BorderRadius.circular(20),
@@ -742,8 +750,13 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
 
   String _dayLabel(DateTime date) {
     final weekdays = [
-      context.l10n.weekdayMon, context.l10n.weekdayTue, context.l10n.weekdayWed,
-      context.l10n.weekdayThu, context.l10n.weekdayFri, context.l10n.weekdaySat, context.l10n.weekdaySun,
+      context.l10n.weekdayMon,
+      context.l10n.weekdayTue,
+      context.l10n.weekdayWed,
+      context.l10n.weekdayThu,
+      context.l10n.weekdayFri,
+      context.l10n.weekdaySat,
+      context.l10n.weekdaySun,
     ];
     final wd = weekdays[date.weekday - 1];
     return context.l10n.dateMonthDayWeekday(date.month, date.day, wd);
@@ -758,8 +771,7 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
   void _consumeScrollTarget(List<DailyTransactions> groups) {
     final target = ref.read(recordScrollTargetProvider);
     if (target == null) return;
-    final normalizedTarget =
-        DateTime(target.year, target.month, target.day);
+    final normalizedTarget = DateTime(target.year, target.month, target.day);
     if (!groups.any((g) => g.date == normalizedTarget)) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -798,7 +810,8 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
     return summary.when(
       skipLoadingOnReload: true,
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
+      error: (e, _) =>
+          Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
       data: (data) {
         // 1) 收集当前 data 里的 active id，把已经从 data 中消失的 id
         //    （= 后端刷新落地）从 `_locallyDeleted` 里清掉。这样
@@ -843,22 +856,22 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.coffee_outlined,
-                            size: 64,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primary
-                                .withAlpha(128)),
+                        Icon(
+                          Icons.coffee_outlined,
+                          size: 64,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withAlpha(128),
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           context.l10n.recordStartFirst,
-                          style:
-                              Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withAlpha(160),
-                                  ),
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withAlpha(160),
+                              ),
                         ),
                       ],
                     ),
@@ -908,14 +921,11 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
                           padding: const EdgeInsets.only(top: 12, bottom: 4),
                           child: Text(
                             _dayLabel(group.date),
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelMedium
+                            style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withAlpha(160),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withAlpha(160),
                                 ),
                           ),
                         ),
@@ -944,16 +954,18 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
     final l10n = context.l10n;
     switch (result.outcome) {
       case SyncTriggerOutcome.success:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.recordSynced)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.recordSynced)));
       case SyncTriggerOutcome.networkUnavailable:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.recordNetworkUnavailable)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.recordNetworkUnavailable)));
       case SyncTriggerOutcome.failure:
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.recordSyncFailedMsg(result.message ?? ''))),
+          SnackBar(
+            content: Text(l10n.recordSyncFailedMsg(result.message ?? '')),
+          ),
         );
       case SyncTriggerOutcome.skipped:
         // 前一次还在跑——静默
@@ -966,11 +978,7 @@ class _TransactionListState extends ConsumerState<_TransactionList> {
 }
 
 class _TxTile extends ConsumerStatefulWidget {
-  const _TxTile({
-    super.key,
-    required this.tx,
-    this.onLocalDismiss,
-  });
+  const _TxTile({super.key, required this.tx, this.onLocalDismiss});
 
   final TransactionEntry tx;
 
@@ -1034,11 +1042,23 @@ class _TxTileState extends ConsumerState<_TxTile> {
     final iconText = isTransfer
         ? '🔁'
         : (matched != null
-            ? resolveCategoryIcon(
-                matched.icon, matched.parentKey, matched.name, iconPack)
-            : (tx.type == 'expense' ? '💸' : (tx.type == 'income' ? '💰' : '🔁')));
+              ? resolveCategoryIcon(
+                  matched.icon,
+                  matched.parentKey,
+                  matched.name,
+                  iconPack,
+                )
+              : (tx.type == 'expense'
+                    ? '💸'
+                    : (tx.type == 'income' ? '💰' : '🔁')));
     final iconSvg = isTransfer ? null : matched?.iconSvg;
-    final nameText = isTransfer ? context.l10n.txTypeTransfer : (matched?.name ?? context.l10n.txTypeUncategorized);
+    final nameText = isTransfer
+        ? context.l10n.txTypeTransfer
+        : (matched?.name ?? context.l10n.txTypeUncategorized);
+    final noteText = tx.tags?.trim();
+    final titleText = (noteText == null || noteText.isEmpty)
+        ? nameText
+        : '$nameText · $noteText';
     final parentKey = _inferParentKey(matched, tx);
 
     String accountName(String? id) {
@@ -1057,132 +1077,133 @@ class _TxTileState extends ConsumerState<_TxTile> {
         : null;
 
     return Dismissible(
-          key: Key('tx_${tx.id}'),
-          direction: DismissDirection.endToStart,
-          confirmDismiss: (_) async {
-            return _confirmDelete(context);
-          },
-          onDismissed: (_) async {
-            // 第一步必须同步执行：把 tx.id 标记为本地已删，触发父级
-            // setState 在当帧 build 阶段把该流水从渲染列表里剔除——
-            // Dismissible Element 因此被 unmount 而非 update，避开
-            // framework 断言 *"A dismissed Dismissible widget is still
-            // part of the tree"*。
-            //
-            // 此前曾尝试 `addPostFrameCallback` 延后 invalidate，
-            // 或仅靠 `skipLoadingOnReload: true` 保留旧数据——前者根本
-            // 没解决"父级仍在渲染该 Dismissible"的问题，后者直接触发了
-            // 上面那条断言。把同步剔除提到所有 await 之前，配合
-            // `_locallyDeleted` 过滤集才是稳妥写法。
-            widget.onLocalDismiss?.call();
+      key: Key('tx_${tx.id}'),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) async {
+        return _confirmDelete(context);
+      },
+      onDismissed: (_) async {
+        // 第一步必须同步执行：把 tx.id 标记为本地已删，触发父级
+        // setState 在当帧 build 阶段把该流水从渲染列表里剔除——
+        // Dismissible Element 因此被 unmount 而非 update，避开
+        // framework 断言 *"A dismissed Dismissible widget is still
+        // part of the tree"*。
+        //
+        // 此前曾尝试 `addPostFrameCallback` 延后 invalidate，
+        // 或仅靠 `skipLoadingOnReload: true` 保留旧数据——前者根本
+        // 没解决"父级仍在渲染该 Dismissible"的问题，后者直接触发了
+        // 上面那条断言。把同步剔除提到所有 await 之前，配合
+        // `_locallyDeleted` 过滤集才是稳妥写法。
+        widget.onLocalDismiss?.call();
 
-            if (!context.mounted) return;
-            final messenger = ScaffoldMessenger.of(context);
-            final txRepo = await ref.read(transactionRepositoryProvider.future);
-            await txRepo.softDeleteById(tx.id);
-            // Step 11.4：软删后清 cache 子目录（fire-and-forget）。
-            unawaited(() async {
-              try {
-                final pruner =
-                    await ref.read(attachmentCachePrunerProvider.future);
-                await pruner.removeForTransaction(tx.id);
-              } catch (_) {/* 静默——cache 残留不影响业务 */}
-            }());
-            if (!context.mounted) return;
-            // 触发 provider 失效；新数据落地后 build 阶段会把 tx.id
-            // 从 `_locallyDeleted` 里清理掉。配合
-            // `skipLoadingOnReload: true`，重载窗口里继续渲染旧 data
-            // 但 tx 已被过滤，不会 spinner 抢一帧。
-            ref.invalidate(recordMonthSummaryProvider);
-            ref.invalidate(statsLinePointsProvider);
-            ref.invalidate(statsPieSlicesProvider);
-            ref.invalidate(statsRankItemsProvider);
-            ref.invalidate(statsHeatmapCellsProvider);
-            ref.invalidate(budgetProgressForProvider);
-            messenger.showSnackBar(
-              SnackBar(content: Text(context.l10n.deleted)),
-            );
-          },
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE76F51).withAlpha(36),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.delete_outline),
-          ),
-          child: InkWell(
-            onTap: () async {
-              await openRecordTileActions(
-                context: context,
-                ref: ref,
-                tx: tx,
-                category: matched,
-                accountName: accountName(tx.accountId),
-                toAccountName: tx.type == 'transfer'
-                    ? accountName(tx.toAccountId)
-                    : null,
-                parentKey: parentKey,
-              );
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: amountColor.withAlpha(36),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    alignment: Alignment.center,
-                    child: SvgOrEmojiIcon(
-                      svgString: iconSvg,
-                      emoji: iconText,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          nameText,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        if (transferSubTitle != null)
-                          Text(
-                            transferSubTitle,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withAlpha(150),
-                                ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '$sign${_symbolFor(tx.currency)}${_fmt.format(tx.amount)}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: amountColor,
-                        ),
-                  ),
-                ],
+        if (!context.mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        final txRepo = await ref.read(transactionRepositoryProvider.future);
+        await txRepo.softDeleteById(tx.id);
+        // Step 11.4：软删后清 cache 子目录（fire-and-forget）。
+        unawaited(() async {
+          try {
+            final pruner = await ref.read(attachmentCachePrunerProvider.future);
+            await pruner.removeForTransaction(tx.id);
+          } catch (_) {
+            /* 静默——cache 残留不影响业务 */
+          }
+        }());
+        if (!context.mounted) return;
+        // 触发 provider 失效；新数据落地后 build 阶段会把 tx.id
+        // 从 `_locallyDeleted` 里清理掉。配合
+        // `skipLoadingOnReload: true`，重载窗口里继续渲染旧 data
+        // 但 tx 已被过滤，不会 spinner 抢一帧。
+        ref.invalidate(recordMonthSummaryProvider);
+        ref.invalidate(statsLinePointsProvider);
+        ref.invalidate(statsPieSlicesProvider);
+        ref.invalidate(statsRankItemsProvider);
+        ref.invalidate(statsHeatmapCellsProvider);
+        ref.invalidate(budgetProgressForProvider);
+        messenger.showSnackBar(SnackBar(content: Text(context.l10n.deleted)));
+      },
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE76F51).withAlpha(36),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.delete_outline),
+      ),
+      child: InkWell(
+        onTap: () async {
+          await openRecordTileActions(
+            context: context,
+            ref: ref,
+            tx: tx,
+            category: matched,
+            accountName: accountName(tx.accountId),
+            toAccountName: tx.type == 'transfer'
+                ? accountName(tx.toAccountId)
+                : null,
+            parentKey: parentKey,
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: amountColor.withAlpha(36),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: SvgOrEmojiIcon(
+                  svgString: iconSvg,
+                  emoji: iconText,
+                  size: 18,
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titleText,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (transferSubTitle != null)
+                      Text(
+                        transferSubTitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withAlpha(150),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Text(
+                '$sign${_symbolFor(tx.currency)}${_fmt.format(tx.amount)}',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: amountColor,
+                ),
+              ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
     final l10n = context.l10n;
-    final ok = await showDialog<bool>(
+    final ok =
+        await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text(l10n.recordDeleteConfirm),
@@ -1217,10 +1238,7 @@ class _RecordBottomSheetPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const SafeArea(
-      top: false,
-      child: RecordNewPage(),
-    );
+    return const SafeArea(top: false, child: RecordNewPage());
   }
 }
 
@@ -1229,10 +1247,7 @@ class _RecordTransferBottomSheetPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const SafeArea(
-      top: false,
-      child: RecordNewPage(isTransfer: true),
-    );
+    return const SafeArea(top: false, child: RecordNewPage(isTransfer: true));
   }
 }
 
@@ -1288,13 +1303,17 @@ class _IdleReminderCardState extends ConsumerState<_IdleReminderCard> {
               child: Text(
                 context.l10n.recordIdleReminder(days),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurface.withAlpha(200),
-                    ),
+                  color: colors.onSurface.withAlpha(200),
+                ),
               ),
             ),
             IconButton(
               tooltip: context.l10n.a11yRecordHomeDismissReminder,
-              icon: Icon(Icons.close, size: 18, color: colors.onSurface.withAlpha(120)),
+              icon: Icon(
+                Icons.close,
+                size: 18,
+                color: colors.onSurface.withAlpha(120),
+              ),
               onPressed: () => setState(() => _dismissed = true),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -1323,10 +1342,12 @@ class _BottomStickFabLocation extends FloatingActionButtonLocation {
 
   @override
   Offset getOffset(ScaffoldPrelayoutGeometry scaffoldGeometry) {
-    final double fabX = (scaffoldGeometry.scaffoldSize.width -
+    final double fabX =
+        (scaffoldGeometry.scaffoldSize.width -
             scaffoldGeometry.floatingActionButtonSize.width) /
         2.0;
-    final double fabY = scaffoldGeometry.scaffoldSize.height -
+    final double fabY =
+        scaffoldGeometry.scaffoldSize.height -
         scaffoldGeometry.minViewPadding.bottom -
         scaffoldGeometry.floatingActionButtonSize.height;
     return Offset(fabX, fabY);

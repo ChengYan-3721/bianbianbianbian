@@ -5,9 +5,14 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/currencies.dart';
+import '../../data/local/providers.dart';
 import '../../data/repository/providers.dart';
 import '../../domain/entity/account.dart';
+import '../budget/budget_providers.dart';
+import '../record/record_providers.dart';
+import '../stats/stats_range_providers.dart';
 import 'account_providers.dart';
+import 'account_save_service.dart';
 
 class AccountEditPage extends ConsumerStatefulWidget {
   const AccountEditPage({super.key, this.accountId});
@@ -23,7 +28,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
   final _nameController = TextEditingController();
   final _iconController = TextEditingController();
   final _iconSvgController = TextEditingController();
-  final _initialBalanceController = TextEditingController();
+  final _balanceController = TextEditingController();
   final _billingDayController = TextEditingController();
   final _repaymentDayController = TextEditingController();
 
@@ -32,8 +37,9 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
   bool _includeInTotal = true;
   bool _initialized = false;
   bool _saving = false;
+  double _loadedBalance = 0;
 
-  late Future<Account?> _loadFuture;
+  late Future<_AccountEditData> _loadFuture;
 
   static const _typeKeys = ['cash', 'debit', 'credit', 'third_party', 'other'];
 
@@ -54,21 +60,41 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
     _loadFuture = _loadAccount();
   }
 
-  Future<Account?> _loadAccount() async {
-    if (widget.accountId == null) return null;
+  Future<_AccountEditData> _loadAccount() async {
+    if (widget.accountId == null) {
+      return const _AccountEditData(account: null, balance: 0);
+    }
     final repo = await ref.read(accountRepositoryProvider.future);
-    return repo.getById(widget.accountId!);
+    final account = await repo.getById(widget.accountId!);
+    if (account == null) {
+      return const _AccountEditData(account: null, balance: 0);
+    }
+    final balances = await ref.read(accountBalancesProvider.future);
+    var balance = 0.0;
+    for (final b in balances) {
+      if (b.accountId == account.id) {
+        balance = b.currentBalance;
+        break;
+      }
+    }
+    return _AccountEditData(account: account, balance: balance);
   }
 
-  void _hydrate(Account acc) {
+  void _hydrate(_AccountEditData data) {
     if (_initialized) return;
     _initialized = true;
+    _loadedBalance = data.balance;
+    final acc = data.account;
+    if (acc == null) {
+      _balanceController.text = '';
+      return;
+    }
     _nameController.text = acc.name;
     _iconController.text = acc.icon ?? '';
     _iconSvgController.text = acc.iconSvg ?? '';
-    _initialBalanceController.text = acc.initialBalance == 0
+    _balanceController.text = data.balance == 0
         ? ''
-        : acc.initialBalance.toStringAsFixed(2);
+        : data.balance.toStringAsFixed(2);
     _billingDayController.text = acc.billingDay?.toString() ?? '';
     _repaymentDayController.text = acc.repaymentDay?.toString() ?? '';
     _type = acc.type;
@@ -81,7 +107,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
     _nameController.dispose();
     _iconController.dispose();
     _iconSvgController.dispose();
-    _initialBalanceController.dispose();
+    _balanceController.dispose();
     _billingDayController.dispose();
     _repaymentDayController.dispose();
     super.dispose();
@@ -95,26 +121,28 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
       appBar: AppBar(
         title: Text(isEdit ? l10n.accountEditTitle : l10n.accountNewTitle),
         actions: [
-          TextButton(
-            onPressed: _saving ? null : _save,
-            child: Text(l10n.save),
-          ),
+          TextButton(onPressed: _saving ? null : _save, child: Text(l10n.save)),
         ],
       ),
-      body: FutureBuilder<Account?>(
+      body: FutureBuilder<_AccountEditData>(
         future: _loadFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text(l10n.loadFailedWithError(snapshot.error.toString())));
+            return Center(
+              child: Text(l10n.loadFailedWithError(snapshot.error.toString())),
+            );
           }
-          final acc = snapshot.data;
+          final data =
+              snapshot.data ??
+              const _AccountEditData(account: null, balance: 0);
+          final acc = data.account;
           if (isEdit && acc == null) {
             return Center(child: Text(l10n.accountNotExist));
           }
-          if (acc != null) _hydrate(acc);
+          _hydrate(data);
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -184,7 +212,7 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
-                    controller: _initialBalanceController,
+                    controller: _balanceController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                       signed: true,
@@ -195,8 +223,8 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
                       ),
                     ],
                     decoration: InputDecoration(
-                      labelText: l10n.accountInitialBalance,
-                      hintText: l10n.accountInitialBalanceHint,
+                      labelText: l10n.accountBalance,
+                      hintText: l10n.accountBalanceHint,
                       border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
@@ -301,13 +329,17 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
     setState(() => _saving = true);
 
     try {
+      final adjustmentNote = context.l10n.accountBalanceAdjustmentNote;
       final repo = await ref.read(accountRepositoryProvider.future);
+      final db = ref.read(appDatabaseProvider);
+      final deviceId = await ref.read(deviceIdProvider.future);
+      final ledgerId = await ref.read(currentLedgerIdProvider.future);
       final now = DateTime.now();
       final isEdit = widget.accountId != null;
 
-      final balance = _initialBalanceController.text.trim().isEmpty
+      final balance = _balanceController.text.trim().isEmpty
           ? 0.0
-          : double.parse(_initialBalanceController.text.trim());
+          : double.parse(_balanceController.text.trim());
       final iconText = _iconController.text.trim();
       final iconSvgText = _iconSvgController.text.trim();
       final iconValue = iconText.isEmpty ? null : iconText;
@@ -338,7 +370,6 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
           icon: iconValue,
           iconSvg: iconSvgValue,
           color: existing.color,
-          initialBalance: balance,
           includeInTotal: _includeInTotal,
           currency: _currency,
           billingDay: billingDay,
@@ -354,7 +385,6 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
           type: _type,
           icon: iconValue,
           iconSvg: iconSvgValue,
-          initialBalance: balance,
           includeInTotal: _includeInTotal,
           currency: _currency,
           billingDay: billingDay,
@@ -364,11 +394,26 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
         );
       }
 
-      await repo.save(entity);
+      final service = AccountSaveService(db: db, deviceId: deviceId);
+      await service.save(
+        account: entity,
+        ledgerId: ledgerId,
+        oldBalance: isEdit ? _loadedBalance : 0,
+        newBalance: balance,
+        adjustmentNote: adjustmentNote,
+      );
       if (!mounted) return;
       ref.invalidate(accountsListProvider);
       ref.invalidate(accountBalancesProvider);
       ref.invalidate(totalAssetsProvider);
+      ref.invalidate(accountAssetLiabilityProvider);
+      ref.invalidate(currentLedgerTransactionsProvider);
+      ref.invalidate(recordMonthSummaryProvider);
+      ref.invalidate(statsLinePointsProvider);
+      ref.invalidate(statsPieSlicesProvider);
+      ref.invalidate(statsRankItemsProvider);
+      ref.invalidate(statsHeatmapCellsProvider);
+      ref.invalidate(budgetProgressForProvider);
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
@@ -379,4 +424,11 @@ class _AccountEditPageState extends ConsumerState<AccountEditPage> {
       if (mounted) setState(() => _saving = false);
     }
   }
+}
+
+class _AccountEditData {
+  const _AccountEditData({required this.account, required this.balance});
+
+  final Account? account;
+  final double balance;
 }

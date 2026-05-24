@@ -69,26 +69,34 @@ void main() {
   });
 
   Future<void> seedLedger(String id) async {
-    await ledgerRepo.save(Ledger(
-      id: id,
-      name: '生活$id',
-      createdAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    await ledgerRepo.save(
+      Ledger(
+        id: id,
+        name: '生活$id',
+        createdAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
   }
 
-  Future<TransactionEntry> seedTx(String id, String ledgerId, {double amount = 10}) async {
-    return txRepo.save(TransactionEntry(
-      id: id,
-      ledgerId: ledgerId,
-      type: 'expense',
-      amount: amount,
-      currency: 'CNY',
-      occurredAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+  Future<TransactionEntry> seedTx(
+    String id,
+    String ledgerId, {
+    double amount = 10,
+  }) async {
+    return txRepo.save(
+      TransactionEntry(
+        id: id,
+        ledgerId: ledgerId,
+        type: 'expense',
+        amount: amount,
+        currency: 'CNY',
+        occurredAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
   }
 
   group('TransactionRepository.listDeleted / restore / purge', () {
@@ -107,10 +115,7 @@ void main() {
       await txRepo.softDeleteById('tx-new-soft');
 
       final deleted = await txRepo.listDeleted();
-      expect(deleted.map((t) => t.id).toList(), [
-        'tx-new-soft',
-        'tx-old-soft',
-      ]);
+      expect(deleted.map((t) => t.id).toList(), ['tx-new-soft', 'tx-old-soft']);
     });
 
     test('restoreById：清 deleted_at + 刷新 updated_at', () async {
@@ -187,27 +192,35 @@ void main() {
       expect(expired.map((t) => t.id), ['old-tx']);
     });
 
-    test('Step 17(云同步 V2):restoreById 入队 op=upsert, payload deleted_at = null',
-        () async {
-      await seedLedger('L1');
-      await seedTx('tx-1', 'L1');
-      await txRepo.softDeleteById('tx-1');
+    test(
+      'Step 17(云同步 V2):restoreById 入队 op=upsert, payload deleted_at = null',
+      () async {
+        await seedLedger('L1');
+        await seedTx('tx-1', 'L1');
+        await txRepo.softDeleteById('tx-1');
 
-      final beforeCount = (await db.syncOpDao.listAll()).length;
-      currentTs += 7000;
-      await txRepo.restoreById('tx-1');
+        final beforeCount = (await db.syncOpDao.listAll()).length;
+        currentTs += 7000;
+        await txRepo.restoreById('tx-1');
 
-      final after = await db.syncOpDao.listAll();
-      expect(after.length, beforeCount + 1,
-          reason: 'restoreById 应入队恰好 1 条 sync_op');
-      final lastOp = after.last;
-      expect(lastOp.entity, 'transaction');
-      expect(lastOp.entityId, 'tx-1');
-      expect(lastOp.op, 'upsert');
-      final payload = jsonDecode(lastOp.payload) as Map<String, dynamic>;
-      expect(payload['deleted_at'], isNull,
-          reason: 'restore payload deleted_at 必须显式置 null');
-    });
+        final after = await db.syncOpDao.listAll();
+        expect(
+          after.length,
+          beforeCount + 1,
+          reason: 'restoreById 应入队恰好 1 条 sync_op',
+        );
+        final lastOp = after.last;
+        expect(lastOp.entity, 'transaction');
+        expect(lastOp.entityId, 'tx-1');
+        expect(lastOp.op, 'upsert');
+        final payload = jsonDecode(lastOp.payload) as Map<String, dynamic>;
+        expect(
+          payload['deleted_at'],
+          isNull,
+          reason: 'restore payload deleted_at 必须显式置 null',
+        );
+      },
+    );
 
     test('restoreById 对已活跃 id 幂等:不入队 sync_op', () async {
       await seedLedger('L1');
@@ -231,15 +244,17 @@ void main() {
 
   group('CategoryRepository / AccountRepository: 基础 trash 路径', () {
     test('Category restoreById 后 listActiveAll 可见', () async {
-      final c = await catRepo.save(Category(
-        id: 'cat-1',
-        parentKey: 'food',
-        name: '午餐',
-        sortOrder: 0,
-        isFavorite: false,
-        updatedAt: clock(),
-        deviceId: 'device-test',
-      ));
+      final c = await catRepo.save(
+        Category(
+          id: 'cat-1',
+          parentKey: 'food',
+          name: '午餐',
+          sortOrder: 0,
+          isFavorite: false,
+          updatedAt: clock(),
+          deviceId: 'device-test',
+        ),
+      );
       await catRepo.softDeleteById(c.id);
       expect(await catRepo.listActiveAll(), isEmpty);
       expect((await catRepo.listDeleted()).length, 1);
@@ -251,16 +266,17 @@ void main() {
     });
 
     test('Account purgeById 物理删除', () async {
-      final a = await accRepo.save(Account(
-        id: 'acc-1',
-        name: '现金',
-        type: 'cash',
-        initialBalance: 0,
-        includeInTotal: true,
-        currency: 'CNY',
-        updatedAt: clock(),
-        deviceId: 'device-test',
-      ));
+      final a = await accRepo.save(
+        Account(
+          id: 'acc-1',
+          name: '现金',
+          type: 'cash',
+          includeInTotal: true,
+          currency: 'CNY',
+          updatedAt: clock(),
+          deviceId: 'device-test',
+        ),
+      );
       await accRepo.softDeleteById(a.id);
       final affected = await accRepo.purgeById(a.id);
       expect(affected, 1);
@@ -292,8 +308,7 @@ void main() {
       // 软删后：L1 的 deleted_at = 10000；tx-l1-a 的 deleted_at = 5000；
       // tx-l1-b 的 deleted_at = 10000。
       var trashedTx = await txRepo.listDeleted();
-      expect(trashedTx.map((t) => t.id).toSet(),
-          {'tx-l1-a', 'tx-l1-b'});
+      expect(trashedTx.map((t) => t.id).toSet(), {'tx-l1-a', 'tx-l1-b'});
 
       // 现在恢复 L1：应该把 tx-l1-b（同时间戳）一起复活，但 tx-l1-a 不动。
       currentTs = 20000;
@@ -303,8 +318,9 @@ void main() {
       final ledgers = await ledgerRepo.listActive();
       expect(ledgers.map((l) => l.id), contains('L1'));
       // tx-l1-b 重新活跃
-      final l1Active =
-          (await txRepo.listActiveByLedger('L1')).map((t) => t.id).toSet();
+      final l1Active = (await txRepo.listActiveByLedger(
+        'L1',
+      )).map((t) => t.id).toSet();
       expect(l1Active, {'tx-l1-b'});
       // tx-l1-a 仍在垃圾桶（用户单独删的没被误恢复）
       trashedTx = await txRepo.listDeleted();
@@ -333,9 +349,7 @@ void main() {
       expect(l2.length, 1);
     });
 
-    test(
-        'Step 17(云同步 V2):账本级联恢复时,ledger + 同时间戳级联子项各自入队 upsert',
-        () async {
+    test('Step 17(云同步 V2):账本级联恢复时,ledger + 同时间戳级联子项各自入队 upsert', () async {
       // 用户单独软删 tx-l1-a(它的 deletedAt 与 L1 不同,不参与级联)
       currentTs = 5000;
       await txRepo.softDeleteById('tx-l1-a');

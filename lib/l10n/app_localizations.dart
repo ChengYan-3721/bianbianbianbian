@@ -1990,17 +1990,23 @@ abstract class AppLocalizations {
   /// **'粘贴 SVG 代码，例如 <svg>...</svg>'**
   String get accountIconSvgHint;
 
-  /// No description provided for @accountInitialBalance.
+  /// No description provided for @accountBalance.
   ///
   /// In zh, this message translates to:
-  /// **'初始余额'**
-  String get accountInitialBalance;
+  /// **'余额'**
+  String get accountBalance;
 
-  /// No description provided for @accountInitialBalanceHint.
+  /// No description provided for @accountBalanceHint.
   ///
   /// In zh, this message translates to:
-  /// **'可为负（信用卡欠款填负值）'**
-  String get accountInitialBalanceHint;
+  /// **'修改后会生成一条余额调整流水'**
+  String get accountBalanceHint;
+
+  /// No description provided for @accountBalanceAdjustmentNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额调整'**
+  String get accountBalanceAdjustmentNote;
 
   /// No description provided for @accountBalanceInvalid.
   ///

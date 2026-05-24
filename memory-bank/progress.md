@@ -150,7 +150,7 @@
 **改动**
 - `lib/data/local/tables/ledger_table.dart`（新建）：`LedgerTable` + `@DataClassName('LedgerEntry')`，字段严格照 §7.1——`id` (TEXT PK)、`name` (NOT NULL)、`cover_emoji`、`default_currency` 默认 `'CNY'`、`archived` 默认 0、`created_at` / `updated_at` (NOT NULL)、`deleted_at`、`device_id` (NOT NULL)。
 - `lib/data/local/tables/category_table.dart`（新建）：`CategoryTable` + `@DataClassName('CategoryEntry')`。`ledger_id` 用 `.references(LedgerTable, #id)()` 声明外键；`type` / `sort_order` / 同步三件套全按 §7.1。
-- `lib/data/local/tables/account_table.dart`（新建）：`AccountTable` + `@DataClassName('AccountEntry')`。`initial_balance` REAL 默认 0，`include_in_total` 默认 1，`currency` 默认 `'CNY'`。
+- `lib/data/local/tables/account_table.dart`（新建）：`AccountTable` + `@DataClassName('AccountEntry')`。账户余额不落账户表，完全由流水计算；`include_in_total` 默认 1，`currency` 默认 `'CNY'`。
 - `lib/data/local/tables/transaction_entry_table.dart`（新建）：`TransactionEntryTable` + `@DataClassName('TransactionEntryRow')`——**刻意不叫 `TransactionEntry`**，留给 Step 2.1 的领域实体同名。`ledger_id` 声 FK 到 `ledger(id)`；`amount` / `currency` / `occurred_at` NOT NULL；`fx_rate` 默认 1.0；`note_encrypted` / `attachments_encrypted` 为 BLOB nullable（Phase 11 接字段级加密后装密文）。
 - `lib/data/local/tables/budget_table.dart`（新建）：`BudgetTable` + `@DataClassName('BudgetEntry')`。`category_id` nullable 表示"总预算"；`carry_over` 默认 0（Step 6.4 真正使用）。
 - `lib/data/local/tables/sync_op_table.dart`（新建）：`SyncOpTable` + `@DataClassName('SyncOpEntry')`。`id` 走 `integer().autoIncrement()`（drift 里 autoIncrement 隐式即主键，**不**再覆写 `primaryKey`——否则 drift_dev 报 `primary_key_and_auto_increment`）。无同步三件套（这是本机出站队列，不双向同步）。
@@ -282,7 +282,7 @@
 - **单事务下的幂等**：`seedIfEmpty` 用 `_db.transaction` 包整块"判空 → 批量插入"，是为了避免两台 isolate（或两个 provider 容器）在极短时间内各跑一次判空，都看到空然后都插入——drift 的 transaction 在 SQLite 层用隐式 BEGIN IMMEDIATE 拿写锁，第二条会等第一条提交后再进入事务，这时 `select(ledger)` 已经能看到第一条插入，走非空分支整体跳过。**绝不能**把 `seedIfEmpty` 拆成"先 `.get()` 再后续 insert"这样非事务的两段，会踩并发双插。
 - **不进 `sync_op` 队列**：有意为之。若两台设备各自种子再都开同步，会生成"两套默认账本 / 分类"——它们 id 不同，sync 层不会合并、只会并列。Phase 10 启用同步时需要专门设计一层"种子数据与云端数据的合并规则"（比如：开启同步前先 push 本地种子，拉取时按"name+type+deviceId<=本机"规则去重）。届时可能得重写这里的语义，当前版本刻意只负责本机首启兜底、不预判 Phase 10 的约束。
 - **分类颜色用 `i % 6` 循环**：第 7 个支出分类和第 1 个支出分类同色（奶油黄）；18 个支出分类里会产生 3 轮色。视觉上 UI 再通过"图标差异 + 名称"区分，完全不会让用户困惑。如果 Phase 15 想改成"按主题独立配色"，需要把颜色从种子常量里移出，改由分类 UI 在渲染时按主题动态上色——届时 `color` 列可能降为"旧主题冗余"甚至弃用。
-- **`默认账户 initialBalance = 0`**：包括信用卡账户也默认 0 而不是负值。用户真用时自己填入实际欠款额（业务测试里 -1200 是作为反面示例，说明「信用卡可以是负的」）。别在种子里塞"猜的"数字。
+- **默认账户余额来自流水**：种子账户不写入任何余额字段。用户真用时若要录入现有欠款或存款，应通过账户编辑页的“余额”字段生成一条“余额调整”流水；不要在种子里塞"猜的"数字。
 - **`namedConstructor + (positional, record)` 语法**：`expenseCategories` / `incomeCategories` / `defaultAccounts` 用 Dart 3 的位置记录 `(String, String)` / `(String, String, String)` 作为清单元素类型。好处是比 `const Map<String, Map<String, String>>` 更紧凑、比自定义类更轻量；代价是解包用 `for (final (name, emoji) in expenseCategories) { ... }` 模式匹配语法，需要 Dart 3.0+（项目 SDK 是 3.11.5，没问题）。
 - **Companion.insert 必填字段**：`LedgerTableCompanion.insert` 要求 `id / name / createdAt / updatedAt / deviceId` 五个非 null 必填，其他（`coverEmoji` / `defaultCurrency` / `archived` / `deletedAt`）走 `Value` 可选。`CategoryTableCompanion.insert` 必填 `id / ledgerId / name / type / updatedAt / deviceId`。`AccountTableCompanion.insert` 必填 `id / name / type / updatedAt / deviceId`。**如果后续某张表新增 NOT NULL 列（无 default 的），必须先在 `expenseCategories` 等常量里补默认，再跑 build_runner 让 Companion 签名变化，然后 `flutter analyze` 会直接报编译错误**——这也是有意的防御机制，别绕过。
 - **`defaultSeedProvider` 不带参数**：很诱人加一个"boolean seeded"返回值让 UI 层读；但本 provider 只是 bootstrap 的副作用 gate，成功即成功，无需告诉调用方"是跑了还是跳过"。需要这种粒度时，应该在 Phase 4 的账本 feature 里单独加一个"是否只剩种子数据"的查询，而不是在 bootstrap provider 上叠概念。
@@ -319,7 +319,7 @@
   - `toJson`：键名走 **snake_case**（与设计文档 §7.1 DDL + 未来 Supabase 列名一致）。`DateTime` → ISO 8601 字符串；`Uint8List?` → **base64 字符串**；`bool` / `double` / `int` / `String?` → 原生 JSON。
   - `fromJson`：对带默认值的字段显式 `??` 兜底——保证默认值在 JSON roundtrip 上不丢（`defaultCurrency ?? 'CNY'`、`fxRate ?? 1.0`、`carryOver ?? false` 等）。
   - `toString`：列出所有字段（bytes 字段只打印 length），测试失败时能一眼看到哪个字段不符。
-- **类型收紧**（相对 drift 数据类）：`archived` / `includeInTotal` / `carryOver` 用 `bool` 而非 `int?`；`defaultCurrency` / `currency` / `fxRate` / `initialBalance` / `sortOrder` 用非空 + 默认值；所有时间戳列从 drift 的 `int`（epoch ms）升级为 `DateTime` / `DateTime?`。仓库层（Step 2.2）承担 drift ↔ 实体的桥接。
+- **类型收紧**（相对 drift 数据类）：`archived` / `includeInTotal` / `carryOver` 用 `bool` 而非 `int?`；`defaultCurrency` / `currency` / `fxRate` / `sortOrder` 用非空 + 默认值；账户余额不属于 Account 实体，所有时间戳列从 drift 的 `int`（epoch ms）升级为 `DateTime` / `DateTime?`。仓库层（Step 2.2）承担 drift ↔ 实体的桥接。
 - `test/domain/entity/entities_test.dart`（新建）：17 用例——每实体 3 条（全字段 roundtrip / 可空字段 null roundtrip / copyWith），TransactionEntry 多一条 bytes 反面用例（换 bytes 后必须 `!=`）；最后一条扫描 `lib/domain/**.dart` 所有 `import` / `export` 行，禁止出现 `package:drift/`——实施计划 Step 2.1 的硬约束。
 
 **验证**
@@ -1222,7 +1222,7 @@
 
 纯函数层（features 内部）：
 - `lib/features/account/account_balance.dart`（新建）：纯 Dart 工具集（不依赖 Flutter / Riverpod / drift）。
-  - `AccountBalance` 数据类（`accountId` / `initialBalance` / `netAmount` + 派生 `currentBalance`）。
+  - `AccountBalance` 数据类（`accountId` / `netAmount`，`currentBalance == netAmount`）。
   - `aggregateNetAmountsByAccount(transactions)` → `Map<String, double>`：按账户聚合流水净额。规则：`expense` 从 `accountId` 减，`income` 向 `accountId` 加，`transfer` 从 `accountId` 减、向 `toAccountId` 加；`deletedAt != null` 流水跳过；`accountId` 为 null 的非 transfer 流水忽略。
   - `computeAccountBalances({accounts, transactions})` → `List<AccountBalance>`：保持 accounts 入参顺序，未发生流水的账户 `netAmount = 0`，UI 不会"消失"。
   - `computeTotalAssets({accounts, transactions})` → `double`：仅累加 `Account.includeInTotal == true` 的账户 `currentBalance`。
@@ -1248,7 +1248,7 @@ UI 层：
 测试：
 - `test/features/account/account_balance_test.dart`（新建，16 用例）：
   1. `aggregateNetAmountsByAccount` 8 条：空、单 expense、单 income、transfer 双向、混合、软删过滤、null accountId 忽略、transfer toAccountId 缺失仅扣 from。
-  2. `computeAccountBalances` 3 条：未发生流水仍输出（含 currentBalance = initialBalance）、保留入参顺序、流水净额应用到对应账户。
+  2. `computeAccountBalances` 3 条：未发生流水仍输出（currentBalance 为 0）、保留入参顺序、流水净额应用到对应账户。
   3. `computeTotalAssets` 5 条：空、`includeInTotal=false` 排除、信用卡负余额计入为减项、叠加流水净额、**Step 7.1 验收**——切换 includeInTotal 后总资产数值跟随变化（同一账户切到 false 后从总资产中扣除）。
 
 **验证**
@@ -1264,7 +1264,7 @@ UI 层：
 
 **给后续开发者的备忘**
 - **"当前账本维度"是 design-document §5.1.4 的硬约束**：账户虽然是全局资源（同一张工商卡可在多账本里被引用），但资产页/总资产展示走"当前账本流水净额"路径——切账本时 `accountBalancesProvider` / `totalAssetsProvider` 自动 invalidate（依赖 `currentLedgerIdProvider`）。如果将来产品改口径要求"全局总资产"（跨账本累加），应**新加一个 provider**（如 `globalTotalAssetsProvider`），不要让 `totalAssetsProvider` 跨语义切换——会让所有现有消费者突然口径变化。
-- **流水净额公式与账户类型解耦**：信用卡余额为负通过"`initialBalance` 用户填负值"驱动，而不是 `aggregateNetAmountsByAccount` 对 type=credit 做特殊处理。原因：① 信用卡用户填的是"当前已欠多少"，那就是负的初始余额；② 后续的 expense（消费）继续 -amount、income（还款）+amount，行为完全统一；③ 一旦把"信用卡 expense 不减反加（视为加大欠款）"这种语义塞进聚合函数，会让测试矩阵爆炸。当前实现的好处是 `expense -amount / income +amount / transfer -from +to` 三条规则在所有账户类型下都自洽。
+- **流水净额公式与账户类型解耦**：信用卡余额为负通过流水净额形成，而不是 `aggregateNetAmountsByAccount` 对 type=credit 做特殊处理。用户在账户编辑页把余额调低时会生成支出调整流水，调高时会生成收入调整流水；后续 expense 继续 -amount、income 继续 +amount。当前实现的好处是 `expense -amount / income +amount / transfer -from +to` 三条规则在所有账户类型下都自洽。
 - **transfer 流水统计语义**：在统计页的折线图/饼图/排行/热力图里 transfer 都被排除（"非真实收支"），但**资产页要计入**——因为转账是"钱从口袋 A 到口袋 B"，影响每个口袋的余额。两套口径不冲突：聚合纯函数各自实现，不要共用。
 - **未发生流水的账户也输出 `AccountBalance(netAmount: 0)`**：`computeAccountBalances` 保证返回列表与入参 `accounts` 等长且同序，UI 拿 Map 索引就能得到 0 而不是 null。如果将来 UI 要"过滤掉零余额且无流水的账户"，应在**消费方**做过滤，不要在聚合层提前丢——否则会让 `_AccountCard` 拿不到对应行。
 - **Step 7.2 即将引入的"删除账户 → 占位"**：Step 7.1 的 `_AccountCard` 还没有"删除"操作；Step 7.2 落地软删后，挂在该账户下的未删流水仍有 `accountId` 指向已软删的账户，资产页这里 `byId[acc.id]` 自然就拿不到余额——但这种情况不应出现，因为 `accountsListProvider` 走 `listActive()` 已过滤掉软删账户。Step 7.2 还需要补"流水详情显示'（已删账户）'"的兜底（不是本步范围）。
@@ -1287,7 +1287,7 @@ UI 层：
   - **名称**（`TextFormField`，`validator` 必填空校验）。
   - **类型**（`DropdownButtonFormField<String>`，5 项 `(cash, '现金') / (debit, '储蓄卡') / (credit, '信用卡') / (third_party, '第三方支付') / (other, '其他')`）。
   - **图标 emoji**（`TextFormField`，可空）。
-  - **初始余额**（`TextFormField` + `numberWithOptions(decimal: true, signed: true)` + `FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d{0,2}'))` 限两位小数 + 可负号）。信用卡欠款填负值。
+  - **余额**（`TextFormField` + `numberWithOptions(decimal: true, signed: true)` + `FilteringTextInputFormatter.allow(RegExp(r'^-?\d*\.?\d{0,2}'))` 限两位小数 + 可负号）。保存时与当前流水余额做差，生成无分类的“余额调整”收入或支出流水。
   - **默认币种**（下拉同账本编辑页 7 种）。
   - **计入总资产**（`SwitchListTile`）。
   - 编辑模式 `_loadFuture` 在 `initState` 启动；`_hydrate(acc)` 守 `_initialized` flag 仅首次写入字段，避免 setState 后覆盖用户编辑。
@@ -1325,7 +1325,7 @@ UI 层：
 - `flutter test` → 200/200 通过（前 192 + 7 account_repository_test + 1 widget_test 已删账户兜底）。
 - 用户本机 `flutter run` 待手工验证：
   1. "我的 → 资产"右下角出现"新建账户" FAB，点击进入 `/accounts/edit`。
-  2. 新建页填写名称/类型/图标/初始余额/币种/计入总资产 → 保存返回资产列表，新卡片可见，总资产数值跟随刷新。
+  2. 新建页填写名称/类型/图标/余额/币种/计入总资产 → 保存返回资产列表，新卡片可见；若余额非 0，会新增“余额调整”流水，总资产数值跟随刷新。
   3. 长按账户卡片 → 弹出菜单（编辑/删除）；点击卡片直接进入编辑。
   4. 编辑模式预填字段；修改后保存返回，列表卡片立即体现。
   5. 删除账户：二次确认 → 软删除 → 卡片从资产页消失，总资产对应减去（若 includeInTotal=true）。
@@ -1392,7 +1392,7 @@ UI 层：
 - `test/domain/entity/entities_test.dart::Account` 组：
   - `full` 实体加两个字段（`billingDay: 5` / `repaymentDay: 22`），原"全字段 roundtrip"用例自然覆盖含信用卡日的序列化。
   - `minimal`（cash 账户）的预期断言新增"`billingDay` / `repaymentDay` 均为 null"。
-  - `copyWith` 用例 reason 改为"改 initialBalance 不动 includeInTotal / 信用卡日"，并断言两字段不被改动。
+  - `copyWith` 用例 reason 改为"改名称不动 includeInTotal / 信用卡日"，并断言两字段不被改动。
   - 新增第 4 条 `信用卡日仅存其一也能 roundtrip`：仅填 `billingDay = 10`、不填 `repaymentDay`，roundtrip 后两字段值均维持。
 - `test/data/repository/account_repository_test.dart`：
   - `makeAccount` 工厂新增 `billingDay` / `repaymentDay` 两个可选参数。

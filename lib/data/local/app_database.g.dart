@@ -2611,18 +2611,6 @@ class $AccountTableTable extends AccountTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _initialBalanceMeta = const VerificationMeta(
-    'initialBalance',
-  );
-  @override
-  late final GeneratedColumn<double> initialBalance = GeneratedColumn<double>(
-    'initial_balance',
-    aliasedName,
-    true,
-    type: DriftSqlType.double,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
   static const VerificationMeta _includeInTotalMeta = const VerificationMeta(
     'includeInTotal',
   );
@@ -2710,7 +2698,6 @@ class $AccountTableTable extends AccountTable
     icon,
     iconSvg,
     color,
-    initialBalance,
     includeInTotal,
     currency,
     billingDay,
@@ -2768,15 +2755,6 @@ class $AccountTableTable extends AccountTable
       context.handle(
         _colorMeta,
         color.isAcceptableOrUnknown(data['color']!, _colorMeta),
-      );
-    }
-    if (data.containsKey('initial_balance')) {
-      context.handle(
-        _initialBalanceMeta,
-        initialBalance.isAcceptableOrUnknown(
-          data['initial_balance']!,
-          _initialBalanceMeta,
-        ),
       );
     }
     if (data.containsKey('include_in_total')) {
@@ -2864,10 +2842,6 @@ class $AccountTableTable extends AccountTable
         DriftSqlType.string,
         data['${effectivePrefix}color'],
       ),
-      initialBalance: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}initial_balance'],
-      ),
       includeInTotal: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}include_in_total'],
@@ -2914,7 +2888,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
   /// SVG 图标代码。
   final String? iconSvg;
   final String? color;
-  final double? initialBalance;
   final int? includeInTotal;
   final String? currency;
 
@@ -2933,7 +2906,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     this.icon,
     this.iconSvg,
     this.color,
-    this.initialBalance,
     this.includeInTotal,
     this.currency,
     this.billingDay,
@@ -2956,9 +2928,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     }
     if (!nullToAbsent || color != null) {
       map['color'] = Variable<String>(color);
-    }
-    if (!nullToAbsent || initialBalance != null) {
-      map['initial_balance'] = Variable<double>(initialBalance);
     }
     if (!nullToAbsent || includeInTotal != null) {
       map['include_in_total'] = Variable<int>(includeInTotal);
@@ -2992,9 +2961,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       color: color == null && nullToAbsent
           ? const Value.absent()
           : Value(color),
-      initialBalance: initialBalance == null && nullToAbsent
-          ? const Value.absent()
-          : Value(initialBalance),
       includeInTotal: includeInTotal == null && nullToAbsent
           ? const Value.absent()
           : Value(includeInTotal),
@@ -3027,7 +2993,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       icon: serializer.fromJson<String?>(json['icon']),
       iconSvg: serializer.fromJson<String?>(json['iconSvg']),
       color: serializer.fromJson<String?>(json['color']),
-      initialBalance: serializer.fromJson<double?>(json['initialBalance']),
       includeInTotal: serializer.fromJson<int?>(json['includeInTotal']),
       currency: serializer.fromJson<String?>(json['currency']),
       billingDay: serializer.fromJson<int?>(json['billingDay']),
@@ -3047,7 +3012,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       'icon': serializer.toJson<String?>(icon),
       'iconSvg': serializer.toJson<String?>(iconSvg),
       'color': serializer.toJson<String?>(color),
-      'initialBalance': serializer.toJson<double?>(initialBalance),
       'includeInTotal': serializer.toJson<int?>(includeInTotal),
       'currency': serializer.toJson<String?>(currency),
       'billingDay': serializer.toJson<int?>(billingDay),
@@ -3065,7 +3029,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     Value<String?> icon = const Value.absent(),
     Value<String?> iconSvg = const Value.absent(),
     Value<String?> color = const Value.absent(),
-    Value<double?> initialBalance = const Value.absent(),
     Value<int?> includeInTotal = const Value.absent(),
     Value<String?> currency = const Value.absent(),
     Value<int?> billingDay = const Value.absent(),
@@ -3080,9 +3043,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     icon: icon.present ? icon.value : this.icon,
     iconSvg: iconSvg.present ? iconSvg.value : this.iconSvg,
     color: color.present ? color.value : this.color,
-    initialBalance: initialBalance.present
-        ? initialBalance.value
-        : this.initialBalance,
     includeInTotal: includeInTotal.present
         ? includeInTotal.value
         : this.includeInTotal,
@@ -3101,9 +3061,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
       icon: data.icon.present ? data.icon.value : this.icon,
       iconSvg: data.iconSvg.present ? data.iconSvg.value : this.iconSvg,
       color: data.color.present ? data.color.value : this.color,
-      initialBalance: data.initialBalance.present
-          ? data.initialBalance.value
-          : this.initialBalance,
       includeInTotal: data.includeInTotal.present
           ? data.includeInTotal.value
           : this.includeInTotal,
@@ -3129,7 +3086,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           ..write('icon: $icon, ')
           ..write('iconSvg: $iconSvg, ')
           ..write('color: $color, ')
-          ..write('initialBalance: $initialBalance, ')
           ..write('includeInTotal: $includeInTotal, ')
           ..write('currency: $currency, ')
           ..write('billingDay: $billingDay, ')
@@ -3149,7 +3105,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
     icon,
     iconSvg,
     color,
-    initialBalance,
     includeInTotal,
     currency,
     billingDay,
@@ -3168,7 +3123,6 @@ class AccountEntry extends DataClass implements Insertable<AccountEntry> {
           other.icon == this.icon &&
           other.iconSvg == this.iconSvg &&
           other.color == this.color &&
-          other.initialBalance == this.initialBalance &&
           other.includeInTotal == this.includeInTotal &&
           other.currency == this.currency &&
           other.billingDay == this.billingDay &&
@@ -3185,7 +3139,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
   final Value<String?> icon;
   final Value<String?> iconSvg;
   final Value<String?> color;
-  final Value<double?> initialBalance;
   final Value<int?> includeInTotal;
   final Value<String?> currency;
   final Value<int?> billingDay;
@@ -3201,7 +3154,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     this.icon = const Value.absent(),
     this.iconSvg = const Value.absent(),
     this.color = const Value.absent(),
-    this.initialBalance = const Value.absent(),
     this.includeInTotal = const Value.absent(),
     this.currency = const Value.absent(),
     this.billingDay = const Value.absent(),
@@ -3218,7 +3170,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     this.icon = const Value.absent(),
     this.iconSvg = const Value.absent(),
     this.color = const Value.absent(),
-    this.initialBalance = const Value.absent(),
     this.includeInTotal = const Value.absent(),
     this.currency = const Value.absent(),
     this.billingDay = const Value.absent(),
@@ -3239,7 +3190,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     Expression<String>? icon,
     Expression<String>? iconSvg,
     Expression<String>? color,
-    Expression<double>? initialBalance,
     Expression<int>? includeInTotal,
     Expression<String>? currency,
     Expression<int>? billingDay,
@@ -3256,7 +3206,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
       if (icon != null) 'icon': icon,
       if (iconSvg != null) 'icon_svg': iconSvg,
       if (color != null) 'color': color,
-      if (initialBalance != null) 'initial_balance': initialBalance,
       if (includeInTotal != null) 'include_in_total': includeInTotal,
       if (currency != null) 'currency': currency,
       if (billingDay != null) 'billing_day': billingDay,
@@ -3275,7 +3224,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     Value<String?>? icon,
     Value<String?>? iconSvg,
     Value<String?>? color,
-    Value<double?>? initialBalance,
     Value<int?>? includeInTotal,
     Value<String?>? currency,
     Value<int?>? billingDay,
@@ -3292,7 +3240,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
       icon: icon ?? this.icon,
       iconSvg: iconSvg ?? this.iconSvg,
       color: color ?? this.color,
-      initialBalance: initialBalance ?? this.initialBalance,
       includeInTotal: includeInTotal ?? this.includeInTotal,
       currency: currency ?? this.currency,
       billingDay: billingDay ?? this.billingDay,
@@ -3324,9 +3271,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
     }
     if (color.present) {
       map['color'] = Variable<String>(color.value);
-    }
-    if (initialBalance.present) {
-      map['initial_balance'] = Variable<double>(initialBalance.value);
     }
     if (includeInTotal.present) {
       map['include_in_total'] = Variable<int>(includeInTotal.value);
@@ -3364,7 +3308,6 @@ class AccountTableCompanion extends UpdateCompanion<AccountEntry> {
           ..write('icon: $icon, ')
           ..write('iconSvg: $iconSvg, ')
           ..write('color: $color, ')
-          ..write('initialBalance: $initialBalance, ')
           ..write('includeInTotal: $includeInTotal, ')
           ..write('currency: $currency, ')
           ..write('billingDay: $billingDay, ')
@@ -7184,7 +7127,6 @@ typedef $$AccountTableTableCreateCompanionBuilder =
       Value<String?> icon,
       Value<String?> iconSvg,
       Value<String?> color,
-      Value<double?> initialBalance,
       Value<int?> includeInTotal,
       Value<String?> currency,
       Value<int?> billingDay,
@@ -7202,7 +7144,6 @@ typedef $$AccountTableTableUpdateCompanionBuilder =
       Value<String?> icon,
       Value<String?> iconSvg,
       Value<String?> color,
-      Value<double?> initialBalance,
       Value<int?> includeInTotal,
       Value<String?> currency,
       Value<int?> billingDay,
@@ -7249,11 +7190,6 @@ class $$AccountTableTableFilterComposer
 
   ColumnFilters<String> get color => $composableBuilder(
     column: $table.color,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<double> get initialBalance => $composableBuilder(
-    column: $table.initialBalance,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7332,11 +7268,6 @@ class $$AccountTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<double> get initialBalance => $composableBuilder(
-    column: $table.initialBalance,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get includeInTotal => $composableBuilder(
     column: $table.includeInTotal,
     builder: (column) => ColumnOrderings(column),
@@ -7399,11 +7330,6 @@ class $$AccountTableTableAnnotationComposer
 
   GeneratedColumn<String> get color =>
       $composableBuilder(column: $table.color, builder: (column) => column);
-
-  GeneratedColumn<double> get initialBalance => $composableBuilder(
-    column: $table.initialBalance,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<int> get includeInTotal => $composableBuilder(
     column: $table.includeInTotal,
@@ -7470,7 +7396,6 @@ class $$AccountTableTableTableManager
                 Value<String?> icon = const Value.absent(),
                 Value<String?> iconSvg = const Value.absent(),
                 Value<String?> color = const Value.absent(),
-                Value<double?> initialBalance = const Value.absent(),
                 Value<int?> includeInTotal = const Value.absent(),
                 Value<String?> currency = const Value.absent(),
                 Value<int?> billingDay = const Value.absent(),
@@ -7486,7 +7411,6 @@ class $$AccountTableTableTableManager
                 icon: icon,
                 iconSvg: iconSvg,
                 color: color,
-                initialBalance: initialBalance,
                 includeInTotal: includeInTotal,
                 currency: currency,
                 billingDay: billingDay,
@@ -7504,7 +7428,6 @@ class $$AccountTableTableTableManager
                 Value<String?> icon = const Value.absent(),
                 Value<String?> iconSvg = const Value.absent(),
                 Value<String?> color = const Value.absent(),
-                Value<double?> initialBalance = const Value.absent(),
                 Value<int?> includeInTotal = const Value.absent(),
                 Value<String?> currency = const Value.absent(),
                 Value<int?> billingDay = const Value.absent(),
@@ -7520,7 +7443,6 @@ class $$AccountTableTableTableManager
                 icon: icon,
                 iconSvg: iconSvg,
                 color: color,
-                initialBalance: initialBalance,
                 includeInTotal: includeInTotal,
                 currency: currency,
                 billingDay: billingDay,

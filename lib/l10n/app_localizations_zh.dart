@@ -1029,10 +1029,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountIconSvgHint => '粘贴 SVG 代码，例如 <svg>...</svg>';
 
   @override
-  String get accountInitialBalance => '初始余额';
+  String get accountBalance => '余额';
 
   @override
-  String get accountInitialBalanceHint => '可为负（信用卡欠款填负值）';
+  String get accountBalanceHint => '修改后会生成一条余额调整流水';
+
+  @override
+  String get accountBalanceAdjustmentNote => '余额调整';
 
   @override
   String get accountBalanceInvalid => '请输入合法的数字';

@@ -58,9 +58,9 @@ void main() {
       clock: clock,
     );
     // 必须 seed 一行 user_pref(id=1),才能 update 游标。
-    await db.into(db.userPrefTable).insert(
-          UserPrefTableCompanion.insert(deviceId: 'device-self'),
-        );
+    await db
+        .into(db.userPrefTable)
+        .insert(UserPrefTableCompanion.insert(deviceId: 'device-self'));
     service = IncrementalSyncService(
       gateway: gateway,
       db: db,
@@ -76,13 +76,15 @@ void main() {
   // ────────── 测试 helper ──────────
 
   Future<Ledger> seedLedger(String id, {String name = '默认账本'}) {
-    return ledgerRepo.save(Ledger(
-      id: id,
-      name: name,
-      createdAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-self',
-    ));
+    return ledgerRepo.save(
+      Ledger(
+        id: id,
+        name: name,
+        createdAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-self',
+      ),
+    );
   }
 
   Future<TransactionEntry> seedTx(
@@ -90,16 +92,18 @@ void main() {
     String ledgerId, {
     double amount = 10,
   }) {
-    return txRepo.save(TransactionEntry(
-      id: id,
-      ledgerId: ledgerId,
-      type: 'expense',
-      amount: amount,
-      currency: 'CNY',
-      occurredAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-self',
-    ));
+    return txRepo.save(
+      TransactionEntry(
+        id: id,
+        ledgerId: ledgerId,
+        type: 'expense',
+        amount: amount,
+        currency: 'CNY',
+        occurredAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-self',
+      ),
+    );
   }
 
   /// 构造一行云端 ledger row(bigint timestamps + boolean archived + user_id 字段)。
@@ -203,15 +207,17 @@ void main() {
       currentTs += 10;
       await seedTx('tx-1', 'L1');
       currentTs += 10;
-      await catRepo.save(Category(
-        id: 'cat-1',
-        name: '午餐',
-        parentKey: 'food',
-        sortOrder: 0,
-        isFavorite: false,
-        updatedAt: clock(),
-        deviceId: 'device-self',
-      ));
+      await catRepo.save(
+        Category(
+          id: 'cat-1',
+          name: '午餐',
+          parentKey: 'food',
+          sortOrder: 0,
+          isFavorite: false,
+          updatedAt: clock(),
+          deviceId: 'device-self',
+        ),
+      );
 
       await service.pushOnly();
 
@@ -315,11 +321,7 @@ void main() {
       await seedLedger('L1', name: '本地旧');
       // 云端 updated_at 设得比 currentTs 大
       gateway.tables['ledger'] = [
-        remoteLedger(
-          id: 'L1',
-          updatedAt: currentTs + 1000,
-          name: '云端新',
-        ),
+        remoteLedger(id: 'L1', updatedAt: currentTs + 1000, name: '云端新'),
       ];
 
       await service.pullThenPush();
@@ -354,11 +356,7 @@ void main() {
       gateway.tables['ledger'] = [remoteLedger(id: 'L1', updatedAt: 1)];
       gateway.tables['transaction_entry'] = List.generate(
         1500,
-        (i) => remoteTx(
-          id: 'tx-$i',
-          ledgerId: 'L1',
-          updatedAt: 1000 + i,
-        ),
+        (i) => remoteTx(id: 'tx-$i', ledgerId: 'L1', updatedAt: 1000 + i),
       );
 
       await service.pullThenPush();
@@ -369,14 +367,10 @@ void main() {
           .toList();
       expect(txQueries.length, greaterThanOrEqualTo(2));
       // 本地 1500 行全部到位
-      expect(
-        await db.select(db.transactionEntryTable).get(),
-        hasLength(1500),
-      );
+      expect(await db.select(db.transactionEntryTable).get(), hasLength(1500));
     });
 
-    test('分页: 云端 2500 行共享同一 updated_at → 仍能拉全(回归 CSV 批量导入卡死 bug)',
-        () async {
+    test('分页: 云端 2500 行共享同一 updated_at → 仍能拉全(回归 CSV 批量导入卡死 bug)', () async {
       // CSV 批量导入场景:同一个 _clock() 毫秒,全部 4000+ 行共用同一 updated_at。
       // 旧实现 pageSince = batchMax + 严格 > 过滤会卡在第一页之后,只拉到 1000。
       gateway.tables['ledger'] = [remoteLedger(id: 'L1', updatedAt: 1)];
@@ -392,10 +386,7 @@ void main() {
       await service.pullThenPush();
 
       // 全部 2500 行都到本地
-      expect(
-        await db.select(db.transactionEntryTable).get(),
-        hasLength(2500),
-      );
+      expect(await db.select(db.transactionEntryTable).get(), hasLength(2500));
       // 至少 3 次 query(2500 / 1000 = 3 页)
       final txQueries = gateway.queryCalls
           .where((c) => c.table == 'transaction_entry')
@@ -421,15 +412,17 @@ void main() {
       await service.pullThenPush();
 
       // ledger 的 query 应该用上次游标 2000 过滤
-      final ledgerQueries =
-          gateway.queryCalls.where((c) => c.table == 'ledger').toList();
+      final ledgerQueries = gateway.queryCalls
+          .where((c) => c.table == 'ledger')
+          .toList();
       expect(ledgerQueries, isNotEmpty);
       expect(ledgerQueries.first.updatedAtGt, 2000);
       // 本地拿到 L3
-      expect(
-        (await db.select(db.ledgerTable).get()).map((r) => r.id).toSet(),
-        {'L1', 'L2', 'L3'},
-      );
+      expect((await db.select(db.ledgerTable).get()).map((r) => r.id).toSet(), {
+        'L1',
+        'L2',
+        'L3',
+      });
     });
   });
 
@@ -445,8 +438,9 @@ void main() {
       await service.fullPull();
 
       // 游标重置 → 用 0 重新 query 一遍
-      final ledgerQueries =
-          gateway.queryCalls.where((c) => c.table == 'ledger').toList();
+      final ledgerQueries = gateway.queryCalls
+          .where((c) => c.table == 'ledger')
+          .toList();
       expect(ledgerQueries, isNotEmpty);
       expect(ledgerQueries.first.updatedAtGt, 0);
     });
@@ -454,9 +448,9 @@ void main() {
     test('fullPull 不推进 lastSyncedAt(留给 pullThenPush)', () async {
       gateway.tables['ledger'] = [remoteLedger(id: 'L1', updatedAt: 1000)];
       await service.fullPull();
-      final pref = await (db.select(db.userPrefTable)
-            ..where((t) => t.id.equals(1)))
-          .getSingle();
+      final pref = await (db.select(
+        db.userPrefTable,
+      )..where((t) => t.id.equals(1))).getSingle();
       expect(pref.lastSyncAt, isNull);
     });
   });
@@ -475,8 +469,9 @@ void main() {
       await txRepo.softDeleteById('tx-1');
       await service.pushOnly();
 
-      final cloudTx =
-          gateway.tables['transaction_entry']!.firstWhere((r) => r['id'] == 'tx-1');
+      final cloudTx = gateway.tables['transaction_entry']!.firstWhere(
+        (r) => r['id'] == 'tx-1',
+      );
       expect(cloudTx['deleted_at'], isNotNull);
     });
 
@@ -495,9 +490,9 @@ void main() {
 
       await service.pullThenPush();
 
-      final local = await (db.select(db.ledgerTable)
-            ..where((t) => t.id.equals('L1')))
-          .getSingle();
+      final local = await (db.select(
+        db.ledgerTable,
+      )..where((t) => t.id.equals('L1'))).getSingle();
       expect(local.deletedAt, isNotNull);
     });
 
@@ -507,10 +502,7 @@ void main() {
       currentTs += 1000;
       await ledgerRepo.softDeleteById('L1');
       await service.pushOnly();
-      expect(
-        gateway.tables['ledger']!.single['deleted_at'],
-        isNotNull,
-      );
+      expect(gateway.tables['ledger']!.single['deleted_at'], isNotNull);
 
       currentTs += 1000;
       await ledgerRepo.restoreById('L1');
@@ -559,10 +551,7 @@ void main() {
       );
     });
     test('listBackups', () {
-      expect(
-        () => service.listBackups(),
-        throwsA(isA<UnsupportedError>()),
-      );
+      expect(() => service.listBackups(), throwsA(isA<UnsupportedError>()));
     });
     test('deleteRemote', () {
       expect(
@@ -587,20 +576,21 @@ void main() {
   // ════════════════════════ Account / Budget 走通 ════════════════════════
 
   group('Account/Budget 走通 push/pull', () {
-    test('Account push 后云端 initial_balance/include_in_total 字段正确', () async {
-      await accRepo.save(Account(
-        id: 'acc-1',
-        name: '现金',
-        type: 'cash',
-        initialBalance: 100.5,
-        includeInTotal: false,
-        currency: 'USD',
-        updatedAt: clock(),
-        deviceId: 'device-self',
-      ));
+    test('Account push 后云端 include_in_total 字段正确且不含 initial_balance', () async {
+      await accRepo.save(
+        Account(
+          id: 'acc-1',
+          name: '现金',
+          type: 'cash',
+          includeInTotal: false,
+          currency: 'USD',
+          updatedAt: clock(),
+          deviceId: 'device-self',
+        ),
+      );
       await service.pushOnly();
       final cloud = gateway.tables['account']!.single;
-      expect(cloud['initial_balance'], 100.5);
+      expect(cloud.containsKey('initial_balance'), isFalse);
       // bool 字段经 _entityJsonToCloudRow 转为 int 0/1——Supabase 业务表
       // 的实际列类型是 integer（见 docs/supabase-setup.sql §5），PostgREST
       // 不会自动 bool→int 归一化，发 JSON bool 会被拒绝。
@@ -613,8 +603,10 @@ void main() {
 /// In-memory [IncrementalCloudGateway] 模拟云端 5 张表存储。
 class _FakeGateway implements IncrementalCloudGateway {
   final Map<String, List<Map<String, dynamic>>> tables = {};
-  final List<({String table, List<Map<String, dynamic>> data})> upsertCalls = [];
-  final List<({String table, int updatedAtGt, int limit, int offset})> queryCalls = [];
+  final List<({String table, List<Map<String, dynamic>> data})> upsertCalls =
+      [];
+  final List<({String table, int updatedAtGt, int limit, int offset})>
+  queryCalls = [];
 
   /// 注入 push 失败模拟: 调用该表的 upsertBatch 时抛异常。
   String? failOnTable;
@@ -633,8 +625,9 @@ class _FakeGateway implements IncrementalCloudGateway {
       list.removeWhere((r) => r['id'] == row['id']);
       list.add(Map<String, dynamic>.from(row));
     }
-    list.sort((a, b) =>
-        (a['updated_at'] as int).compareTo(b['updated_at'] as int));
+    list.sort(
+      (a, b) => (a['updated_at'] as int).compareTo(b['updated_at'] as int),
+    );
   }
 
   @override
@@ -659,18 +652,23 @@ class _FakeGateway implements IncrementalCloudGateway {
     required int limit,
     int offset = 0,
   }) async {
-    queryCalls.add(
-      (table: table, updatedAtGt: updatedAtGt, limit: limit, offset: offset),
-    );
-    final rows = (tables[table] ?? const [])
-        .where((r) => (r['updated_at'] as int) > updatedAtGt)
-        .toList()
-      ..sort((a, b) {
-        final cmp =
-            (a['updated_at'] as int).compareTo(b['updated_at'] as int);
-        if (cmp != 0) return cmp;
-        return (a['id'] as String).compareTo(b['id'] as String);
-      });
+    queryCalls.add((
+      table: table,
+      updatedAtGt: updatedAtGt,
+      limit: limit,
+      offset: offset,
+    ));
+    final rows =
+        (tables[table] ?? const [])
+            .where((r) => (r['updated_at'] as int) > updatedAtGt)
+            .toList()
+          ..sort((a, b) {
+            final cmp = (a['updated_at'] as int).compareTo(
+              b['updated_at'] as int,
+            );
+            if (cmp != 0) return cmp;
+            return (a['id'] as String).compareTo(b['id'] as String);
+          });
     return rows
         .skip(offset)
         .take(limit)

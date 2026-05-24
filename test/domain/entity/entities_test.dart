@@ -59,7 +59,8 @@ void main() {
         id: 'ledger-svg',
         name: '家庭',
         coverEmoji: '🏠',
-        coverSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        coverSvg:
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
             '<path d="M3 12l9-9 9 9"/></svg>',
         createdAt: DateTime.utc(2026, 4, 20),
         updatedAt: DateTime.utc(2026, 4, 20),
@@ -88,18 +89,20 @@ void main() {
       expect(Category.fromJson(full.toJson()), full);
     });
 
-    test('fromJson(toJson(x)) == x （icon/color/deletedAt 为 null + 默认 sortOrder）',
-        () {
-      final minimal = Category(
-        id: 'cat-2',
-        parentKey: 'income',
-        name: '工资',
-        updatedAt: DateTime.utc(2026, 4, 21),
-        deviceId: 'device-a',
-      );
-      expect(Category.fromJson(minimal.toJson()), minimal);
-      expect(minimal.sortOrder, 0);
-    });
+    test(
+      'fromJson(toJson(x)) == x （icon/color/deletedAt 为 null + 默认 sortOrder）',
+      () {
+        final minimal = Category(
+          id: 'cat-2',
+          parentKey: 'income',
+          name: '工资',
+          updatedAt: DateTime.utc(2026, 4, 21),
+          deviceId: 'device-a',
+        );
+        expect(Category.fromJson(minimal.toJson()), minimal);
+        expect(minimal.sortOrder, 0);
+      },
+    );
 
     test('copyWith 改 sortOrder 不动 parentKey', () {
       final moved = full.copyWith(sortOrder: 10);
@@ -114,7 +117,8 @@ void main() {
         parentKey: 'food',
         name: '咖啡',
         icon: '☕',
-        iconSvg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>',
+        iconSvg:
+            '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>',
         updatedAt: DateTime.utc(2026, 4, 21),
         deviceId: 'device-a',
       );
@@ -130,7 +134,6 @@ void main() {
       type: 'credit',
       icon: '💳',
       color: '#E76F51',
-      initialBalance: -1200.5,
       includeInTotal: false,
       currency: 'USD',
       billingDay: 5,
@@ -144,8 +147,7 @@ void main() {
       expect(Account.fromJson(full.toJson()), full);
     });
 
-    test('fromJson(toJson(x)) == x （icon/color/deletedAt 为 null + 全默认）',
-        () {
+    test('fromJson(toJson(x)) == x （icon/color/deletedAt 为 null + 全默认）', () {
       final minimal = Account(
         id: 'acc-2',
         name: '现金',
@@ -154,20 +156,19 @@ void main() {
         deviceId: 'device-a',
       );
       expect(Account.fromJson(minimal.toJson()), minimal);
-      expect(minimal.initialBalance, 0.0);
+      expect(minimal.toJson().containsKey('initial_balance'), isFalse);
       expect(minimal.includeInTotal, isTrue);
       expect(minimal.currency, 'CNY');
       expect(minimal.billingDay, isNull);
       expect(minimal.repaymentDay, isNull);
     });
 
-    test('copyWith 改 initialBalance 不动 includeInTotal / 信用卡日', () {
-      final topped = full.copyWith(initialBalance: -800.0);
-      expect(topped.initialBalance, -800.0);
-      expect(topped.includeInTotal, isFalse);
-      expect(topped.currency, 'USD');
-      expect(topped.billingDay, 5);
-      expect(topped.repaymentDay, 22);
+    test('copyWith 改 includeInTotal 不动 currency / 信用卡日', () {
+      final included = full.copyWith(includeInTotal: true);
+      expect(included.includeInTotal, isTrue);
+      expect(included.currency, 'USD');
+      expect(included.billingDay, 5);
+      expect(included.repaymentDay, 22);
     });
 
     test('信用卡日仅存其一也能 roundtrip（Step 7.3：允许部分填写）', () {
@@ -191,7 +192,8 @@ void main() {
         name: '支付宝',
         type: 'third_party',
         icon: '💰',
-        iconSvg: '<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>',
+        iconSvg:
+            '<svg viewBox="0 0 24 24"><rect width="24" height="24"/></svg>',
         updatedAt: DateTime.utc(2026, 4, 21),
         deviceId: 'device-a',
       );
@@ -232,21 +234,22 @@ void main() {
     });
 
     test(
-        'fromJson(toJson(x)) == x （note/attachments/category/account/deletedAt 均 null）',
-        () {
-      final minimal = TransactionEntry(
-        id: 'tx-2',
-        ledgerId: 'ledger-1',
-        type: 'income',
-        amount: 10000.0,
-        currency: 'CNY',
-        occurredAt: DateTime.utc(2026, 4, 1),
-        updatedAt: DateTime.utc(2026, 4, 1),
-        deviceId: 'device-a',
-      );
-      expect(TransactionEntry.fromJson(minimal.toJson()), minimal);
-      expect(minimal.fxRate, 1.0);
-    });
+      'fromJson(toJson(x)) == x （note/attachments/category/account/deletedAt 均 null）',
+      () {
+        final minimal = TransactionEntry(
+          id: 'tx-2',
+          ledgerId: 'ledger-1',
+          type: 'income',
+          amount: 10000.0,
+          currency: 'CNY',
+          occurredAt: DateTime.utc(2026, 4, 1),
+          updatedAt: DateTime.utc(2026, 4, 1),
+          deviceId: 'device-a',
+        );
+        expect(TransactionEntry.fromJson(minimal.toJson()), minimal);
+        expect(minimal.fxRate, 1.0);
+      },
+    );
 
     test('copyWith 改 amount 不动 bytes', () {
       final edited = full.copyWith(amount: 50.0);
@@ -282,8 +285,7 @@ void main() {
       expect(Budget.fromJson(full.toJson()), full);
     });
 
-    test('fromJson(toJson(x)) == x （categoryId=null 表示总预算 + 默认 carryOver）',
-        () {
+    test('fromJson(toJson(x)) == x （categoryId=null 表示总预算 + 默认 carryOver）', () {
       final total = Budget(
         id: 'bgt-2',
         ledgerId: 'ledger-1',
@@ -308,15 +310,20 @@ void main() {
   group('domain 层依赖隔离', () {
     test('lib/domain/ 下所有 .dart 文件均不 import package:drift/*', () {
       final root = Directory('lib/domain');
-      expect(root.existsSync(), isTrue,
-          reason: 'domain 目录必须存在（Step 0.2 建立的骨架）');
+      expect(
+        root.existsSync(),
+        isTrue,
+        reason: 'domain 目录必须存在（Step 0.2 建立的骨架）',
+      );
 
       final offenders = <String>[];
       for (final entity in root.listSync(recursive: true)) {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
         final content = entity.readAsStringSync();
         // 只扫描 import/export 语句，避免注释/字符串里的字面量误杀
-        final importLines = content.split('\n').where(
+        final importLines = content
+            .split('\n')
+            .where(
               (line) =>
                   line.trimLeft().startsWith('import ') ||
                   line.trimLeft().startsWith('export '),
@@ -328,9 +335,13 @@ void main() {
           }
         }
       }
-      expect(offenders, isEmpty,
-          reason: '领域层禁止直接依赖 drift；仓库层才做 entity ↔ drift 转换。'
-              '违规: ${offenders.join('\n')}');
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            '领域层禁止直接依赖 drift；仓库层才做 entity ↔ drift 转换。'
+            '违规: ${offenders.join('\n')}',
+      );
     });
   });
 }

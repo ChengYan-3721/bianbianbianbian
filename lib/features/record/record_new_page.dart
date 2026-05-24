@@ -103,7 +103,11 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
       resizeToAvoidBottomInset: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        title: Text(widget.isTransfer ? context.l10n.recordNewTransferTitle : context.l10n.recordNewTitle),
+        title: Text(
+          widget.isTransfer
+              ? context.l10n.recordNewTransferTitle
+              : context.l10n.recordNewTitle,
+        ),
         leading: IconButton(
           tooltip: context.l10n.a11yRecordNewBack,
           icon: const Icon(Icons.keyboard_arrow_down),
@@ -122,28 +126,28 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                     isTransfer: widget.isTransfer,
                   )
                 : widget.isTransfer
-                    ? _TransferEntryStage(
-                        onEnter: () {
-                          notifier.initDefaultAccount();
-                          setState(() => _showKeyboard = true);
-                        },
-                      )
-                    : _RecordPageRefreshMarker(
-                        onRefresh: _refreshCategoryGrid,
-                        child: _CategoryStage(
-                          key: ValueKey(
-                            '${form.selectedParentKey}|${form.categoryId}|$_categoryGridVersion',
-                          ),
-                          parentKey: form.selectedParentKey,
-                          selectedId: form.categoryId,
-                          onParentChanged: notifier.setParentKey,
-                          onCategorySelected: (id, pk) {
-                            notifier.setCategory(id, parentKey: pk);
-                            notifier.initDefaultAccount(); // fire-and-forget，键盘立即弹出
-                            setState(() => _showKeyboard = true);
-                          },
-                        ),
+                ? _TransferEntryStage(
+                    onEnter: () {
+                      notifier.initDefaultAccount();
+                      setState(() => _showKeyboard = true);
+                    },
+                  )
+                : _RecordPageRefreshMarker(
+                    onRefresh: _refreshCategoryGrid,
+                    child: _CategoryStage(
+                      key: ValueKey(
+                        '${form.selectedParentKey}|${form.categoryId}|$_categoryGridVersion',
                       ),
+                      parentKey: form.selectedParentKey,
+                      selectedId: form.categoryId,
+                      onParentChanged: notifier.setParentKey,
+                      onCategorySelected: (id, pk) {
+                        notifier.setCategory(id, parentKey: pk);
+                        notifier.initDefaultAccount(); // fire-and-forget，键盘立即弹出
+                        setState(() => _showKeyboard = true);
+                      },
+                    ),
+                  ),
           ),
           if (!_showKeyboard && !widget.isTransfer)
             _ParentTabs(
@@ -159,9 +163,8 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                 // Step 8.2：CNY 键改为打开 11 内置币种下拉。
                 final picked = await showModalBottomSheet<String>(
                   context: context,
-                  builder: (sheetContext) => _CurrencyPicker(
-                    selectedCode: form.currency,
-                  ),
+                  builder: (sheetContext) =>
+                      _CurrencyPicker(selectedCode: form.currency),
                 );
                 if (picked != null && picked != form.currency) {
                   notifier.setCurrency(picked);
@@ -209,7 +212,9 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                 await Future.delayed(const Duration(milliseconds: 300));
                 notifier.reset();
               },
-              canAction: notifier.hasOperator ? notifier.canAction : form.canSave,
+              canAction: notifier.hasOperator
+                  ? notifier.canAction
+                  : form.canSave,
             ),
         ],
       ),
@@ -252,9 +257,9 @@ class _CategoryStage extends StatelessWidget {
         children: [
           Text(
             context.l10n.recordNewSelectCategory,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           Expanded(
@@ -326,7 +331,11 @@ class _KeyboardStage extends ConsumerWidget {
     );
   }
 
-  String _resolveCategoryName(BuildContext context, List<Category> categories, String? categoryId) {
+  String _resolveCategoryName(
+    BuildContext context,
+    List<Category> categories,
+    String? categoryId,
+  ) {
     if (categoryId == null) return context.l10n.recordNewSwitchTo;
     for (final c in categories) {
       if (c.id == categoryId) return c.name;
@@ -425,10 +434,10 @@ class _AmountDisplay extends StatelessWidget {
           Text(
             displayAmount,
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colors.onSurface,
-                  fontFamily: 'monospace',
-                ),
+              fontWeight: FontWeight.w700,
+              color: colors.onSurface,
+              fontFamily: 'monospace',
+            ),
             key: const Key('amount_result'),
           ),
         ],
@@ -483,11 +492,15 @@ class _CategoryGrid extends ConsumerWidget {
                   if (isFavoriteTab) {
                     await context.push('/record/categories');
                   } else {
-                    await context.push('/record/categories/parent?parentKey=$parentKey');
+                    await context.push(
+                      '/record/categories/parent?parentKey=$parentKey',
+                    );
                   }
                   if (!context.mounted) return;
                   final markRefresh = context
-                      .findAncestorWidgetOfExactType<_RecordPageRefreshMarker>();
+                      .findAncestorWidgetOfExactType<
+                        _RecordPageRefreshMarker
+                      >();
                   markRefresh?.onRefresh();
                 },
                 child: Container(
@@ -497,17 +510,24 @@ class _CategoryGrid extends ConsumerWidget {
                       color: Theme.of(context).colorScheme.outlineVariant,
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 6,
+                    horizontal: 4,
+                  ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         isFavoriteTab ? Icons.add : Icons.edit_outlined,
-                        color: Theme.of(context).colorScheme.onSurface.withAlpha(180),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withAlpha(180),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        isFavoriteTab ? context.l10n.recordNewAdd : context.l10n.recordNewEditCategory,
+                        isFavoriteTab
+                            ? context.l10n.recordNewAdd
+                            : context.l10n.recordNewEditCategory,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12),
@@ -541,7 +561,12 @@ class _CategoryGrid extends ConsumerWidget {
                   children: [
                     SvgOrEmojiIcon(
                       svgString: cat.iconSvg,
-                      emoji: resolveCategoryIcon(cat.icon, cat.parentKey, cat.name, iconPack),
+                      emoji: resolveCategoryIcon(
+                        cat.icon,
+                        cat.parentKey,
+                        cat.name,
+                        iconPack,
+                      ),
                       size: 20,
                     ),
                     const SizedBox(height: 4),
@@ -649,7 +674,9 @@ class _MetaToolbar extends StatelessWidget {
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
                                 foregroundColor: scheme.onSurface,
-                                textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
@@ -670,7 +697,9 @@ class _MetaToolbar extends StatelessWidget {
                             textButtonTheme: TextButtonThemeData(
                               style: TextButton.styleFrom(
                                 foregroundColor: scheme.onSurface,
-                                textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                                textStyle: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
@@ -716,10 +745,7 @@ class _MetaToolbar extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _NotePillButton(
-                note: form.note,
-                onChanged: onNoteChanged,
-              ),
+              child: _NotePillButton(note: form.note, onChanged: onNoteChanged),
             ),
           ],
         ),
@@ -813,13 +839,10 @@ class _WalletPillButton extends ConsumerWidget {
             ? null
             : allAccounts.where((a) => a.id == selectedId).firstOrNull;
 
-        final balancesById = balancesAsync.whenOrNull<List<AccountBalance>>(
-              data: (b) => b,
-            ) ??
+        final balancesById =
+            balancesAsync.whenOrNull<List<AccountBalance>>(data: (b) => b) ??
             const [];
-        final balanceById = {
-          for (final b in balancesById) b.accountId: b,
-        };
+        final balanceById = {for (final b in balancesById) b.accountId: b};
 
         return _MetaPillButton(
           label: emptyText,
@@ -870,14 +893,14 @@ class _AccountBalanceText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final amount = balance?.currentBalance ?? account.initialBalance;
+    final amount = balance?.currentBalance ?? 0;
     final isNegative = amount < 0;
     final text = '${isNegative ? '-' : ''}¥${_fmt.format(amount.abs())}';
     return Text(
       text,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
-          ),
+        color: Theme.of(context).colorScheme.onSurface.withAlpha(160),
+      ),
     );
   }
 }
@@ -919,9 +942,9 @@ class _NoteSheet extends ConsumerWidget {
           ),
           Text(
             context.l10n.recordNewNote,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -939,10 +962,7 @@ class _NoteSheet extends ConsumerWidget {
           const SizedBox(height: 10),
           _NoteAttachments(notifier: notifier),
           const SizedBox(height: 8),
-          _NoteActions(
-            notifier: notifier,
-            onConfirm: onConfirm,
-          ),
+          _NoteActions(notifier: notifier, onConfirm: onConfirm),
         ],
       ),
     );
@@ -978,18 +998,17 @@ class _NoteAttachments extends ConsumerWidget {
               final meta = paths[index];
               return Stack(
                 children: [
-                  AttachmentThumbnail(
-                    meta: meta,
-                    txId: txId,
-                    size: 72,
-                  ),
+                  AttachmentThumbnail(meta: meta, txId: txId, size: 72),
                   Positioned(
                     right: -4,
                     top: -4,
                     child: IconButton(
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
                       tooltip: context.l10n.recordNewDeleteImage,
                       onPressed: () => notifier.removeAttachmentAt(index),
                       icon: const Icon(Icons.cancel, size: 18),
@@ -1019,18 +1038,21 @@ class _NoteActions extends ConsumerWidget {
       children: [
         IconButton(
           tooltip: context.l10n.recordNewGallery,
-          onPressed: () => _pickAndShowError(context, () => notifier.pickAndAttachFromGallery()),
+          onPressed: () => _pickAndShowError(
+            context,
+            () => notifier.pickAndAttachFromGallery(),
+          ),
           icon: const Icon(Icons.photo_library_outlined),
         ),
         IconButton(
           tooltip: context.l10n.recordNewCamera,
-          onPressed: () => _pickAndShowError(context, () => notifier.pickAndAttachFromCamera()),
+          onPressed: () => _pickAndShowError(
+            context,
+            () => notifier.pickAndAttachFromCamera(),
+          ),
           icon: const Icon(Icons.camera_alt_outlined),
         ),
-        Text(
-          '$count/3',
-          style: Theme.of(context).textTheme.labelMedium,
-        ),
+        Text('$count/3', style: Theme.of(context).textTheme.labelMedium),
         const Spacer(),
         TextButton(
           style: TextButton.styleFrom(
@@ -1066,8 +1088,7 @@ class _NoteActions extends ConsumerWidget {
           actions: [
             TextButton(
               style: TextButton.styleFrom(
-                foregroundColor:
-                    Theme.of(dialogContext).colorScheme.onSurface,
+                foregroundColor: Theme.of(dialogContext).colorScheme.onSurface,
                 textStyle: const TextStyle(fontWeight: FontWeight.w700),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(),
@@ -1096,9 +1117,9 @@ class _TransferEntryStage extends ConsumerWidget {
         children: [
           Text(
             context.l10n.recordNewTransferSettings,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           _MetaToolbar(
@@ -1107,8 +1128,9 @@ class _TransferEntryStage extends ConsumerWidget {
             onBackToCategory: _noop,
             onTimeChanged: ref.read(recordFormProvider.notifier).setOccurredAt,
             onAccountSelected: ref.read(recordFormProvider.notifier).setAccount,
-            onToAccountSelected:
-                ref.read(recordFormProvider.notifier).setToAccount,
+            onToAccountSelected: ref
+                .read(recordFormProvider.notifier)
+                .setToAccount,
             onNoteChanged: ref.read(recordFormProvider.notifier).setNote,
             isTransfer: true,
           ),
@@ -1194,8 +1216,8 @@ class _CurrencyPicker extends StatelessWidget {
                 child: Text(
                   context.l10n.recordNewSelectCurrency,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),

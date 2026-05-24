@@ -88,40 +88,46 @@ void main() {
 
   test('30 天前软删的流水被硬删 + 附件目录被清', () async {
     // 种父 ledger
-    await ledgerRepo.save(Ledger(
-      id: 'L1',
-      name: '生活',
-      createdAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    await ledgerRepo.save(
+      Ledger(
+        id: 'L1',
+        name: '生活',
+        createdAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
     // 31 天前软删的流水（需要硬删）
-    final old = await txRepo.save(TransactionEntry(
-      id: 'tx-old',
-      ledgerId: 'L1',
-      type: 'expense',
-      amount: 30,
-      currency: 'CNY',
-      occurredAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    final old = await txRepo.save(
+      TransactionEntry(
+        id: 'tx-old',
+        ledgerId: 'L1',
+        type: 'expense',
+        amount: 30,
+        currency: 'CNY',
+        occurredAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
     currentTs += const Duration(days: 31).inMilliseconds * -1; // 退到 31 天前
     await txRepo.softDeleteById(old.id);
     // 时光回正：now 比 deletedAt 大 31 天
     currentTs += const Duration(days: 31).inMilliseconds;
 
     // 13 天前软删的流水（不应被硬删）
-    final fresh = await txRepo.save(TransactionEntry(
-      id: 'tx-fresh',
-      ledgerId: 'L1',
-      type: 'expense',
-      amount: 50,
-      currency: 'CNY',
-      occurredAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    final fresh = await txRepo.save(
+      TransactionEntry(
+        id: 'tx-fresh',
+        ledgerId: 'L1',
+        type: 'expense',
+        amount: 50,
+        currency: 'CNY',
+        occurredAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
     final freshDeletedAt = currentTs - const Duration(days: 13).inMilliseconds;
     final savedTs = currentTs;
     currentTs = freshDeletedAt;
@@ -132,7 +138,11 @@ void main() {
 
     expect(report.transactions, 1, reason: '只清 31 天前的');
     expect(cleaner.deletedTxIds, ['tx-old']);
-    expect(report.attachmentsRemoved, 1, reason: 'fake cleaner 默认 deleteForTransaction 返回 true');
+    expect(
+      report.attachmentsRemoved,
+      1,
+      reason: 'fake cleaner 默认 deleteForTransaction 返回 true',
+    );
 
     // 仍能在 listDeleted 找到 fresh（13 天前），但 old 已物理消失
     final remainingDeleted = await txRepo.listDeleted();
@@ -141,32 +151,37 @@ void main() {
 
   test('cutoff 在分类/账户/账本各类生效', () async {
     // 31 天前软删的分类 + 账户 + 账本
-    final c = await catRepo.save(Category(
-      id: 'cat-1',
-      parentKey: 'food',
-      name: '午餐',
-      sortOrder: 0,
-      isFavorite: false,
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
-    final a = await accRepo.save(Account(
-      id: 'acc-1',
-      name: '现金',
-      type: 'cash',
-      initialBalance: 0,
-      includeInTotal: true,
-      currency: 'CNY',
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
-    final l = await ledgerRepo.save(Ledger(
-      id: 'L-purge',
-      name: '过期账本',
-      createdAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    final c = await catRepo.save(
+      Category(
+        id: 'cat-1',
+        parentKey: 'food',
+        name: '午餐',
+        sortOrder: 0,
+        isFavorite: false,
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
+    final a = await accRepo.save(
+      Account(
+        id: 'acc-1',
+        name: '现金',
+        type: 'cash',
+        includeInTotal: true,
+        currency: 'CNY',
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
+    final l = await ledgerRepo.save(
+      Ledger(
+        id: 'L-purge',
+        name: '过期账本',
+        createdAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
 
     // 把 deleted_at 设到 31 天前
     final deletedTs = currentTs - const Duration(days: 31).inMilliseconds;
@@ -188,23 +203,27 @@ void main() {
   });
 
   test('活跃项绝不被 GC 触碰', () async {
-    await ledgerRepo.save(Ledger(
-      id: 'L1',
-      name: 'active',
-      createdAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
-    await txRepo.save(TransactionEntry(
-      id: 'tx-active',
-      ledgerId: 'L1',
-      type: 'expense',
-      amount: 10,
-      currency: 'CNY',
-      occurredAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    await ledgerRepo.save(
+      Ledger(
+        id: 'L1',
+        name: 'active',
+        createdAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
+    await txRepo.save(
+      TransactionEntry(
+        id: 'tx-active',
+        ledgerId: 'L1',
+        type: 'expense',
+        amount: 10,
+        currency: 'CNY',
+        occurredAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
 
     await makeService().gcExpired(now: clock());
 
@@ -216,31 +235,36 @@ void main() {
   });
 
   test('自定义 retention=7 天：8 天前软删的项被清', () async {
-    await ledgerRepo.save(Ledger(
-      id: 'L1',
-      name: 'x',
-      createdAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
-    final tx = await txRepo.save(TransactionEntry(
-      id: 'tx-1',
-      ledgerId: 'L1',
-      type: 'expense',
-      amount: 10,
-      currency: 'CNY',
-      occurredAt: clock(),
-      updatedAt: clock(),
-      deviceId: 'device-test',
-    ));
+    await ledgerRepo.save(
+      Ledger(
+        id: 'L1',
+        name: 'x',
+        createdAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
+    final tx = await txRepo.save(
+      TransactionEntry(
+        id: 'tx-1',
+        ledgerId: 'L1',
+        type: 'expense',
+        amount: 10,
+        currency: 'CNY',
+        occurredAt: clock(),
+        updatedAt: clock(),
+        deviceId: 'device-test',
+      ),
+    );
     final softTs = currentTs - const Duration(days: 8).inMilliseconds;
     final savedTs = currentTs;
     currentTs = softTs;
     await txRepo.softDeleteById(tx.id);
     currentTs = savedTs;
 
-    final report = await makeService(retention: const Duration(days: 7))
-        .gcExpired(now: clock());
+    final report = await makeService(
+      retention: const Duration(days: 7),
+    ).gcExpired(now: clock());
     expect(report.transactions, 1);
   });
 }

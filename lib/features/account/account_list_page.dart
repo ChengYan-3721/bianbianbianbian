@@ -49,10 +49,13 @@ class AccountListPage extends ConsumerWidget {
       ),
       body: accountsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
+        error: (e, _) =>
+            Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
         data: (accounts) => balancesAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text(context.l10n.loadFailedWithError(e.toString()))),
+          error: (e, _) => Center(
+            child: Text(context.l10n.loadFailedWithError(e.toString())),
+          ),
           data: (balances) {
             final byId = {for (final b in balances) b.accountId: b};
             return ListView(
@@ -83,8 +86,7 @@ class AccountListPage extends ConsumerWidget {
                             ref.invalidate(accountAssetLiabilityProvider);
                           }
                         },
-                        onLongPress: () =>
-                            _showAccountMenu(context, ref, acc),
+                        onLongPress: () => _showAccountMenu(context, ref, acc),
                       ),
                     ),
                   ),
@@ -100,10 +102,7 @@ class AccountListPage extends ConsumerWidget {
   /// reset 表单 + setTransferMode(true) → 弹底部 RecordNewPage(isTransfer: true)
   /// 模态。模态关闭后无论用户是否保存，统一 invalidate 资产相关 provider，
   /// 让顶部卡片和账户列表立刻反映新流水。
-  Future<void> _openTransferSheet(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
+  Future<void> _openTransferSheet(BuildContext context, WidgetRef ref) async {
     ref.read(recordFormProvider.notifier).reset();
     ref.read(recordFormProvider.notifier).setTransferMode(true);
     await showModalBottomSheet<void>(
@@ -130,11 +129,7 @@ class AccountListPage extends ConsumerWidget {
     ref.invalidate(accountAssetLiabilityProvider);
   }
 
-  void _showAccountMenu(
-    BuildContext context,
-    WidgetRef ref,
-    Account account,
-  ) {
+  void _showAccountMenu(BuildContext context, WidgetRef ref, Account account) {
     showModalBottomSheet<void>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -159,7 +154,10 @@ class AccountListPage extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
+              title: Text(
+                context.l10n.delete,
+                style: const TextStyle(color: Colors.red),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(context, ref, account);
@@ -210,7 +208,9 @@ class AccountListPage extends ConsumerWidget {
     } catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.deleteFailedWithError(e.toString()))),
+        SnackBar(
+          content: Text(context.l10n.deleteFailedWithError(e.toString())),
+        ),
       );
     }
   }
@@ -274,10 +274,7 @@ class _AssetsOverviewCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                _TransferPill(
-                  onTap: onTransfer,
-                  color: onContainer,
-                ),
+                _TransferPill(onTap: onTransfer, color: onContainer),
               ],
             ),
             const SizedBox(height: 14),
@@ -336,9 +333,9 @@ class _TransferPill extends StatelessWidget {
           child: Text(
             context.l10n.txTypeTransfer,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -397,7 +394,9 @@ class _EmptyState extends StatelessWidget {
           Icon(
             Icons.account_balance_wallet_outlined,
             size: 64,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.26),
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurface.withValues(alpha: 0.26),
           ),
           const SizedBox(height: 12),
           Text(
@@ -430,12 +429,15 @@ class _AccountCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final semantic = theme.extension<BianBianSemanticColors>()!;
-    final amount = balance?.currentBalance ?? account.initialBalance;
+    final amount = balance?.currentBalance ?? 0;
     final isNegative = amount < 0;
-    final amountColor =
-        isNegative ? semantic.danger : theme.colorScheme.onSurface;
+    final amountColor = isNegative
+        ? semantic.danger
+        : theme.colorScheme.onSurface;
     final typeLabel = _typeLabel(context, account.type);
-    final notInTotalSuffix = account.includeInTotal ? '' : context.l10n.accountNotInTotal;
+    final notInTotalSuffix = account.includeInTotal
+        ? ''
+        : context.l10n.accountNotInTotal;
     final creditInfo = account.type == 'credit'
         ? _creditDayLine(context, account.billingDay, account.repaymentDay)
         : null;
@@ -464,7 +466,9 @@ class _AccountCard extends StatelessWidget {
                     Text(
                       '$typeLabel$notInTotalSuffix',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.54,
+                        ),
                       ),
                     ),
                     if (creditInfo != null) ...[
@@ -473,7 +477,9 @@ class _AccountCard extends StatelessWidget {
                         creditInfo,
                         key: Key('credit_info_${account.id}'),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.54),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.54,
+                          ),
                         ),
                       ),
                     ],
@@ -497,10 +503,18 @@ class _AccountCard extends StatelessWidget {
 
   /// 信用卡专属副标题文案：根据填写情况组合"账单日 X 号 · 还款日 Y 号"，
   /// 任一字段缺失时仅显示已填字段；两者都缺失返回 null（UI 不渲染整行）。
-  String? _creditDayLine(BuildContext context, int? billingDay, int? repaymentDay) {
+  String? _creditDayLine(
+    BuildContext context,
+    int? billingDay,
+    int? repaymentDay,
+  ) {
     final parts = <String>[];
-    if (billingDay != null) parts.add(context.l10n.accountBillingDayDisplay(billingDay));
-    if (repaymentDay != null) parts.add(context.l10n.accountRepaymentDayDisplay(repaymentDay));
+    if (billingDay != null) {
+      parts.add(context.l10n.accountBillingDayDisplay(billingDay));
+    }
+    if (repaymentDay != null) {
+      parts.add(context.l10n.accountRepaymentDayDisplay(repaymentDay));
+    }
     if (parts.isEmpty) return null;
     return parts.join(' · ');
   }

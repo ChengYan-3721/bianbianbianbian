@@ -1,9 +1,11 @@
 import 'package:drift/drift.dart';
 
 import '../app_database.dart';
+import '../tables/sync_op_table.dart';
 
 part 'sync_op_dao.g.dart';
 
+@DriftAccessor(tables: [SyncOpTable])
 class SyncOpDao extends DatabaseAccessor<AppDatabase> with _$SyncOpDaoMixin {
   SyncOpDao(super.db);
 
@@ -39,8 +41,9 @@ class SyncOpDao extends DatabaseAccessor<AppDatabase> with _$SyncOpDaoMixin {
   }
 
   Future<List<SyncOpEntry>> listAll() {
-    return (select(syncOpTable)..orderBy([(t) => OrderingTerm.asc(t.id)]))
-        .get();
+    return (select(
+      syncOpTable,
+    )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
   }
 
   Future<List<SyncOpEntry>> listPendingBatch({
@@ -48,7 +51,9 @@ class SyncOpDao extends DatabaseAccessor<AppDatabase> with _$SyncOpDaoMixin {
     int maxTried = 5,
   }) {
     return (select(syncOpTable)
-          ..where((t) => t.tried.isNull() | t.tried.isSmallerThanValue(maxTried))
+          ..where(
+            (t) => t.tried.isNull() | t.tried.isSmallerThanValue(maxTried),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.id)])
           ..limit(limit))
         .get();
@@ -68,8 +73,9 @@ class SyncOpDao extends DatabaseAccessor<AppDatabase> with _$SyncOpDaoMixin {
   }
 
   Future<int> countPending({int maxTried = 5}) {
-    return (select(syncOpTable)
-          ..where((t) => t.tried.isNull() | t.tried.isSmallerThanValue(maxTried)))
+    return (select(syncOpTable)..where(
+          (t) => t.tried.isNull() | t.tried.isSmallerThanValue(maxTried),
+        ))
         .get()
         .then((rows) => rows.length);
   }

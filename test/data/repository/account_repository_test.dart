@@ -32,7 +32,6 @@ void main() {
     String id = 'acc-1',
     String name = '现金',
     String type = 'cash',
-    double initialBalance = 0,
     bool includeInTotal = true,
     String? icon,
     int? billingDay,
@@ -43,7 +42,6 @@ void main() {
       name: name,
       type: type,
       icon: icon,
-      initialBalance: initialBalance,
       includeInTotal: includeInTotal,
       currency: 'CNY',
       billingDay: billingDay,
@@ -87,8 +85,7 @@ void main() {
     expect(got, isNull);
   });
 
-  test('softDeleteById → listActive 不可见，但 getById 仍能查到（含 deletedAt）',
-      () async {
+  test('softDeleteById → listActive 不可见，但 getById 仍能查到（含 deletedAt）', () async {
     await repo.save(makeAccount(id: 'acc-1', name: '现金'));
 
     await repo.softDeleteById('acc-1');
@@ -129,20 +126,16 @@ void main() {
       clock: steppedClock,
     );
 
-    final saved1 = await steppedRepo.save(
-      makeAccount(id: 'acc-1', name: '现金', initialBalance: 0),
-    );
-    final saved2 = await steppedRepo.save(
-      saved1.copyWith(initialBalance: 1234.5),
-    );
+    final saved1 = await steppedRepo.save(makeAccount(id: 'acc-1', name: '现金'));
+    final saved2 = await steppedRepo.save(saved1.copyWith(name: '现金更新'));
 
     expect(saved2.updatedAt.isAfter(saved1.updatedAt), isTrue);
-    expect(saved2.initialBalance, 1234.5);
+    expect(saved2.name, '现金更新');
 
     // 数据库内只有一行
     final all = await steppedRepo.listActive();
     expect(all, hasLength(1));
-    expect(all.first.initialBalance, 1234.5);
+    expect(all.first.name, '现金更新');
 
     // sync_op 应有 2 条 upsert（同一 entity_id）
     final ops = await db.syncOpDao.listAll();
@@ -166,7 +159,6 @@ void main() {
       id: 'acc-card',
       name: '招商信用卡',
       type: 'credit',
-      initialBalance: -1500,
       billingDay: 5,
       repaymentDay: 22,
     );
@@ -186,14 +178,9 @@ void main() {
     expect(payload['repayment_day'], 22);
   });
 
-  test('Step 7.3：非信用卡保存时 billingDay/repaymentDay 为 null（即使被传入）',
-      () async {
+  test('Step 7.3：非信用卡保存时 billingDay/repaymentDay 为 null（即使被传入）', () async {
     // UI 层会按 type 清空字段并写 null，仓库不做强制；这里覆盖"按规范写入 null"的路径。
-    final cash = makeAccount(
-      id: 'acc-cash',
-      name: '现金',
-      type: 'cash',
-    );
+    final cash = makeAccount(id: 'acc-cash', name: '现金', type: 'cash');
     await repo.save(cash);
     final got = await repo.getById('acc-cash');
     expect(got, isNotNull);

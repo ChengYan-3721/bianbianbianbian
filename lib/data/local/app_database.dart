@@ -80,6 +80,8 @@ part 'app_database.g.dart';
 /// - v13（Step 17·云同步 V2）：`user_pref` 追加 `last_pulled_at_json TEXT`
 ///   （nullable，默认 null）——增量同步的逐表 pull 游标，shape 详见
 ///   [UserPrefTable.lastPulledAtJson]。无数据迁移，仅 ALTER TABLE ADD COLUMN。
+/// - v14（未发布重构）：移除 `account.initial_balance`。账户余额不再存储在
+///   账户表，完全由未删除流水聚合得出；余额修改通过自动生成的流水留痕。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -108,124 +110,122 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async {
-          // v2 空库首次创建：`createAll` 会依据 `@DriftDatabase` 声明一次性
-          // 建好所有表；索引走手写 SQL（保留 §7.1 的 DESC 方向，drift 的
-          // `@TableIndex` 注解不支持排序方向）。
-          await m.createAll();
-          await _createTransactionIndexes();
-        },
-        onUpgrade: (m, from, to) async {
-          if (from < 2) {
-            // v1 → v2：追加 6 张业务表 + 2 个索引，`user_pref` 原样保留。
-            await m.createTable(ledgerTable);
-            await m.createTable(categoryTable);
-            await m.createTable(accountTable);
-            await m.createTable(transactionEntryTable);
-            await m.createTable(budgetTable);
-            await m.createTable(syncOpTable);
-            await _createTransactionIndexes();
-          }
+    onCreate: (m) async {
+      // v2 空库首次创建：`createAll` 会依据 `@DriftDatabase` 声明一次性
+      // 建好所有表；索引走手写 SQL（保留 §7.1 的 DESC 方向，drift 的
+      // `@TableIndex` 注解不支持排序方向）。
+      await m.createAll();
+      await _createTransactionIndexes();
+    },
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        // v1 → v2：追加 6 张业务表 + 2 个索引，`user_pref` 原样保留。
+        await m.createTable(ledgerTable);
+        await m.createTable(categoryTable);
+        await m.createTable(accountTable);
+        await m.createTable(transactionEntryTable);
+        await m.createTable(budgetTable);
+        await m.createTable(syncOpTable);
+        await _createTransactionIndexes();
+      }
 
-          if (from < 3) {
-            // v2 → v3：按产品要求“无需兼容旧 category 结构”，直接重建 category。
-            await m.deleteTable('category');
-            await m.createTable(categoryTable);
-          }
+      if (from < 3) {
+        // v2 → v3：按产品要求“无需兼容旧 category 结构”，直接重建 category。
+        await m.deleteTable('category');
+        await m.createTable(categoryTable);
+      }
 
-          if (from < 4) {
-            // v3 → v4：budget 表追加 carry_balance / last_settled_at 两列，
-            // 历史记录默认结转余额 0、未结算（lastSettledAt = NULL）。
-            await m.addColumn(budgetTable, budgetTable.carryBalance);
-            await m.addColumn(budgetTable, budgetTable.lastSettledAt);
-          }
+      if (from < 4) {
+        // v3 → v4：budget 表追加 carry_balance / last_settled_at 两列，
+        // 历史记录默认结转余额 0、未结算（lastSettledAt = NULL）。
+        await m.addColumn(budgetTable, budgetTable.carryBalance);
+        await m.addColumn(budgetTable, budgetTable.lastSettledAt);
+      }
 
-          if (from < 5) {
-            // v4 → v5：account 表追加 billing_day / repayment_day 两列，
-            // 历史记录默认 NULL；非信用卡账户也允许保持 NULL。
-            await m.addColumn(accountTable, accountTable.billingDay);
-            await m.addColumn(accountTable, accountTable.repaymentDay);
-          }
+      if (from < 5) {
+        // v4 → v5：account 表追加 billing_day / repayment_day 两列，
+        // 历史记录默认 NULL；非信用卡账户也允许保持 NULL。
+        await m.addColumn(accountTable, accountTable.billingDay);
+        await m.addColumn(accountTable, accountTable.repaymentDay);
+      }
 
-          if (from < 6) {
-            // v5 → v6：user_pref 追加 multi_currency_enabled 列（默认 0
-            // = 关闭，与新装行为一致）；新增工具表 fx_rate。fx_rate 的
-            // 初始快照不在 onUpgrade 写入——下次冷启动 seeder 会按
-            // "fx_rate 表为空"独立判空补齐，与 ledger 种子化逻辑解耦。
-            await m.addColumn(
-              userPrefTable,
-              userPrefTable.multiCurrencyEnabled,
-            );
-            await m.createTable(fxRateTable);
-          }
+      if (from < 6) {
+        // v5 → v6：user_pref 追加 multi_currency_enabled 列（默认 0
+        // = 关闭，与新装行为一致）；新增工具表 fx_rate。fx_rate 的
+        // 初始快照不在 onUpgrade 写入——下次冷启动 seeder 会按
+        // "fx_rate 表为空"独立判空补齐，与 ledger 种子化逻辑解耦。
+        await m.addColumn(userPrefTable, userPrefTable.multiCurrencyEnabled);
+        await m.createTable(fxRateTable);
+      }
 
-          if (from < 7) {
-            // v6 → v7：fx_rate 追加 is_manual 列（默认 0 = 自动管理，可被
-            // 自动刷新覆盖）；user_pref 追加 last_fx_refresh_at（每日刷新
-            // 节流锚点；NULL = 从未刷新）。
-            await m.addColumn(fxRateTable, fxRateTable.isManual);
-            await m.addColumn(
-              userPrefTable,
-              userPrefTable.lastFxRefreshAt,
-            );
-          }
+      if (from < 7) {
+        // v6 → v7：fx_rate 追加 is_manual 列（默认 0 = 自动管理，可被
+        // 自动刷新覆盖）；user_pref 追加 last_fx_refresh_at（每日刷新
+        // 节流锚点；NULL = 从未刷新）。
+        await m.addColumn(fxRateTable, fxRateTable.isManual);
+        await m.addColumn(userPrefTable, userPrefTable.lastFxRefreshAt);
+      }
 
-          if (from < 8) {
-            // v7 → v8：user_pref 追加 AI 增强配置 3 列。`ai_api_endpoint`
-            // / `ai_api_key_encrypted` 自 v1 即声明，无需迁移。`ai_input_enabled`
-            // 默认 0（关闭，与新装行为一致）；`ai_api_model` /
-            // `ai_api_prompt_template` 默认 NULL，UI 配置页保存时按用户填
-            // 写值写入，未填走 [kDefaultAiInputPromptTemplate] 兜底。
-            await m.addColumn(userPrefTable, userPrefTable.aiApiModel);
-            await m.addColumn(
-              userPrefTable,
-              userPrefTable.aiApiPromptTemplate,
-            );
-            await m.addColumn(userPrefTable, userPrefTable.aiInputEnabled);
-          }
+      if (from < 8) {
+        // v7 → v8：user_pref 追加 AI 增强配置 3 列。`ai_api_endpoint`
+        // / `ai_api_key_encrypted` 自 v1 即声明，无需迁移。`ai_input_enabled`
+        // 默认 0（关闭，与新装行为一致）；`ai_api_model` /
+        // `ai_api_prompt_template` 默认 NULL，UI 配置页保存时按用户填
+        // 写值写入，未填走 [kDefaultAiInputPromptTemplate] 兜底。
+        await m.addColumn(userPrefTable, userPrefTable.aiApiModel);
+        await m.addColumn(userPrefTable, userPrefTable.aiApiPromptTemplate);
+        await m.addColumn(userPrefTable, userPrefTable.aiInputEnabled);
+      }
 
-          if (from < 9) {
-            // v8 → v9（Step 11.2）：transaction_entry.attachments_encrypted
-            // BLOB 内 JSON shape 从字符串数组升级为 AttachmentMeta 对象数组。
-            // 不动 schema，纯数据迁移：扫所有非空 BLOB → 解码旧 shape →
-            // 包装成新对象数组（remote_key / sha256 留 null 等下次同步回填，
-            // size / mime 现场推断，本地文件不存在的标记 missing: true）→
-            // 写回原行。
-            await _upgradeAttachmentsBlobToV9();
-          }
+      if (from < 9) {
+        // v8 → v9（Step 11.2）：transaction_entry.attachments_encrypted
+        // BLOB 内 JSON shape 从字符串数组升级为 AttachmentMeta 对象数组。
+        // 不动 schema，纯数据迁移：扫所有非空 BLOB → 解码旧 shape →
+        // 包装成新对象数组（remote_key / sha256 留 null 等下次同步回填，
+        // size / mime 现场推断，本地文件不存在的标记 missing: true）→
+        // 写回原行。
+        await _upgradeAttachmentsBlobToV9();
+      }
 
-          if (from < 10) {
-            // v9 → v10（Step 15.2）：user_pref 追加 font_size 列（默认
-            // 'standard'，与新装行为一致）。
-            await m.addColumn(userPrefTable, userPrefTable.fontSize);
-          }
+      if (from < 10) {
+        // v9 → v10（Step 15.2）：user_pref 追加 font_size 列（默认
+        // 'standard'，与新装行为一致）。
+        await m.addColumn(userPrefTable, userPrefTable.fontSize);
+      }
 
-          if (from < 11) {
-            // v10 → v11（Step 15.3）：user_pref 追加 icon_pack 列（默认
-            // 'sticker'，与新装行为一致）。
-            await m.addColumn(userPrefTable, userPrefTable.iconPack);
-          }
+      if (from < 11) {
+        // v10 → v11（Step 15.3）：user_pref 追加 icon_pack 列（默认
+        // 'sticker'，与新装行为一致）。
+        await m.addColumn(userPrefTable, userPrefTable.iconPack);
+      }
 
-          if (from < 12) {
-            // v11 → v12（Step 16.1）：user_pref 追加 reminder_enabled /
-            // reminder_time 两列。默认关闭 + null 时间（与新装行为一致）。
-            await m.addColumn(userPrefTable, userPrefTable.reminderEnabled);
-            await m.addColumn(userPrefTable, userPrefTable.reminderTime);
-          }
+      if (from < 12) {
+        // v11 → v12（Step 16.1）：user_pref 追加 reminder_enabled /
+        // reminder_time 两列。默认关闭 + null 时间（与新装行为一致）。
+        await m.addColumn(userPrefTable, userPrefTable.reminderEnabled);
+        await m.addColumn(userPrefTable, userPrefTable.reminderTime);
+      }
 
-          if (from < 13) {
-            // v12 → v13（Step 17·云同步 V2）：user_pref 追加
-            // last_pulled_at_json 列（nullable，默认 null）。
-            // 增量同步引擎首次启动时 cursor 为 null → 视为 0 → 首次 pull
-            // 即全量；之后由 IncrementalSyncService 推进游标。
-            await m.addColumn(userPrefTable, userPrefTable.lastPulledAtJson);
-          }
-        },
-      );
+      if (from < 13) {
+        // v12 → v13（Step 17·云同步 V2）：user_pref 追加
+        // last_pulled_at_json 列（nullable，默认 null）。
+        // 增量同步引擎首次启动时 cursor 为 null → 视为 0 → 首次 pull
+        // 即全量；之后由 IncrementalSyncService 推进游标。
+        await m.addColumn(userPrefTable, userPrefTable.lastPulledAtJson);
+      }
+
+      if (from >= 2 && from < 14) {
+        // 未发布重构：余额完全由流水计算，账户表不再保存 initial_balance。
+        await customStatement(
+          'ALTER TABLE account DROP COLUMN initial_balance',
+        );
+      }
+    },
+  );
 
   /// v8 → v9 迁移的具体实现，抽出方法便于阅读 + 单测注入。
   ///
@@ -287,8 +287,10 @@ class AppDatabase extends _$AppDatabase {
 /// 以防后续有其他 sqlite3 使用方）。
 void _registerSqlCipherLoader() {
   if (Platform.isAndroid) {
-    sqlite3_open.open
-        .overrideFor(sqlite3_open.OperatingSystem.android, openCipherOnAndroid);
+    sqlite3_open.open.overrideFor(
+      sqlite3_open.OperatingSystem.android,
+      openCipherOnAndroid,
+    );
   }
   // iOS 走 static link，sqlcipher_flutter_libs 的 pod 已经把符号并入主二进制，
   // sqlite3 包用 `DynamicLibrary.process()` 就能找到，无需 override。

@@ -4,38 +4,31 @@ import '../../domain/entity/transaction_entry.dart';
 /// 单个账户在某条时间线上的当前余额。
 ///
 /// 字段语义：
-/// - [initialBalance]：账户的初始余额（来自 [Account.initialBalance]）。
 /// - [netAmount]：流水净额（参与计算的全部 income/expense/transfer 给该账户
 ///   带来的净增减）。
-/// - [currentBalance] = [initialBalance] + [netAmount]——展示给用户的"当前
-///   余额"，信用卡欠款时为负数。
+/// - [currentBalance] = [netAmount]。账户不再保存余额字段，当前余额完全由
+///   未删除流水计算得出。
 class AccountBalance {
-  const AccountBalance({
-    required this.accountId,
-    required this.initialBalance,
-    required this.netAmount,
-  });
+  const AccountBalance({required this.accountId, required this.netAmount});
 
   final String accountId;
-  final double initialBalance;
   final double netAmount;
 
-  double get currentBalance => initialBalance + netAmount;
+  double get currentBalance => netAmount;
 
   @override
   bool operator ==(Object other) =>
       other is AccountBalance &&
       other.accountId == accountId &&
-      other.initialBalance == initialBalance &&
       other.netAmount == netAmount;
 
   @override
-  int get hashCode => Object.hash(accountId, initialBalance, netAmount);
+  int get hashCode => Object.hash(accountId, netAmount);
 
   @override
-  String toString() => 'AccountBalance(accountId: $accountId, '
-      'initialBalance: $initialBalance, netAmount: $netAmount, '
-      'currentBalance: $currentBalance)';
+  String toString() =>
+      'AccountBalance(accountId: $accountId, '
+      'netAmount: $netAmount, currentBalance: $currentBalance)';
 }
 
 /// 给定一组流水，按账户聚合净流入金额。
@@ -92,11 +85,7 @@ List<AccountBalance> computeAccountBalances({
   final nets = aggregateNetAmountsByAccount(transactions);
   return [
     for (final acc in accounts)
-      AccountBalance(
-        accountId: acc.id,
-        initialBalance: acc.initialBalance,
-        netAmount: nets[acc.id] ?? 0,
-      ),
+      AccountBalance(accountId: acc.id, netAmount: nets[acc.id] ?? 0),
   ];
 }
 
@@ -112,7 +101,7 @@ double computeTotalAssets({
   var total = 0.0;
   for (final acc in accounts) {
     if (!acc.includeInTotal) continue;
-    total += acc.initialBalance + (nets[acc.id] ?? 0);
+    total += nets[acc.id] ?? 0;
   }
   return total;
 }
@@ -133,7 +122,7 @@ double computeTotalAssets({
   var liabilities = 0.0;
   for (final acc in accounts) {
     if (!acc.includeInTotal) continue;
-    final balance = acc.initialBalance + (nets[acc.id] ?? 0);
+    final balance = nets[acc.id] ?? 0;
     if (balance >= 0) {
       assets += balance;
     } else {
@@ -155,6 +144,7 @@ class AccountYearDetail {
   final int year;
   final double yearInflow;
   final double yearOutflow;
+
   /// 长度恒为 12，索引 0..11 对应 1..12 月（缺月仍占位，inflow/outflow=0、
   /// transactions=[]）。UI 据此渲染 12 张月份卡片。
   final List<AccountMonthGroup> months;
@@ -198,9 +188,11 @@ AccountYearDetail computeAccountYearDetail({
     if (tx.deletedAt != null) continue;
     if (tx.occurredAt.year != year) continue;
 
-    final isInflowHere = (tx.type == 'income' && tx.accountId == accountId) ||
+    final isInflowHere =
+        (tx.type == 'income' && tx.accountId == accountId) ||
         (tx.type == 'transfer' && tx.toAccountId == accountId);
-    final isOutflowHere = (tx.type == 'expense' && tx.accountId == accountId) ||
+    final isOutflowHere =
+        (tx.type == 'expense' && tx.accountId == accountId) ||
         (tx.type == 'transfer' && tx.accountId == accountId);
     if (!isInflowHere && !isOutflowHere) continue;
 

@@ -91,7 +91,6 @@ void main() {
       for (final acc in accounts) {
         expect(acc.includeInTotal, 1);
         expect(acc.currency, 'CNY');
-        expect(acc.initialBalance, 0.0);
         expect(acc.deviceId, 'device-a');
         expect(acc.updatedAt, fixedInstant);
         expect(acc.deletedAt, isNull);
@@ -111,17 +110,25 @@ void main() {
       final catsAfterSecond = await db.select(db.categoryTable).get();
       final accsAfterSecond = await db.select(db.accountTable).get();
 
-      expect(ledgersAfterSecond.map((l) => l.id).toSet(),
-          ledgersAfterFirst.map((l) => l.id).toSet());
-      expect(catsAfterSecond.map((c) => c.id).toSet(),
-          catsAfterFirst.map((c) => c.id).toSet());
-      expect(accsAfterSecond.map((a) => a.id).toSet(),
-          accsAfterFirst.map((a) => a.id).toSet());
+      expect(
+        ledgersAfterSecond.map((l) => l.id).toSet(),
+        ledgersAfterFirst.map((l) => l.id).toSet(),
+      );
+      expect(
+        catsAfterSecond.map((c) => c.id).toSet(),
+        catsAfterFirst.map((c) => c.id).toSet(),
+      );
+      expect(
+        accsAfterSecond.map((a) => a.id).toSet(),
+        accsAfterFirst.map((a) => a.id).toSet(),
+      );
     });
 
     test('已存在账本时整体跳过（不补齐分类/账户）', () async {
       // 预置一个用户自建的账本,seeder 应完全不动
-      await db.into(db.ledgerTable).insert(
+      await db
+          .into(db.ledgerTable)
+          .insert(
             LedgerTableCompanion.insert(
               id: 'user-ledger-1',
               name: '工作',

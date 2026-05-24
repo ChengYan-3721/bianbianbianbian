@@ -106,6 +106,11 @@ List<TransactionEntry> searchTransactions({
   required List<Account> accounts,
   required SearchQuery query,
   Map<String, String> parentKeyLabels = const <String, String>{},
+  List<String> uncategorizedLabels = const <String>[
+    '未分类',
+    '无分类',
+    'uncategorized',
+  ],
 }) {
   if (query.isEmpty) {
     // 调用方预期空查询不返回结果（搜索页 UI 据此显示"开始搜索"提示）。
@@ -113,14 +118,16 @@ List<TransactionEntry> searchTransactions({
   }
 
   // 反查表——避免在循环里反复 O(N) 找。
-  final categoryById = <String, Category>{
-    for (final c in categories) c.id: c,
-  };
-  final accountById = <String, Account>{
-    for (final a in accounts) a.id: a,
-  };
+  final categoryById = <String, Category>{for (final c in categories) c.id: c};
+  final accountById = <String, Account>{for (final a in accounts) a.id: a};
 
   final keyword = query.keyword.trim().toLowerCase();
+  final matchesUncategorizedKeyword =
+      keyword.isNotEmpty &&
+      uncategorizedLabels
+          .map((label) => label.trim().toLowerCase())
+          .where((label) => label.isNotEmpty)
+          .any((label) => label == keyword || keyword.contains(label));
   final start = query.startDate == null
       ? null
       : DateTime(
@@ -150,11 +157,11 @@ List<TransactionEntry> searchTransactions({
     // 反查中文展示名。同时保留对 parent key 字面量的匹配，确保用户输入
     // "food" 也能命中"餐饮"下的所有流水（开发自用 / 英文搜索场景）。
     final cat = tx.categoryId == null ? null : categoryById[tx.categoryId!];
+    if (tx.categoryId == null && matchesUncategorizedKeyword) return true;
     if (cat != null) {
       if (cat.name.toLowerCase().contains(keyword)) return true;
       final parentLabel = parentKeyLabels[cat.parentKey];
-      if (parentLabel != null &&
-          parentLabel.toLowerCase().contains(keyword)) {
+      if (parentLabel != null && parentLabel.toLowerCase().contains(keyword)) {
         return true;
       }
       if (cat.parentKey.toLowerCase().contains(keyword)) return true;
@@ -196,10 +203,12 @@ List<TransactionEntry> searchTransactions({
   }
 
   return transactions
-      .where((tx) =>
-          matchKeyword(tx) &&
-          matchDate(tx) &&
-          matchType(tx) &&
-          matchAmount(tx))
+      .where(
+        (tx) =>
+            matchKeyword(tx) &&
+            matchDate(tx) &&
+            matchType(tx) &&
+            matchAmount(tx),
+      )
       .toList(growable: false);
 }

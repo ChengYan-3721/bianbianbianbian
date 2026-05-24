@@ -322,7 +322,7 @@
 
 - 账户是"标签"不是"账本"：一笔流水挂在某账户下，只是为了分类统计。
 - 默认账户：现金、工商银行卡、招商信用卡（示例）、支付宝、微信。
-- 每账户字段：名称、类型（现金 / 储蓄卡 / 信用卡 / 第三方支付 / 其他）、图标颜色、初始余额、是否计入总资产。
+- 每账户字段：名称、类型（现金 / 储蓄卡 / 信用卡 / 第三方支付 / 其他）、图标颜色、是否计入总资产。账户不保存余额字段，当前余额完全由流水计算；编辑账户余额时生成一条无分类的余额调整流水。
 - 信用卡账户：可设账单日、还款日（V1 仅展示，不做自动提醒，V1.1 再做）。
 
 ### 5.7 多币种
@@ -425,6 +425,7 @@ CREATE TABLE ledger (
   id TEXT PRIMARY KEY,             -- uuid
   name TEXT NOT NULL,
   cover_emoji TEXT,
+  cover_svg TEXT,
   default_currency TEXT DEFAULT 'CNY',
   archived INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
@@ -439,6 +440,7 @@ CREATE TABLE category (
   ledger_id TEXT NOT NULL,
   name TEXT NOT NULL,
   icon TEXT,                       -- 资源 key 或 emoji
+  icon_svg TEXT,                       -- svg 代码
   color TEXT,
   type TEXT NOT NULL,              -- income | expense
   sort_order INTEGER DEFAULT 0,
@@ -454,8 +456,8 @@ CREATE TABLE account (
   name TEXT NOT NULL,
   type TEXT NOT NULL,              -- cash | debit | credit | third_party | other
   icon TEXT,
+  icon_svg TEXT,
   color TEXT,
-  initial_balance REAL DEFAULT 0,
   include_in_total INTEGER DEFAULT 1,
   currency TEXT DEFAULT 'CNY',
   updated_at INTEGER NOT NULL,

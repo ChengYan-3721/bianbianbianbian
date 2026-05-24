@@ -276,7 +276,6 @@ create table if not exists public.account (
   icon text,
   icon_svg text,
   color text,
-  initial_balance double precision default 0,
   include_in_total integer default 1,
   currency text default 'CNY',
   billing_day int,
@@ -328,53 +327,6 @@ create table if not exists public.budget (
   device_id text not null
 );
 create index if not exists budget_user_updated_idx on public.budget(user_id, updated_at);
-
--- 5.6 历史 schema 修复：已经按更早版本 docs 把 bool 字段建成 boolean 列的
--- 用户，跑下面这段把它们转回 integer 0/1，与最新代码对齐。
--- 幂等：列已是 integer 时跳过；列是 boolean 时转换并保留旧值。
-do $$
-begin
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'ledger'
-      and column_name = 'archived' and data_type = 'boolean'
-  ) then
-    alter table public.ledger
-      alter column archived drop default,
-      alter column archived type integer using (case when archived then 1 else 0 end),
-      alter column archived set default 0;
-  end if;
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'category'
-      and column_name = 'is_favorite' and data_type = 'boolean'
-  ) then
-    alter table public.category
-      alter column is_favorite drop default,
-      alter column is_favorite type integer using (case when is_favorite then 1 else 0 end),
-      alter column is_favorite set default 0;
-  end if;
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'account'
-      and column_name = 'include_in_total' and data_type = 'boolean'
-  ) then
-    alter table public.account
-      alter column include_in_total drop default,
-      alter column include_in_total type integer using (case when include_in_total then 1 else 0 end),
-      alter column include_in_total set default 1;
-  end if;
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'budget'
-      and column_name = 'carry_over' and data_type = 'boolean'
-  ) then
-    alter table public.budget
-      alter column carry_over drop default,
-      alter column carry_over type integer using (case when carry_over then 1 else 0 end),
-      alter column carry_over set default 0;
-  end if;
-end $$;
 
 
 -- -----------------------------------------------------------------------------

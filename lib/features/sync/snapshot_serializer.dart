@@ -31,7 +31,7 @@ import '../../domain/entity/transaction_entry.dart';
 /// **不包含**：`fx_rate`（每端独立维护）、`user_pref`、`sync_op`、已软删条目。
 @immutable
 class LedgerSnapshot {
-  static const int kVersion = 1;
+  static const int kVersion = 2;
 
   final int version;
   final DateTime exportedAt;
@@ -56,15 +56,15 @@ class LedgerSnapshot {
   String get ledgerId => ledger.id;
 
   Map<String, dynamic> toJson() => {
-        'version': version,
-        'exported_at': exportedAt.toIso8601String(),
-        'device_id': deviceId,
-        'ledger': ledger.toJson(),
-        'categories': categories.map((c) => c.toJson()).toList(),
-        'accounts': accounts.map((a) => a.toJson()).toList(),
-        'transactions': transactions.map((t) => t.toJson()).toList(),
-        'budgets': budgets.map((b) => b.toJson()).toList(),
-      };
+    'version': version,
+    'exported_at': exportedAt.toIso8601String(),
+    'device_id': deviceId,
+    'ledger': ledger.toJson(),
+    'categories': categories.map((c) => c.toJson()).toList(),
+    'accounts': accounts.map((a) => a.toJson()).toList(),
+    'transactions': transactions.map((t) => t.toJson()).toList(),
+    'budgets': budgets.map((b) => b.toJson()).toList(),
+  };
 
   factory LedgerSnapshot.fromJson(Map<String, dynamic> json) {
     final version = (json['version'] as num?)?.toInt() ?? 1;
@@ -91,6 +91,7 @@ class LedgerSnapshot {
     );
   }
 }
+
 /// 多账本备份快照——JSON 输出的顶层信封。
 ///
 /// 之所以再包一层而不直接导出 `List<LedgerSnapshot>`：① 给版本号留位置；
@@ -100,7 +101,7 @@ class LedgerSnapshot {
 /// **不持久化任何数据库**——仅用于导出/导入/同步的内存表达。
 @immutable
 class MultiLedgerSnapshot {
-  static const int kVersion = 1;
+  static const int kVersion = 2;
 
   const MultiLedgerSnapshot({
     required this.version,
@@ -115,11 +116,11 @@ class MultiLedgerSnapshot {
   final List<LedgerSnapshot> ledgers;
 
   Map<String, dynamic> toJson() => {
-        'version': version,
-        'exported_at': exportedAt.toIso8601String(),
-        'device_id': deviceId,
-        'ledgers': ledgers.map((l) => l.toJson()).toList(),
-      };
+    'version': version,
+    'exported_at': exportedAt.toIso8601String(),
+    'device_id': deviceId,
+    'ledgers': ledgers.map((l) => l.toJson()).toList(),
+  };
 
   factory MultiLedgerSnapshot.fromJson(Map<String, dynamic> json) {
     final version = (json['version'] as num?)?.toInt() ?? 1;
@@ -136,6 +137,7 @@ class MultiLedgerSnapshot {
     );
   }
 }
+
 class LedgerSnapshotSerializer implements DataSerializer<LedgerSnapshot> {
   const LedgerSnapshotSerializer();
 
@@ -252,6 +254,7 @@ class MultiLedgerSnapshotSerializer
     return sha256.convert(utf8.encode(jsonEncode(stable))).toString();
   }
 }
+
 /// 从本地数据库导出所有活跃账本的快照，打包为 [MultiLedgerSnapshot]。
 ///
 /// 不读取任何 sync_op / user_pref / fx_rate；不写入 sync_op；纯读路径。
@@ -272,16 +275,18 @@ Future<MultiLedgerSnapshot> exportMultiLedgerSnapshot({
   for (final ledger in activeLedgers) {
     final transactions = await transactionRepo.listActiveByLedger(ledger.id);
     final budgets = await budgetRepo.listActiveByLedger(ledger.id);
-    snapshots.add(LedgerSnapshot(
-      version: LedgerSnapshot.kVersion,
-      exportedAt: clock(),
-      deviceId: deviceId,
-      ledger: ledger,
-      categories: categories,
-      accounts: accounts,
-      transactions: transactions,
-      budgets: budgets,
-    ));
+    snapshots.add(
+      LedgerSnapshot(
+        version: LedgerSnapshot.kVersion,
+        exportedAt: clock(),
+        deviceId: deviceId,
+        ledger: ledger,
+        categories: categories,
+        accounts: accounts,
+        transactions: transactions,
+        budgets: budgets,
+      ),
+    );
   }
 
   return MultiLedgerSnapshot(
@@ -321,6 +326,7 @@ Future<int> importMultiLedgerSnapshot({
     return total;
   });
 }
+
 /// 从本地数据库导出指定账本的活跃快照。
 ///
 /// 不读取任何 sync_op / user_pref / fx_rate；不写入 sync_op；纯读路径。
@@ -377,12 +383,12 @@ Future<int> importLedgerSnapshot({
     final ledgerId = snapshot.ledger.id;
 
     // 1. 清空当前账本现有的流水与预算（含软删）
-    await (db.delete(db.transactionEntryTable)
-          ..where((t) => t.ledgerId.equals(ledgerId)))
-        .go();
-    await (db.delete(db.budgetTable)
-          ..where((t) => t.ledgerId.equals(ledgerId)))
-        .go();
+    await (db.delete(
+      db.transactionEntryTable,
+    )..where((t) => t.ledgerId.equals(ledgerId))).go();
+    await (db.delete(
+      db.budgetTable,
+    )..where((t) => t.ledgerId.equals(ledgerId))).go();
 
     // 2-5. 批量 upsert
     await db.batch((batch) {
@@ -466,10 +472,11 @@ Future<LedgerNameConflict?> checkLedgerNameConflict({
   required String cloudLedgerName,
   required AppDatabase db,
 }) async {
-  final rows = await (db.select(db.ledgerTable)
-        ..where((t) => t.name.equals(cloudLedgerName))
-        ..where((t) => t.deletedAt.isNull()))
-      .get();
+  final rows =
+      await (db.select(db.ledgerTable)
+            ..where((t) => t.name.equals(cloudLedgerName))
+            ..where((t) => t.deletedAt.isNull()))
+          .get();
   if (rows.isEmpty) return null;
   final local = rows.first;
   return LedgerNameConflict(
@@ -523,28 +530,24 @@ Future<String> importLedgerSnapshotAsNew({
   // ledgerId:优先保留原始 id,仅当本地已存在同名活跃账本时才生成新 UUID。
   // 保留原始 id 让多设备恢复同一备份后 ledgerId 相同,自然共享同一云端路径。
   final originalLedgerId = snapshot.ledger.id;
-  final txIdMap = {
-    for (final t in snapshot.transactions) t.id: uuid(),
-  };
-  final budgetIdMap = {
-    for (final b in snapshot.budgets) b.id: uuid(),
-  };
+  final txIdMap = {for (final t in snapshot.transactions) t.id: uuid()};
+  final budgetIdMap = {for (final b in snapshot.budgets) b.id: uuid()};
 
   return db.transaction(() async {
     // 查询本地已有的分类和账户，按 (name, parentKey) / (name, type) 去重。
     // 不同设备 seeder 生成的 UUID 不同，但同名同父级分类 / 同名同类型账户
     // 应视为同一资源——直接按 UUID insertOrReplace 会导致重复行。
-    final existingCatRows = await (db.select(db.categoryTable)
-          ..where((t) => t.deletedAt.isNull()))
-        .get();
+    final existingCatRows = await (db.select(
+      db.categoryTable,
+    )..where((t) => t.deletedAt.isNull())).get();
     final existingCatKeys = <(String, String), String>{};
     for (final r in existingCatRows) {
       existingCatKeys[(r.name, r.parentKey)] = r.id;
     }
 
-    final existingAcctRows = await (db.select(db.accountTable)
-          ..where((t) => t.deletedAt.isNull()))
-        .get();
+    final existingAcctRows = await (db.select(
+      db.accountTable,
+    )..where((t) => t.deletedAt.isNull())).get();
     final existingAcctKeys = <(String, String), String>{};
     for (final r in existingAcctRows) {
       existingAcctKeys[(r.name, r.type)] = r.id;
@@ -553,18 +556,20 @@ Future<String> importLedgerSnapshotAsNew({
     // 检查原始 ledgerId 是否与本地已有活跃账本冲突。
     // 冲突条件:本地已存在同名活跃账本(非软删)且 id 不同。
     // 不冲突(本地无此 id 或同名账本已软删) → 保留原始 id,多设备共享同一云端路径。
-    final existingLedger = await (db.select(db.ledgerTable)
-          ..where((t) => t.id.equals(originalLedgerId)))
-        .getSingleOrNull();
-    final hasConflict = existingLedger != null &&
+    final existingLedger = await (db.select(
+      db.ledgerTable,
+    )..where((t) => t.id.equals(originalLedgerId))).getSingleOrNull();
+    final hasConflict =
+        existingLedger != null &&
         existingLedger.deletedAt == null &&
         existingLedger.name == snapshot.ledger.name;
 
     // 同时检查按名称的冲突(不同 id 但同名)——这是 S3 云同步恢复的常见场景。
-    final nameConflictRows = await (db.select(db.ledgerTable)
-          ..where((t) => t.name.equals(snapshot.ledger.name))
-          ..where((t) => t.deletedAt.isNull()))
-        .get();
+    final nameConflictRows =
+        await (db.select(db.ledgerTable)
+              ..where((t) => t.name.equals(snapshot.ledger.name))
+              ..where((t) => t.deletedAt.isNull()))
+            .get();
     final nameConflict = nameConflictRows
         .where((r) => r.id != originalLedgerId)
         .toList();
@@ -587,12 +592,12 @@ Future<String> importLedgerSnapshotAsNew({
           finalLedgerId = localLedger.id;
           finalLedgerName = localLedger.name;
           // 清空本地同名账本的流水与预算
-          await (db.delete(db.transactionEntryTable)
-                ..where((t) => t.ledgerId.equals(localLedger.id)))
-              .go();
-          await (db.delete(db.budgetTable)
-                ..where((t) => t.ledgerId.equals(localLedger.id)))
-              .go();
+          await (db.delete(
+            db.transactionEntryTable,
+          )..where((t) => t.ledgerId.equals(localLedger.id))).go();
+          await (db.delete(
+            db.budgetTable,
+          )..where((t) => t.ledgerId.equals(localLedger.id))).go();
           break;
         case LedgerNameConflictStrategy.rename:
           // 重命名:新 UUID + 新名称
@@ -614,7 +619,9 @@ Future<String> importLedgerSnapshotAsNew({
       id: finalLedgerId,
       name: finalLedgerName,
     );
-    await db.into(db.ledgerTable).insert(
+    await db
+        .into(db.ledgerTable)
+        .insert(
           ledgerToCompanion(remappedLedger),
           mode: InsertMode.insertOrReplace,
         );

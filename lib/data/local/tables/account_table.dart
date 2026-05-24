@@ -27,11 +27,6 @@ class AccountTable extends Table {
 
   TextColumn get color => text().nullable()();
 
-  RealColumn get initialBalance => real()
-      .named('initial_balance')
-      .nullable()
-      .withDefault(const Constant(0))();
-
   IntColumn get includeInTotal => integer()
       .named('include_in_total')
       .nullable()
@@ -41,12 +36,10 @@ class AccountTable extends Table {
       text().nullable().withDefault(const Constant('CNY'))();
 
   /// 账单日（信用卡专属，1-28），nullable。Step 7.3。
-  IntColumn get billingDay =>
-      integer().named('billing_day').nullable()();
+  IntColumn get billingDay => integer().named('billing_day').nullable()();
 
   /// 还款日（信用卡专属，1-28），nullable。Step 7.3。
-  IntColumn get repaymentDay =>
-      integer().named('repayment_day').nullable()();
+  IntColumn get repaymentDay => integer().named('repayment_day').nullable()();
 
   IntColumn get updatedAt => integer().named('updated_at')();
 

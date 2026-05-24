@@ -72,8 +72,7 @@ class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
   }
 
   Future<void> _openSettings(Account account) async {
-    final saved =
-        await context.push<bool>('/accounts/edit?id=${account.id}');
+    final saved = await context.push<bool>('/accounts/edit?id=${account.id}');
     if (saved == true) {
       ref.invalidate(accountsListProvider);
       ref.invalidate(accountBalancesProvider);
@@ -90,9 +89,8 @@ class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
     final txsAsync = ref.watch(currentLedgerTransactionsProvider);
 
     return accountsAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
         body: Center(child: Text(l10n.loadFailedWithError(e.toString()))),
@@ -154,17 +152,17 @@ class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
   }
 
   Account _missingAccount() => Account(
-        id: '',
-        name: '',
-        type: 'other',
-        currency: 'CNY',
-        updatedAt: DateTime.now(),
-        deviceId: '',
-      );
+    id: '',
+    name: '',
+    type: 'other',
+    currency: 'CNY',
+    updatedAt: DateTime.now(),
+    deviceId: '',
+  );
 
   double _currentBalance(Account account, List<TransactionEntry> txs) {
     final nets = aggregateNetAmountsByAccount(txs);
-    return account.initialBalance + (nets[account.id] ?? 0);
+    return nets[account.id] ?? 0;
   }
 }
 
@@ -247,6 +245,7 @@ class _HeaderCard extends StatelessWidget {
   final double yearInflow;
   final double yearOutflow;
   final VoidCallback onPrevYear;
+
   /// 切到未来年没有意义（也会出现"未来月份"的空卡片），由父级把 `null`
   /// 传进来禁用 "下一年" 箭头。
   final VoidCallback? onNextYear;
@@ -480,12 +479,15 @@ class _MonthCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final semantic = theme.extension<BianBianSemanticColors>()!;
-    final monthLabel = context.l10n
-        .accountDetailMonthLabel(group.month.toString().padLeft(2, '0'));
-    final inflowLine = context.l10n
-        .accountDetailInflowLine(_fmt.format(group.inflow));
-    final outflowLine = context.l10n
-        .accountDetailOutflowLine(_fmt.format(group.outflow));
+    final monthLabel = context.l10n.accountDetailMonthLabel(
+      group.month.toString().padLeft(2, '0'),
+    );
+    final inflowLine = context.l10n.accountDetailInflowLine(
+      _fmt.format(group.inflow),
+    );
+    final outflowLine = context.l10n.accountDetailOutflowLine(
+      _fmt.format(group.outflow),
+    );
 
     return Card(
       margin: EdgeInsets.zero,
@@ -515,8 +517,9 @@ class _MonthCard extends ConsumerWidget {
                         Text(
                           _monthRange(year, group.month),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -556,10 +559,7 @@ class _MonthCard extends ConsumerWidget {
             ),
           ),
           if (expanded)
-            _MonthBody(
-              account: account,
-              transactions: group.transactions,
-            ),
+            _MonthBody(account: account, transactions: group.transactions),
         ],
       ),
     );
@@ -567,10 +567,7 @@ class _MonthCard extends ConsumerWidget {
 }
 
 class _MonthBody extends ConsumerWidget {
-  const _MonthBody({
-    required this.account,
-    required this.transactions,
-  });
+  const _MonthBody({required this.account, required this.transactions});
 
   final Account account;
   final List<TransactionEntry> transactions;
@@ -585,30 +582,28 @@ class _MonthBody extends ConsumerWidget {
             Icon(
               Icons.water_drop_outlined,
               size: 56,
-              color: Theme.of(context)
-                  .colorScheme
-                  .onSurface
-                  .withValues(alpha: 0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.2),
             ),
             const SizedBox(height: 8),
             Text(
               context.l10n.accountDetailEmptyMonth,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.5),
-                  ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
             ),
           ],
         ),
       );
     }
 
-    final accounts = ref.watch(accountsListProvider).valueOrNull ??
-        const <Account>[];
-    final categories = ref.watch(categoriesListProvider).valueOrNull ??
-        const <Category>[];
+    final accounts =
+        ref.watch(accountsListProvider).valueOrNull ?? const <Account>[];
+    final categories =
+        ref.watch(categoriesListProvider).valueOrNull ?? const <Category>[];
     final iconPack = ref.watch(currentIconPackProvider);
 
     // 同日多条流水：第一条左侧显示日期，其余空着。倒序遍历完成。
@@ -616,8 +611,11 @@ class _MonthBody extends ConsumerWidget {
     DateTime? lastDay;
     for (var i = 0; i < transactions.length; i++) {
       final tx = transactions[i];
-      final day = DateTime(tx.occurredAt.year, tx.occurredAt.month,
-          tx.occurredAt.day);
+      final day = DateTime(
+        tx.occurredAt.year,
+        tx.occurredAt.month,
+        tx.occurredAt.day,
+      );
       final showDate = lastDay == null || lastDay != day;
       lastDay = day;
       children.add(
@@ -634,12 +632,7 @@ class _MonthBody extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
-      child: Column(
-        children: [
-          const Divider(height: 1),
-          ...children,
-        ],
-      ),
+      child: Column(children: [const Divider(height: 1), ...children]),
     );
   }
 
@@ -649,8 +642,9 @@ class _MonthBody extends ConsumerWidget {
     final yesterday = today.subtract(const Duration(days: 1));
     if (day == today) return context.l10n.accountDetailToday;
     if (day == yesterday) return context.l10n.accountDetailYesterday;
-    return context.l10n
-        .accountDetailDayLabel(day.day.toString().padLeft(2, '0'));
+    return context.l10n.accountDetailDayLabel(
+      day.day.toString().padLeft(2, '0'),
+    );
   }
 }
 
@@ -678,11 +672,11 @@ class _TxRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final semantic = theme.extension<BianBianSemanticColors>()!;
     final isTransfer = tx.type == 'transfer';
-    final isOutflowHere = (tx.type == 'expense' && tx.accountId == account.id) ||
+    final isOutflowHere =
+        (tx.type == 'expense' && tx.accountId == account.id) ||
         (isTransfer && tx.accountId == account.id);
     final sign = isOutflowHere ? '-' : '+';
-    final amountColor =
-        isOutflowHere ? semantic.danger : semantic.success;
+    final amountColor = isOutflowHere ? semantic.danger : semantic.success;
 
     Category? matched;
     final cid = tx.categoryId;
@@ -697,9 +691,13 @@ class _TxRow extends ConsumerWidget {
     final iconText = isTransfer
         ? '🔁'
         : (matched != null
-            ? resolveCategoryIcon(
-                matched.icon, matched.parentKey, matched.name, iconPack)
-            : (tx.type == 'expense' ? '💸' : '💰'));
+              ? resolveCategoryIcon(
+                  matched.icon,
+                  matched.parentKey,
+                  matched.name,
+                  iconPack,
+                )
+              : (tx.type == 'expense' ? '💸' : '💰'));
     final iconSvg = isTransfer ? null : matched?.iconSvg;
     final nameText = isTransfer
         ? context.l10n.txTypeTransfer
@@ -774,8 +772,9 @@ class _TxRow extends ConsumerWidget {
                     Text(
                       transferSub,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -784,8 +783,9 @@ class _TxRow extends ConsumerWidget {
                     Text(
                       note,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
