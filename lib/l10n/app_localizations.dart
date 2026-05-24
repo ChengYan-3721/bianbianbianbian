@@ -1000,6 +1000,18 @@ abstract class AppLocalizations {
   /// **'转出账户和转入账户不能相同'**
   String get recordNewTransferSameError;
 
+  /// No description provided for @recordNewErrorNoAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入大于 0 的金额'**
+  String get recordNewErrorNoAmount;
+
+  /// No description provided for @recordNewErrorNoAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择账户'**
+  String get recordNewErrorNoAccount;
+
   /// No description provided for @recordNewAdd.
   ///
   /// In zh, this message translates to:
@@ -2223,6 +2235,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'一整年都没有流水~'**
   String get accountDetailEmptyYear;
+
+  /// No description provided for @accountReorderTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户排序'**
+  String get accountReorderTitle;
 
   /// No description provided for @lockTitle.
   ///

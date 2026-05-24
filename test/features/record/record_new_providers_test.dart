@@ -244,17 +244,18 @@ void main() {
       expect(form.canSave, isFalse);
     });
 
-    test('有金额无分类时 canSave 为 false', () {
+    test('有金额无分类但有账户时 canSave 为 true（分类可选）', () {
       final container = makeContainer();
       final notifier = container.read(recordFormProvider.notifier);
 
       notifier.onKeyTap('1');
       notifier.onKeyTap('0');
+      notifier.setAccount('acc-cash');
 
       final form = container.read(recordFormProvider);
       expect(form.amount, 10);
       expect(form.categoryId, isNull);
-      expect(form.canSave, isFalse);
+      expect(form.canSave, isTrue);
     });
 
     test('有分类无金额时 canSave 为 false', () {
@@ -268,13 +269,14 @@ void main() {
       expect(form.canSave, isFalse);
     });
 
-    test('选择分类 + 输入金额后 canSave 为 true', () {
+    test('选择分类 + 输入金额 + 选择账户后 canSave 为 true', () {
       final container = makeContainer();
       final notifier = container.read(recordFormProvider.notifier);
 
       notifier.setCategory('cat-1');
       notifier.onKeyTap('2');
       notifier.onKeyTap('5');
+      notifier.setAccount('acc-cash');
 
       final form = container.read(recordFormProvider);
       expect(form.amount, 25);
@@ -365,6 +367,8 @@ void main() {
     });
 
     test('保存成功后 recordMonthSummaryProvider 被 invalidate', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       final repo = _FakeTransactionRepository();
       final container = makeContainer(txRepo: repo);
       final notifier = container.read(recordFormProvider.notifier);
@@ -372,6 +376,7 @@ void main() {
       notifier.setCategory('cat-food');
       notifier.onKeyTap('5');
       notifier.onKeyTap('0');
+      notifier.setAccount('acc-cash');
 
       final ok = await notifier.save();
       expect(ok, isTrue);
@@ -382,6 +387,8 @@ void main() {
     });
 
     test('保存后不清空表单（由 UI 层 pop 处理）', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues(<String, Object>{});
       final repo = _FakeTransactionRepository();
       final container = makeContainer(txRepo: repo);
       final notifier = container.read(recordFormProvider.notifier);
@@ -389,6 +396,7 @@ void main() {
       notifier.setCategory('cat-food');
       notifier.onKeyTap('2');
       notifier.onKeyTap('0');
+      notifier.setAccount('acc-cash');
 
       final ok = await notifier.save();
       expect(ok, isTrue);
@@ -433,6 +441,7 @@ void main() {
       notifier.setCategory('cat-food');
       notifier.onKeyTap('6');
       notifier.onKeyTap('6');
+      notifier.setAccount('acc-cash');
 
       final current = container.read(recordFormProvider);
       final injected = current.copyWith(
@@ -532,6 +541,7 @@ void main() {
 
       notifier.setCategory('cat-food');
       notifier.setCurrency('USD');
+      notifier.setAccount('acc-cash');
       notifier.onKeyTap('1');
       notifier.onKeyTap('0');
 
@@ -559,6 +569,7 @@ void main() {
       final notifier = container.read(recordFormProvider.notifier);
 
       notifier.setCategory('cat-food');
+      notifier.setAccount('acc-cash');
       // currency 默认 'CNY' = 账本默认
       notifier.onKeyTap('5');
       notifier.onKeyTap('0');
@@ -581,6 +592,7 @@ void main() {
 
       notifier.setCategory('cat-food');
       notifier.setCurrency('CNY');
+      notifier.setAccount('acc-cash');
       notifier.onKeyTap('5');
       notifier.onKeyTap('0');
 

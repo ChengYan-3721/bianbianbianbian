@@ -116,6 +116,13 @@ class UserPrefTable extends Table {
   TextColumn get lastPulledAtJson =>
       text().nullable().named('last_pulled_at_json')();
 
+  /// 账户排序：用户手动拖动排列后的账户 ID 顺序，JSON 数组字符串如
+  /// `'["id1","id2","id3"]'`。null = 按余额倒序（默认）。
+  /// 排在数组里但实际已删的 ID 会在 provider 层被过滤掉；数组里没有的新账户
+  /// 追加到末尾。
+  TextColumn get accountOrder =>
+      text().nullable().named('account_order')();
+
   @override
   Set<Column> get primaryKey => {id};
 }

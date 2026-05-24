@@ -494,6 +494,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordNewTransferSameError => '转出账户和转入账户不能相同';
 
   @override
+  String get recordNewErrorNoAmount => '请输入大于 0 的金额';
+
+  @override
+  String get recordNewErrorNoAccount => '请选择账户';
+
+  @override
   String get recordNewAdd => '添加';
 
   @override
@@ -1162,6 +1168,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountDetailEmptyYear => '一整年都没有流水~';
+
+  @override
+  String get accountReorderTitle => '账户排序';
 
   @override
   String get lockTitle => '应用锁';

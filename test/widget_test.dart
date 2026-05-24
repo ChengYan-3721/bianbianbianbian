@@ -183,6 +183,8 @@ List<Override> _standardOverrides() {
     statsHeatmapCellsProvider.overrideWith((ref) async => []),
     // 无总预算时进度环隐藏；防止 _CategoryPieCard 触达真实 DB。
     activeBudgetsProvider.overrideWith((ref) async => []),
+    // 账户排序：null = 默认余额倒序，测试中无 DB 故需覆盖。
+    accountOrderProvider.overrideWith((ref) async => null),
   ];
 }
 
@@ -454,6 +456,8 @@ void main() {
         ledgerRepositoryProvider.overrideWith((ref) async => fakeLedger),
         transactionRepositoryProvider.overrideWith((ref) async => fakeTx),
         accountRepositoryProvider.overrideWith((ref) async => fakeAccount),
+        // 账户排序：null = 默认余额倒序，测试中无 DB 故需覆盖。
+        accountOrderProvider.overrideWith((ref) async => null),
         statsLinePointsProvider.overrideWith((ref) async => []),
         statsPieSlicesProvider.overrideWith((ref) async => []),
         statsRankItemsProvider.overrideWith((ref) async => []),

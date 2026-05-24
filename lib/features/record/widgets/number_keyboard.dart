@@ -106,7 +106,9 @@ class _KeyButton extends StatelessWidget {
       child: SizedBox(
         height: 65,
         child: Material(
-          color: highlight ? colors.primary : colors.surface,
+          color: highlight
+              ? (enabled ? colors.primary : colors.primary.withAlpha(80))
+              : colors.surface,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
             borderRadius: BorderRadius.circular(10),
@@ -118,7 +120,7 @@ class _KeyButton extends StatelessWidget {
                   fontSize: label == '✓' || label == '=' ? 20 : 22,
                   fontWeight: FontWeight.w600,
                   color: highlight
-                      ? colors.onPrimary
+                      ? (enabled ? colors.onPrimary : colors.onPrimary.withAlpha(80))
                       : enabled
                           ? colors.onSurface
                           : colors.onSurface.withAlpha(80),

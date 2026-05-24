@@ -72,15 +72,22 @@ class RecordFormData {
   /// `AttachmentUploader.uploadPending` 计算并回填。
   final List<AttachmentMeta> attachmentMetas;
 
-  bool get canSave {
-    final hasAmount = amount != null && amount! > 0;
-    if (!hasAmount) return false;
+  bool get canSave => saveValidationError == null;
+
+  /// 保存校验不通过时返回原因文本 key（对应 l10n），可保存时返回 null。
+  ///
+  /// 仅校验金额 > 0、账户已选、日期已设；分类可选（未分类流水视为支出）。
+  String? get saveValidationError {
+    if (amount == null || amount! <= 0) return 'recordNewErrorNoAmount';
     if (isTransfer) {
-      return accountId != null &&
-          toAccountId != null &&
-          accountId != toAccountId;
+      if (accountId == null || toAccountId == null) {
+        return 'recordNewErrorNoAccount';
+      }
+      if (accountId == toAccountId) return 'recordNewTransferSameError';
+      return null;
     }
-    return categoryId != null;
+    if (accountId == null) return 'recordNewErrorNoAccount';
+    return null;
   }
 
   RecordFormData copyWith({

@@ -236,6 +236,17 @@ class $UserPrefTableTable extends UserPrefTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _accountOrderMeta = const VerificationMeta(
+    'accountOrder',
+  );
+  @override
+  late final GeneratedColumn<String> accountOrder = GeneratedColumn<String>(
+    'account_order',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -258,6 +269,7 @@ class $UserPrefTableTable extends UserPrefTable
     reminderEnabled,
     reminderTime,
     lastPulledAtJson,
+    accountOrder,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -435,6 +447,15 @@ class $UserPrefTableTable extends UserPrefTable
         ),
       );
     }
+    if (data.containsKey('account_order')) {
+      context.handle(
+        _accountOrderMeta,
+        accountOrder.isAcceptableOrUnknown(
+          data['account_order']!,
+          _accountOrderMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -524,6 +545,10 @@ class $UserPrefTableTable extends UserPrefTable
         DriftSqlType.string,
         data['${effectivePrefix}last_pulled_at_json'],
       ),
+      accountOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_order'],
+      ),
     );
   }
 
@@ -599,6 +624,12 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
   ///
   /// null = 从未 pull 过（首次 pull 即全量）。
   final String? lastPulledAtJson;
+
+  /// 账户排序：用户手动拖动排列后的账户 ID 顺序，JSON 数组字符串如
+  /// `'["id1","id2","id3"]'`。null = 按余额倒序（默认）。
+  /// 排在数组里但实际已删的 ID 会在 provider 层被过滤掉；数组里没有的新账户
+  /// 追加到末尾。
+  final String? accountOrder;
   const UserPrefEntry({
     required this.id,
     required this.deviceId,
@@ -620,6 +651,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     this.reminderEnabled,
     this.reminderTime,
     this.lastPulledAtJson,
+    this.accountOrder,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -679,6 +711,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     }
     if (!nullToAbsent || lastPulledAtJson != null) {
       map['last_pulled_at_json'] = Variable<String>(lastPulledAtJson);
+    }
+    if (!nullToAbsent || accountOrder != null) {
+      map['account_order'] = Variable<String>(accountOrder);
     }
     return map;
   }
@@ -741,6 +776,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       lastPulledAtJson: lastPulledAtJson == null && nullToAbsent
           ? const Value.absent()
           : Value(lastPulledAtJson),
+      accountOrder: accountOrder == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accountOrder),
     );
   }
 
@@ -776,6 +814,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       reminderEnabled: serializer.fromJson<int?>(json['reminderEnabled']),
       reminderTime: serializer.fromJson<String?>(json['reminderTime']),
       lastPulledAtJson: serializer.fromJson<String?>(json['lastPulledAtJson']),
+      accountOrder: serializer.fromJson<String?>(json['accountOrder']),
     );
   }
   @override
@@ -802,6 +841,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       'reminderEnabled': serializer.toJson<int?>(reminderEnabled),
       'reminderTime': serializer.toJson<String?>(reminderTime),
       'lastPulledAtJson': serializer.toJson<String?>(lastPulledAtJson),
+      'accountOrder': serializer.toJson<String?>(accountOrder),
     };
   }
 
@@ -826,6 +866,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     Value<int?> reminderEnabled = const Value.absent(),
     Value<String?> reminderTime = const Value.absent(),
     Value<String?> lastPulledAtJson = const Value.absent(),
+    Value<String?> accountOrder = const Value.absent(),
   }) => UserPrefEntry(
     id: id ?? this.id,
     deviceId: deviceId ?? this.deviceId,
@@ -867,6 +908,7 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     lastPulledAtJson: lastPulledAtJson.present
         ? lastPulledAtJson.value
         : this.lastPulledAtJson,
+    accountOrder: accountOrder.present ? accountOrder.value : this.accountOrder,
   );
   UserPrefEntry copyWithCompanion(UserPrefTableCompanion data) {
     return UserPrefEntry(
@@ -920,6 +962,9 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
       lastPulledAtJson: data.lastPulledAtJson.present
           ? data.lastPulledAtJson.value
           : this.lastPulledAtJson,
+      accountOrder: data.accountOrder.present
+          ? data.accountOrder.value
+          : this.accountOrder,
     );
   }
 
@@ -945,13 +990,14 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           ..write('iconPack: $iconPack, ')
           ..write('reminderEnabled: $reminderEnabled, ')
           ..write('reminderTime: $reminderTime, ')
-          ..write('lastPulledAtJson: $lastPulledAtJson')
+          ..write('lastPulledAtJson: $lastPulledAtJson, ')
+          ..write('accountOrder: $accountOrder')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     deviceId,
     currentLedgerId,
@@ -972,7 +1018,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
     reminderEnabled,
     reminderTime,
     lastPulledAtJson,
-  );
+    accountOrder,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -999,7 +1046,8 @@ class UserPrefEntry extends DataClass implements Insertable<UserPrefEntry> {
           other.iconPack == this.iconPack &&
           other.reminderEnabled == this.reminderEnabled &&
           other.reminderTime == this.reminderTime &&
-          other.lastPulledAtJson == this.lastPulledAtJson);
+          other.lastPulledAtJson == this.lastPulledAtJson &&
+          other.accountOrder == this.accountOrder);
 }
 
 class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
@@ -1023,6 +1071,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
   final Value<int?> reminderEnabled;
   final Value<String?> reminderTime;
   final Value<String?> lastPulledAtJson;
+  final Value<String?> accountOrder;
   const UserPrefTableCompanion({
     this.id = const Value.absent(),
     this.deviceId = const Value.absent(),
@@ -1044,6 +1093,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.reminderEnabled = const Value.absent(),
     this.reminderTime = const Value.absent(),
     this.lastPulledAtJson = const Value.absent(),
+    this.accountOrder = const Value.absent(),
   });
   UserPrefTableCompanion.insert({
     this.id = const Value.absent(),
@@ -1066,6 +1116,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     this.reminderEnabled = const Value.absent(),
     this.reminderTime = const Value.absent(),
     this.lastPulledAtJson = const Value.absent(),
+    this.accountOrder = const Value.absent(),
   }) : deviceId = Value(deviceId);
   static Insertable<UserPrefEntry> custom({
     Expression<int>? id,
@@ -1088,6 +1139,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Expression<int>? reminderEnabled,
     Expression<String>? reminderTime,
     Expression<String>? lastPulledAtJson,
+    Expression<String>? accountOrder,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1112,6 +1164,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       if (reminderEnabled != null) 'reminder_enabled': reminderEnabled,
       if (reminderTime != null) 'reminder_time': reminderTime,
       if (lastPulledAtJson != null) 'last_pulled_at_json': lastPulledAtJson,
+      if (accountOrder != null) 'account_order': accountOrder,
     });
   }
 
@@ -1136,6 +1189,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     Value<int?>? reminderEnabled,
     Value<String?>? reminderTime,
     Value<String?>? lastPulledAtJson,
+    Value<String?>? accountOrder,
   }) {
     return UserPrefTableCompanion(
       id: id ?? this.id,
@@ -1158,6 +1212,7 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
       reminderEnabled: reminderEnabled ?? this.reminderEnabled,
       reminderTime: reminderTime ?? this.reminderTime,
       lastPulledAtJson: lastPulledAtJson ?? this.lastPulledAtJson,
+      accountOrder: accountOrder ?? this.accountOrder,
     );
   }
 
@@ -1228,6 +1283,9 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
     if (lastPulledAtJson.present) {
       map['last_pulled_at_json'] = Variable<String>(lastPulledAtJson.value);
     }
+    if (accountOrder.present) {
+      map['account_order'] = Variable<String>(accountOrder.value);
+    }
     return map;
   }
 
@@ -1253,7 +1311,8 @@ class UserPrefTableCompanion extends UpdateCompanion<UserPrefEntry> {
           ..write('iconPack: $iconPack, ')
           ..write('reminderEnabled: $reminderEnabled, ')
           ..write('reminderTime: $reminderTime, ')
-          ..write('lastPulledAtJson: $lastPulledAtJson')
+          ..write('lastPulledAtJson: $lastPulledAtJson, ')
+          ..write('accountOrder: $accountOrder')
           ..write(')'))
         .toString();
   }
@@ -5902,6 +5961,7 @@ typedef $$UserPrefTableTableCreateCompanionBuilder =
       Value<int?> reminderEnabled,
       Value<String?> reminderTime,
       Value<String?> lastPulledAtJson,
+      Value<String?> accountOrder,
     });
 typedef $$UserPrefTableTableUpdateCompanionBuilder =
     UserPrefTableCompanion Function({
@@ -5925,6 +5985,7 @@ typedef $$UserPrefTableTableUpdateCompanionBuilder =
       Value<int?> reminderEnabled,
       Value<String?> reminderTime,
       Value<String?> lastPulledAtJson,
+      Value<String?> accountOrder,
     });
 
 class $$UserPrefTableTableFilterComposer
@@ -6033,6 +6094,11 @@ class $$UserPrefTableTableFilterComposer
 
   ColumnFilters<String> get lastPulledAtJson => $composableBuilder(
     column: $table.lastPulledAtJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountOrder => $composableBuilder(
+    column: $table.accountOrder,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6145,6 +6211,11 @@ class $$UserPrefTableTableOrderingComposer
     column: $table.lastPulledAtJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get accountOrder => $composableBuilder(
+    column: $table.accountOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$UserPrefTableTableAnnotationComposer
@@ -6245,6 +6316,11 @@ class $$UserPrefTableTableAnnotationComposer
     column: $table.lastPulledAtJson,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get accountOrder => $composableBuilder(
+    column: $table.accountOrder,
+    builder: (column) => column,
+  );
 }
 
 class $$UserPrefTableTableTableManager
@@ -6298,6 +6374,7 @@ class $$UserPrefTableTableTableManager
                 Value<int?> reminderEnabled = const Value.absent(),
                 Value<String?> reminderTime = const Value.absent(),
                 Value<String?> lastPulledAtJson = const Value.absent(),
+                Value<String?> accountOrder = const Value.absent(),
               }) => UserPrefTableCompanion(
                 id: id,
                 deviceId: deviceId,
@@ -6319,6 +6396,7 @@ class $$UserPrefTableTableTableManager
                 reminderEnabled: reminderEnabled,
                 reminderTime: reminderTime,
                 lastPulledAtJson: lastPulledAtJson,
+                accountOrder: accountOrder,
               ),
           createCompanionCallback:
               ({
@@ -6342,6 +6420,7 @@ class $$UserPrefTableTableTableManager
                 Value<int?> reminderEnabled = const Value.absent(),
                 Value<String?> reminderTime = const Value.absent(),
                 Value<String?> lastPulledAtJson = const Value.absent(),
+                Value<String?> accountOrder = const Value.absent(),
               }) => UserPrefTableCompanion.insert(
                 id: id,
                 deviceId: deviceId,
@@ -6363,6 +6442,7 @@ class $$UserPrefTableTableTableManager
                 reminderEnabled: reminderEnabled,
                 reminderTime: reminderTime,
                 lastPulledAtJson: lastPulledAtJson,
+                accountOrder: accountOrder,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

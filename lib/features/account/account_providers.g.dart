@@ -6,10 +6,35 @@ part of 'account_providers.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$accountsListHash() => r'44737203c4368e3f1f21abda668f0090df7c69ed';
+String _$accountOrderHash() => r'ccaa57ebdd09339c0b91a1bd02ffffc8ce29725b';
 
-/// 当前账本视角下的账户清单（按 [accountRepository.listActive] 顺序，
-/// 即 `updated_at` 倒序）。Step 7.1 列表页直接消费。
+/// 用户在 `user_pref.account_order` 中保存的账户排序（JSON 数组字符串）。
+///
+/// - null：使用默认排序（余额倒序）
+/// - 非空：用户手动拖动后的 ID 顺序
+///
+/// Copied from [accountOrder].
+@ProviderFor(accountOrder)
+final accountOrderProvider = AutoDisposeFutureProvider<List<String>?>.internal(
+  accountOrder,
+  name: r'accountOrderProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$accountOrderHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef AccountOrderRef = AutoDisposeFutureProviderRef<List<String>?>;
+String _$accountsListHash() => r'bcfbdb6745975e21fabf04e789bbc2ef3892d857';
+
+/// 当前账本视角下的账户清单，按用户自定义排序（`user_pref.account_order`）
+/// 或默认余额倒序排列。Step 7.1 列表页直接消费。
+///
+/// 当 `account_order` 为 null（默认）时，独立计算余额用于排序，
+/// 不依赖 [accountBalancesProvider] 以避免循环依赖。
 ///
 /// Copied from [accountsList].
 @ProviderFor(accountsList)

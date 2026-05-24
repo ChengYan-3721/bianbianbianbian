@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/l10n/l10n_ext.dart';
+import '../../l10n/app_localizations.dart';
 import '../../core/util/currencies.dart';
 import '../../core/util/category_icon_packs.dart';
 import '../../core/util/svg_or_emoji_icon.dart';
@@ -177,14 +178,12 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                   notifier.onActionTap();
                   return;
                 }
-                if (!form.canSave) return;
-                final l10n = context.l10n;
-                if (widget.isTransfer &&
-                    form.accountId != null &&
-                    form.toAccountId != null &&
-                    form.accountId == form.toAccountId) {
+                final validationKey = form.saveValidationError;
+                if (validationKey != null) {
+                  final l10n = context.l10n;
+                  final msg = _validationMessage(l10n, validationKey);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l10n.recordNewTransferSameError)),
+                    SnackBar(content: Text(msg)),
                   );
                   return;
                 }
@@ -816,22 +815,23 @@ class _WalletPillButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final repo = ref.watch(accountRepositoryProvider).valueOrNull;
-    if (repo == null) {
-      return _MetaPillButton(
+    final accountsAsync = ref.watch(accountsListProvider);
+    final balancesAsync = ref.watch(accountBalancesProvider);
+
+    return accountsAsync.when(
+      loading: () => _MetaPillButton(
         label: emptyText,
         value: emptyText,
         icon: icon,
         onTap: _noop,
-      );
-    }
-
-    final balancesAsync = ref.watch(accountBalancesProvider);
-
-    return FutureBuilder<List<Account>>(
-      future: repo.listActive(),
-      builder: (context, snapshot) {
-        final allAccounts = snapshot.data ?? [];
+      ),
+      error: (_, _) => _MetaPillButton(
+        label: emptyText,
+        value: emptyText,
+        icon: icon,
+        onTap: _noop,
+      ),
+      data: (allAccounts) {
         final accounts = excludeId == null
             ? allAccounts
             : allAccounts.where((a) => a.id != excludeId).toList();
@@ -906,6 +906,20 @@ class _AccountBalanceText extends StatelessWidget {
 }
 
 void _noop() {}
+
+/// 根据 [RecordFormData.saveValidationError] 返回的 key 解析用户可见的提示文本。
+String _validationMessage(AppLocalizations l10n, String key) {
+  switch (key) {
+    case 'recordNewErrorNoAmount':
+      return l10n.recordNewErrorNoAmount;
+    case 'recordNewErrorNoAccount':
+      return l10n.recordNewErrorNoAccount;
+    case 'recordNewTransferSameError':
+      return l10n.recordNewTransferSameError;
+    default:
+      return l10n.tip;
+  }
+}
 
 class _NoteSheet extends ConsumerWidget {
   const _NoteSheet({

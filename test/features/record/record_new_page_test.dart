@@ -12,7 +12,9 @@ import 'package:bianbianbianbian/domain/entity/account.dart';
 import 'package:bianbianbianbian/domain/entity/category.dart';
 import 'package:bianbianbianbian/domain/entity/ledger.dart';
 import 'package:bianbianbianbian/domain/entity/transaction_entry.dart';
+import 'package:bianbianbianbian/features/account/account_providers.dart';
 import 'package:bianbianbianbian/features/record/record_new_page.dart';
+import 'package:bianbianbianbian/features/record/record_new_providers.dart';
 import 'package:bianbianbianbian/features/record/record_providers.dart';
 import 'package:bianbianbianbian/features/settings/settings_providers.dart';
 import 'package:bianbianbianbian/l10n/app_localizations.dart';
@@ -247,6 +249,7 @@ List<Override> _baseOverrides({
       (ref) async =>
           _FakeAccountRepository(accounts: accounts ?? [_testAccount()]),
     ),
+    accountOrderProvider.overrideWith((ref) async => null),
     ledgerRepositoryProvider.overrideWith(
       (ref) async => _FakeLedgerRepository(ledger: l),
     ),
@@ -319,11 +322,23 @@ Widget _wrapApp(Widget child, {List<Override>? overrides}) {
 }
 
 /// 切换到"食"一级 Tab 并点击测试分类进入数字键盘态。
+///
+/// 选分类后 `initDefaultAccount()` 是 fire-and-forget 异步调用，
+/// 测试环境 SharedPreferences 可能不可用导致账户未自动填入，
+/// 因此在此主动填入默认账户以保证 `canSave` 判定正确。
 Future<void> _enterKeyboardStage(WidgetTester tester) async {
   // 默认在 ☆，先切到"食"
   await tester.tap(find.text('食').first);
   await tester.pumpAndSettle();
   await tester.tap(find.text('🍔').first);
+  await tester.pumpAndSettle();
+
+  // 选分类后 initDefaultAccount 是异步 fire-and-forget，
+  // 测试里可能还没跑完。手动同步设账户确保 canSave 正确。
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(RecordNewPage)),
+  );
+  container.read(recordFormProvider.notifier).setAccount('acc-cash');
   await tester.pumpAndSettle();
 }
 

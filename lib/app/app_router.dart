@@ -5,6 +5,7 @@ import '../domain/entity/category.dart';
 import '../features/account/account_detail_page.dart';
 import '../features/account/account_edit_page.dart';
 import '../features/account/account_list_page.dart';
+import '../features/account/account_reorder_page.dart';
 import '../features/budget/budget_edit_page.dart';
 import '../features/budget/budget_list_page.dart';
 import '../features/compliance/about_page.dart';
@@ -118,6 +119,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         final accountId = state.uri.queryParameters['id'] ?? '';
         return AccountDetailPage(accountId: accountId);
       },
+    ),
+    GoRoute(
+      path: '/accounts/reorder',
+      builder: (context, state) => const AccountReorderPage(),
     ),
     GoRoute(
       path: '/settings/multi-currency',

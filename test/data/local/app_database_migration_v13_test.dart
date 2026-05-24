@@ -5,7 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('AppDatabase schema v14 · last_pulled_at_json', () {
+  group('AppDatabase schema v15 · account_order', () {
     late AppDatabase db;
 
     setUp(() {
@@ -16,9 +16,9 @@ void main() {
       await db.close();
     });
 
-    test('schemaVersion == 14', () {
+    test('schemaVersion == 15', () {
       // 防回归：bump 后没人改 schemaVersion 就会卡这条。
-      expect(db.schemaVersion, 14);
+      expect(db.schemaVersion, 15);
     });
 
     test('新装库 user_pref.last_pulled_at_json 默认 null', () async {
@@ -95,6 +95,56 @@ void main() {
       expect(row.iconPack, 'sticker');
       expect(row.reminderEnabled, 0);
       expect(row.reminderTime, isNull);
+    });
+
+    test('新装库 user_pref.account_order 默认 null', () async {
+      // onCreate 路径：默认 null 表示余额倒序。
+      await db
+          .into(db.userPrefTable)
+          .insert(UserPrefTableCompanion.insert(deviceId: 'test-device-uuid'));
+      final row = await db.select(db.userPrefTable).getSingle();
+      expect(row.accountOrder, isNull);
+    });
+
+    test('写入 account_order JSON 数组后能完整 roundtrip', () async {
+      final order = ['acc-1', 'acc-2', 'acc-3'];
+      final encoded = jsonEncode(order);
+
+      await db
+          .into(db.userPrefTable)
+          .insert(
+            UserPrefTableCompanion.insert(
+              deviceId: 'test-device-uuid',
+              accountOrder: Value(encoded),
+            ),
+          );
+
+      final row = await db.select(db.userPrefTable).getSingle();
+      expect(row.accountOrder, encoded);
+      final decoded = (jsonDecode(row.accountOrder!) as List).cast<String>();
+      expect(decoded, order);
+    });
+
+    test('UPDATE 路径能把 account_order null → 有值 → null', () async {
+      await db
+          .into(db.userPrefTable)
+          .insert(UserPrefTableCompanion.insert(deviceId: 'test-device-uuid'));
+
+      await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+        UserPrefTableCompanion(accountOrder: Value('["a","b"]')),
+      );
+      expect(
+        (await db.select(db.userPrefTable).getSingle()).accountOrder,
+        '["a","b"]',
+      );
+
+      await (db.update(db.userPrefTable)..where((t) => t.id.equals(1))).write(
+        const UserPrefTableCompanion(accountOrder: Value(null)),
+      );
+      expect(
+        (await db.select(db.userPrefTable).getSingle()).accountOrder,
+        isNull,
+      );
     });
   });
 }

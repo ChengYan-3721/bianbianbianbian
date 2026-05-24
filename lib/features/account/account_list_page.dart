@@ -32,7 +32,24 @@ class AccountListPage extends ConsumerWidget {
     final assetLiabilityAsync = ref.watch(accountAssetLiabilityProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.meAssets)),
+      appBar: AppBar(
+        title: Text(context.l10n.meAssets),
+        actions: [
+          IconButton(
+            tooltip: context.l10n.accountReorderTitle,
+            icon: const Icon(Icons.sort),
+            onPressed: () async {
+              final changed = await context.push<bool>('/accounts/reorder');
+              if (changed == true) {
+                ref.invalidate(accountsListProvider);
+                ref.invalidate(accountBalancesProvider);
+                ref.invalidate(totalAssetsProvider);
+                ref.invalidate(accountAssetLiabilityProvider);
+              }
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'account_list_fab',
         onPressed: () async {

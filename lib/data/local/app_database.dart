@@ -82,6 +82,8 @@ part 'app_database.g.dart';
 ///   [UserPrefTable.lastPulledAtJson]。无数据迁移，仅 ALTER TABLE ADD COLUMN。
 /// - v14（未发布重构）：移除 `account.initial_balance`。账户余额不再存储在
 ///   账户表，完全由未删除流水聚合得出；余额修改通过自动生成的流水留痕。
+/// - v15：`user_pref` 追加 `account_order TEXT`（nullable，默认 null）
+///   ——用户手动拖动排列的账户 ID 顺序（JSON 数组字符串）。null 时 UI 按余额倒序。
 @DriftDatabase(
   tables: [
     UserPrefTable,
@@ -110,7 +112,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -223,6 +225,13 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'ALTER TABLE account DROP COLUMN initial_balance',
         );
+      }
+
+      if (from < 15) {
+        // v14 → v15：user_pref 追加 account_order 列（nullable，默认 null）
+        // ——用户手动拖动排列的账户 ID 顺序（JSON 数组字符串）。
+        // null 时 UI 按余额倒序（默认）。
+        await m.addColumn(userPrefTable, userPrefTable.accountOrder);
       }
     },
   );
