@@ -2077,7 +2077,7 @@ abstract class AppLocalizations {
   /// No description provided for @accountDeleteConfirmMsg.
   ///
   /// In zh, this message translates to:
-  /// **'确定要删除账户「{name}」吗？\\n\\n该账户下的流水将自动挂到「已删账户」占位。\\n删除后可在垃圾桶中保留 30 天。'**
+  /// **'确定要删除账户「{name}」吗？\n\n该账户下的流水将自动挂到「已删账户」占位。\n删除后可在垃圾桶中保留 30 天。'**
   String accountDeleteConfirmMsg(String name);
 
   /// No description provided for @accountDeleted.
@@ -3139,7 +3139,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncSwitchHint.
   ///
   /// In zh, this message translates to:
-  /// **'切换服务后，需要重新进行首次同步。'**
+  /// **'切换后将在新后端上同步，原有后端上的数据不受影响。'**
   String get syncSwitchHint;
 
   /// No description provided for @syncMigrateAttachments.
@@ -3237,6 +3237,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'配置无效'**
   String get syncConfigInvalid;
+
+  /// No description provided for @syncClearConfig.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除配置'**
+  String get syncClearConfig;
+
+  /// No description provided for @syncClearConfigConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定要清除 {name} 的配置吗？此操作不会影响已同步的云端数据。'**
+  String syncClearConfigConfirm(String name);
+
+  /// No description provided for @syncConfigCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} 配置已清除'**
+  String syncConfigCleared(String name);
 
   /// No description provided for @syncProviderInitNull.
   ///
@@ -3388,12 +3406,6 @@ abstract class AppLocalizations {
   /// **'上传'**
   String get syncUpload;
 
-  /// No description provided for @syncDownload.
-  ///
-  /// In zh, this message translates to:
-  /// **'浏览备份'**
-  String get syncDownload;
-
   /// No description provided for @syncDeleteCloudBackupShort.
   ///
   /// In zh, this message translates to:
@@ -3417,12 +3429,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'云端无备份'**
   String get syncStatusNoBackup;
-
-  /// No description provided for @syncNoBackupHintBrowse.
-  ///
-  /// In zh, this message translates to:
-  /// **'其他设备的备份可在「浏览备份」中找到'**
-  String get syncNoBackupHintBrowse;
 
   /// No description provided for @syncStatusSynced.
   ///
@@ -5107,6 +5113,108 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'强制拉取完成'**
   String get syncForcePullDone;
+
+  /// No description provided for @syncInitialChoiceTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地与云端均有数据'**
+  String get syncInitialChoiceTitle;
+
+  /// No description provided for @syncInitialChoicePrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择如何完成首次同步：'**
+  String get syncInitialChoicePrompt;
+
+  /// No description provided for @syncInitialLocalOverwrite.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地覆盖云端'**
+  String get syncInitialLocalOverwrite;
+
+  /// No description provided for @syncInitialLocalOverwriteSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'上传本地全部数据，清除云端独有的内容'**
+  String get syncInitialLocalOverwriteSub;
+
+  /// No description provided for @syncInitialCloudOverwrite.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端覆盖本地'**
+  String get syncInitialCloudOverwrite;
+
+  /// No description provided for @syncInitialCloudOverwriteSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'下载云端全部数据，清空本地原有内容'**
+  String get syncInitialCloudOverwriteSub;
+
+  /// No description provided for @syncInitialMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并（推荐）'**
+  String get syncInitialMerge;
+
+  /// No description provided for @syncInitialMergeSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'按更新时间合并两端数据，冲突时较新者胜出'**
+  String get syncInitialMergeSub;
+
+  /// No description provided for @syncInitialRestoreTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'发现云端数据'**
+  String get syncInitialRestoreTitle;
+
+  /// No description provided for @syncInitialRestorePrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'云端已存在备份数据，本地暂无数据。是否从云端恢复到本地？'**
+  String get syncInitialRestorePrompt;
+
+  /// No description provided for @syncInitialRestoreConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'从云端恢复'**
+  String get syncInitialRestoreConfirm;
+
+  /// No description provided for @syncInitialDisabledOnCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已暂时关闭云同步，请重新进入云服务页面选择同步方式'**
+  String get syncInitialDisabledOnCancel;
+
+  /// No description provided for @syncInitialPushing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在上传本地数据到云端…'**
+  String get syncInitialPushing;
+
+  /// No description provided for @syncInitialPushDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地数据已上传到云端'**
+  String get syncInitialPushDone;
+
+  /// No description provided for @syncInitialMerging.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在合并本地与云端数据…'**
+  String get syncInitialMerging;
+
+  /// No description provided for @syncInitialMergeDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并完成'**
+  String get syncInitialMergeDone;
+
+  /// No description provided for @syncInitialFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'首次同步失败：{error}'**
+  String syncInitialFailed(String error);
 }
 
 class _AppLocalizationsDelegate

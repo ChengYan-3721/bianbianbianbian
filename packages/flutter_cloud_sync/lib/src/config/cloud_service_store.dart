@@ -357,4 +357,40 @@ class CloudServiceStore {
     }
     return null;
   }
+
+  /// 清除指定后端的配置。如果该后端当前处于激活状态，自动切回 local。
+  /// 同时从 failed 集合清理该后端的测试状态。清除后该后端在 UI 上回到"未配置"。
+  Future<void> deleteConfig(CloudBackendType type) async {
+    final sp = await SharedPreferences.getInstance();
+    switch (type) {
+      case CloudBackendType.supabase:
+        await sp.remove(_kSupabaseCfg);
+      case CloudBackendType.webdav:
+        await sp.remove(_kWebdavCfg);
+      case CloudBackendType.s3:
+        await sp.remove(_kS3Cfg);
+      case CloudBackendType.beecountCloud:
+        await sp.remove(_kBeeCountCloudCfg);
+      case CloudBackendType.icloud:
+      case CloudBackendType.local:
+        break;
+    }
+    // 如果清除的是当前激活的后端，切回 local
+    final activeType = sp.getString(_kActiveType);
+    if (activeType == _typeStorageKey(type)) {
+      await sp.setString(_kActiveType, 'local');
+    }
+    // 从 failed 集合中移除
+    await markBackendTested(type: type, success: true);
+  }
+
+  /// 把 [CloudBackendType] 映射为 [_kActiveType] 约定的字符串。
+  String? _typeStorageKey(CloudBackendType type) => switch (type) {
+        CloudBackendType.local => 'local',
+        CloudBackendType.beecountCloud => 'beecount_cloud',
+        CloudBackendType.supabase => 'supabase',
+        CloudBackendType.webdav => 'webdav',
+        CloudBackendType.icloud => 'icloud',
+        CloudBackendType.s3 => 's3',
+      };
 }

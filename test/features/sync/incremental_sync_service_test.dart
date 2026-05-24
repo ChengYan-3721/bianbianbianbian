@@ -375,6 +375,36 @@ void main() {
       );
     });
 
+    test('分页: 云端 2500 行共享同一 updated_at → 仍能拉全(回归 CSV 批量导入卡死 bug)',
+        () async {
+      // CSV 批量导入场景:同一个 _clock() 毫秒,全部 4000+ 行共用同一 updated_at。
+      // 旧实现 pageSince = batchMax + 严格 > 过滤会卡在第一页之后,只拉到 1000。
+      gateway.tables['ledger'] = [remoteLedger(id: 'L1', updatedAt: 1)];
+      gateway.tables['transaction_entry'] = List.generate(
+        2500,
+        (i) => remoteTx(
+          id: 'tx-${i.toString().padLeft(5, '0')}',
+          ledgerId: 'L1',
+          updatedAt: 1000, // 全部相同!
+        ),
+      );
+
+      await service.pullThenPush();
+
+      // 全部 2500 行都到本地
+      expect(
+        await db.select(db.transactionEntryTable).get(),
+        hasLength(2500),
+      );
+      // 至少 3 次 query(2500 / 1000 = 3 页)
+      final txQueries = gateway.queryCalls
+          .where((c) => c.table == 'transaction_entry')
+          .toList();
+      expect(txQueries.length, greaterThanOrEqualTo(3));
+      // 验证 offset 单调递增(0 → 1000 → 2000)
+      expect(txQueries.map((c) => c.offset).toList(), [0, 1000, 2000]);
+    });
+
     test('游标推进: 第二次 pull 只拉新增', () async {
       // 第一轮: 拉 2 条
       gateway.tables['ledger'] = [
@@ -571,7 +601,9 @@ void main() {
       await service.pushOnly();
       final cloud = gateway.tables['account']!.single;
       expect(cloud['initial_balance'], 100.5);
-      // bool 字段经 _entityJsonToCloudRow 转为 int(0/1),兼容云端 boolean/integer 列
+      // bool 字段经 _entityJsonToCloudRow 转为 int 0/1——Supabase 业务表
+      // 的实际列类型是 integer（见 docs/supabase-setup.sql §5），PostgREST
+      // 不会自动 bool→int 归一化，发 JSON bool 会被拒绝。
       expect(cloud['include_in_total'], 0);
       expect(cloud['currency'], 'USD');
     });
@@ -582,7 +614,7 @@ void main() {
 class _FakeGateway implements IncrementalCloudGateway {
   final Map<String, List<Map<String, dynamic>>> tables = {};
   final List<({String table, List<Map<String, dynamic>> data})> upsertCalls = [];
-  final List<({String table, int updatedAtGt, int limit})> queryCalls = [];
+  final List<({String table, int updatedAtGt, int limit, int offset})> queryCalls = [];
 
   /// 注入 push 失败模拟: 调用该表的 upsertBatch 时抛异常。
   String? failOnTable;
@@ -621,32 +653,26 @@ class _FakeGateway implements IncrementalCloudGateway {
   }
 
   @override
-  Future<void> deleteExcept({
-    required String table,
-    required Set<String> keepIds,
-  }) async {
-    if (keepIds.isEmpty) {
-      tables.remove(table);
-      return;
-    }
-    final list = tables[table];
-    if (list == null) return;
-    list.removeWhere((r) => !keepIds.contains(r['id'] as String));
-  }
-
-  @override
   Future<List<Map<String, dynamic>>> queryUpdatedSince({
     required String table,
     required int updatedAtGt,
     required int limit,
+    int offset = 0,
   }) async {
-    queryCalls.add((table: table, updatedAtGt: updatedAtGt, limit: limit));
+    queryCalls.add(
+      (table: table, updatedAtGt: updatedAtGt, limit: limit, offset: offset),
+    );
     final rows = (tables[table] ?? const [])
         .where((r) => (r['updated_at'] as int) > updatedAtGt)
         .toList()
-      ..sort((a, b) =>
-          (a['updated_at'] as int).compareTo(b['updated_at'] as int));
+      ..sort((a, b) {
+        final cmp =
+            (a['updated_at'] as int).compareTo(b['updated_at'] as int);
+        if (cmp != 0) return cmp;
+        return (a['id'] as String).compareTo(b['id'] as String);
+      });
     return rows
+        .skip(offset)
         .take(limit)
         .map((r) => Map<String, dynamic>.from(r))
         .toList(growable: false);

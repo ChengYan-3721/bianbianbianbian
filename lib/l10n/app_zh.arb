@@ -597,7 +597,7 @@
   "accountCannotSave": "账户不存在，无法保存",
   "accountListNew": "新建账户",
   "accountDeleteConfirmTitle": "删除账户",
-  "accountDeleteConfirmMsg": "确定要删除账户「{name}」吗？\\n\\n该账户下的流水将自动挂到「已删账户」占位。\\n删除后可在垃圾桶中保留 30 天。",
+  "accountDeleteConfirmMsg": "确定要删除账户「{name}」吗？\n\n该账户下的流水将自动挂到「已删账户」占位。\n删除后可在垃圾桶中保留 30 天。",
   "@accountDeleteConfirmMsg": {
     "placeholders": {
       "name": {
@@ -1045,7 +1045,7 @@
   "syncUseIcloud": "使用 iCloud Drive 同步",
   "syncIcloudUnavailable": "iCloud 不可用，请检查系统设置",
   "syncSwitchConfirm": "切换云服务?",
-  "syncSwitchHint": "切换服务后，需要重新进行首次同步。",
+  "syncSwitchHint": "切换后将在新后端上同步，原有后端上的数据不受影响。",
   "syncMigrateAttachments": "迁移附件到新后端？",
   "syncMigrateAttachmentsHint": "迁移会将已上传的附件从旧后端下载后重新上传到新后端。此过程可能耗时较长，取决于附件数量与网络状况。\n\n如果选择「暂不迁移」，已上传的附件仍保留在旧后端，新上传的附件会存到新后端。",
   "syncSkipMigration": "暂不迁移",
@@ -1100,6 +1100,23 @@
     }
   },
   "syncConfigInvalid": "配置无效",
+  "syncClearConfig": "清除配置",
+  "syncClearConfigConfirm": "确定要清除 {name} 的配置吗？此操作不会影响已同步的云端数据。",
+  "@syncClearConfigConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "syncConfigCleared": "{name} 配置已清除",
+  "@syncConfigCleared": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "syncProviderInitNull": "Provider 初始化返回空",
   "syncConfigSupabase": "配置 Supabase",
   "syncCustomName": "自定义名称",
@@ -1153,12 +1170,10 @@
     }
   },
   "syncUpload": "上传",
-  "syncDownload": "浏览备份",
   "syncDeleteCloudBackupShort": "删除云端备份",
   "syncStatusNotConfigured": "未配置",
   "syncStatusNotLoggedIn": "未登录",
   "syncStatusNoBackup": "云端无备份",
-  "syncNoBackupHintBrowse": "其他设备的备份可在「浏览备份」中找到",
   "syncStatusSynced": "已同步",
   "syncStatusLocalNewer": "本地较新（建议上传）",
   "syncStatusCloudNewer": "云端较新（建议下载）",
@@ -1841,5 +1856,25 @@
   "syncForcePushDone": "强制推送完成",
   "syncForcePull": "强制拉取",
   "syncForcePullConfirm": "从云端强制拉取全部数据，将覆盖本地数据。确定继续？",
-  "syncForcePullDone": "强制拉取完成"
+  "syncForcePullDone": "强制拉取完成",
+  "syncInitialChoiceTitle": "本地与云端均有数据",
+  "syncInitialChoicePrompt": "请选择如何完成首次同步：",
+  "syncInitialLocalOverwrite": "本地覆盖云端",
+  "syncInitialLocalOverwriteSub": "上传本地全部数据，清除云端独有的内容",
+  "syncInitialCloudOverwrite": "云端覆盖本地",
+  "syncInitialCloudOverwriteSub": "下载云端全部数据，清空本地原有内容",
+  "syncInitialMerge": "合并（推荐）",
+  "syncInitialMergeSub": "按更新时间合并两端数据，冲突时较新者胜出",
+  "syncInitialRestoreTitle": "发现云端数据",
+  "syncInitialRestorePrompt": "云端已存在备份数据，本地暂无数据。是否从云端恢复到本地？",
+  "syncInitialRestoreConfirm": "从云端恢复",
+  "syncInitialDisabledOnCancel": "已暂时关闭云同步，请重新进入云服务页面选择同步方式",
+  "syncInitialPushing": "正在上传本地数据到云端…",
+  "syncInitialPushDone": "本地数据已上传到云端",
+  "syncInitialMerging": "正在合并本地与云端数据…",
+  "syncInitialMergeDone": "合并完成",
+  "syncInitialFailed": "首次同步失败：{error}",
+  "@syncInitialFailed": {
+    "placeholders": { "error": { "type": "String" } }
+  }
 }

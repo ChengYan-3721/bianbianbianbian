@@ -1072,7 +1072,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String accountDeleteConfirmMsg(String name) {
-    return '确定要删除账户「$name」吗？\\n\\n该账户下的流水将自动挂到「已删账户」占位。\\n删除后可在垃圾桶中保留 30 天。';
+    return '确定要删除账户「$name」吗？\n\n该账户下的流水将自动挂到「已删账户」占位。\n删除后可在垃圾桶中保留 30 天。';
   }
 
   @override
@@ -1680,7 +1680,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncSwitchConfirm => '切换云服务?';
 
   @override
-  String get syncSwitchHint => '切换服务后，需要重新进行首次同步。';
+  String get syncSwitchHint => '切换后将在新后端上同步，原有后端上的数据不受影响。';
 
   @override
   String get syncMigrateAttachments => '迁移附件到新后端？';
@@ -1740,6 +1740,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncConfigInvalid => '配置无效';
+
+  @override
+  String get syncClearConfig => '清除配置';
+
+  @override
+  String syncClearConfigConfirm(String name) {
+    return '确定要清除 $name 的配置吗？此操作不会影响已同步的云端数据。';
+  }
+
+  @override
+  String syncConfigCleared(String name) {
+    return '$name 配置已清除';
+  }
 
   @override
   String get syncProviderInitNull => 'Provider 初始化返回空';
@@ -1825,9 +1838,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncUpload => '上传';
 
   @override
-  String get syncDownload => '浏览备份';
-
-  @override
   String get syncDeleteCloudBackupShort => '删除云端备份';
 
   @override
@@ -1838,9 +1848,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncStatusNoBackup => '云端无备份';
-
-  @override
-  String get syncNoBackupHintBrowse => '其他设备的备份可在「浏览备份」中找到';
 
   @override
   String get syncStatusSynced => '已同步';
@@ -2823,4 +2830,57 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncForcePullDone => '强制拉取完成';
+
+  @override
+  String get syncInitialChoiceTitle => '本地与云端均有数据';
+
+  @override
+  String get syncInitialChoicePrompt => '请选择如何完成首次同步：';
+
+  @override
+  String get syncInitialLocalOverwrite => '本地覆盖云端';
+
+  @override
+  String get syncInitialLocalOverwriteSub => '上传本地全部数据，清除云端独有的内容';
+
+  @override
+  String get syncInitialCloudOverwrite => '云端覆盖本地';
+
+  @override
+  String get syncInitialCloudOverwriteSub => '下载云端全部数据，清空本地原有内容';
+
+  @override
+  String get syncInitialMerge => '合并（推荐）';
+
+  @override
+  String get syncInitialMergeSub => '按更新时间合并两端数据，冲突时较新者胜出';
+
+  @override
+  String get syncInitialRestoreTitle => '发现云端数据';
+
+  @override
+  String get syncInitialRestorePrompt => '云端已存在备份数据，本地暂无数据。是否从云端恢复到本地？';
+
+  @override
+  String get syncInitialRestoreConfirm => '从云端恢复';
+
+  @override
+  String get syncInitialDisabledOnCancel => '已暂时关闭云同步，请重新进入云服务页面选择同步方式';
+
+  @override
+  String get syncInitialPushing => '正在上传本地数据到云端…';
+
+  @override
+  String get syncInitialPushDone => '本地数据已上传到云端';
+
+  @override
+  String get syncInitialMerging => '正在合并本地与云端数据…';
+
+  @override
+  String get syncInitialMergeDone => '合并完成';
+
+  @override
+  String syncInitialFailed(String error) {
+    return '首次同步失败：$error';
+  }
 }

@@ -231,9 +231,23 @@ class MultiLedgerSnapshotSerializer
   String fingerprint(String data) {
     final raw = _decodeIfGzipped(data);
     final json = jsonDecode(raw) as Map<String, dynamic>;
+    // 与 LedgerSnapshotSerializer.fingerprint 一致：排除 outer 和 inner 的
+    // exported_at / device_id 元数据——这些每次 export 都会变化（clock()），
+    // 保留会导致上传后立即 getStatus 仍显示「不一致」。
+    final ledgers = (json['ledgers'] as List<dynamic>).map((l) {
+      final ledger = l as Map<String, dynamic>;
+      return <String, dynamic>{
+        'version': ledger['version'],
+        'ledger': ledger['ledger'],
+        'categories': ledger['categories'],
+        'accounts': ledger['accounts'],
+        'transactions': ledger['transactions'],
+        'budgets': ledger['budgets'],
+      };
+    }).toList();
     final stable = <String, dynamic>{
       'version': json['version'],
-      'ledgers': json['ledgers'],
+      'ledgers': ledgers,
     };
     return sha256.convert(utf8.encode(jsonEncode(stable))).toString();
   }

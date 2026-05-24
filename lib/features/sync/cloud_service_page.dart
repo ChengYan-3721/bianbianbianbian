@@ -10,6 +10,12 @@ import 'package:intl/intl.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../data/local/providers.dart' as local;
 import '../../data/repository/providers.dart' show currentLedgerIdProvider;
+import '../account/account_providers.dart';
+import '../budget/budget_providers.dart';
+import '../ledger/ledger_list_page.dart';
+import '../ledger/ledger_providers.dart';
+import '../record/record_providers.dart';
+import '../stats/stats_range_providers.dart';
 import 'attachment/attachment_migration.dart';
 import 'incremental_sync_service.dart';
 import 'sync_provider.dart';
@@ -118,6 +124,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
                 isDisabled: !webdavReady,
                 onTap: () => _switchService(CloudBackendType.webdav),
                 onConfigure: () => _configureService(CloudBackendType.webdav),
+                onClearConfig:
+                    webdavReady
+                        ? () => _clearConfig(CloudBackendType.webdav)
+                        : null,
               ),
               const SizedBox(height: 12),
 
@@ -136,6 +146,8 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
                 isDisabled: !s3Ready,
                 onTap: () => _switchService(CloudBackendType.s3),
                 onConfigure: () => _configureService(CloudBackendType.s3),
+                onClearConfig:
+                    s3Ready ? () => _clearConfig(CloudBackendType.s3) : null,
               ),
               const SizedBox(height: 12),
 
@@ -154,6 +166,10 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
                 isDisabled: !supabaseReady,
                 onTap: () => _switchService(CloudBackendType.supabase),
                 onConfigure: () => _configureService(CloudBackendType.supabase),
+                onClearConfig:
+                    supabaseReady
+                        ? () => _clearConfig(CloudBackendType.supabase)
+                        : null,
               ),
             ],
           );
@@ -188,7 +204,9 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     bool isDisabled = false,
     required VoidCallback onTap,
     VoidCallback? onConfigure,
+    VoidCallback? onClearConfig,
   }) {
+    final cs = Theme.of(context).colorScheme;
     return Opacity(
       opacity: isDisabled ? 0.5 : 1.0,
       child: Card(
@@ -196,7 +214,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: isSelected
-              ? BorderSide(color: Theme.of(context).primaryColor, width: 2)
+              ? BorderSide(color: cs.primary, width: 2)
               : BorderSide.none,
         ),
         child: ListTile(
@@ -204,13 +222,23 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           title: Text(title),
           subtitle: Text(subtitle),
           onTap: isDisabled ? null : onTap,
-          trailing: onConfigure != null
-              ? IconButton(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (onClearConfig != null)
+                IconButton(
+                  tooltip: context.l10n.syncClearConfig,
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: onClearConfig,
+                ),
+              if (onConfigure != null)
+                IconButton(
                   tooltip: context.l10n.a11yCloudServiceConfigure,
                   icon: const Icon(Icons.settings),
                   onPressed: onConfigure,
-                )
-              : null,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -350,6 +378,11 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           context,
         ).showSnackBar(SnackBar(content: Text(msg)));
       }
+      // 切换到 Supabase 时也触发首次同步引导——已同步过的会被 lastSyncAt
+      // 跳过条件挡住，从未同步的会进入四象限分支。
+      if (type == CloudBackendType.supabase && mounted) {
+        await _handleInitialSync();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -448,6 +481,49 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     }
   }
 
+  Future<void> _clearConfig(CloudBackendType type) async {
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(context.l10n.syncClearConfig),
+        content: Text(
+          context.l10n.syncClearConfigConfirm(_typeLabel(context, type)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(context.l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(context.l10n.syncClearConfig),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final store = ref.read(cloudServiceStoreProvider);
+    await store.deleteConfig(type);
+    ref.invalidate(activeCloudConfigProvider);
+    ref.invalidate(authServiceProvider);
+    ref.invalidate(syncServiceProvider);
+    ref.invalidate(supabaseConfigProvider);
+    ref.invalidate(webdavConfigProvider);
+    ref.invalidate(s3ConfigProvider);
+    ref.invalidate(cloudFailedBackendsProvider);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.syncConfigCleared(_typeLabel(context, type)),
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _showSupabaseConfigDialog() async {
     final existing = await ref.read(supabaseConfigProvider.future);
     if (!mounted) return;
@@ -533,21 +609,21 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           type: CloudBackendType.webdav,
           name: 'WebDAV',
           customName: customName,
-          webdavUrl: data['url'] as String,
-          webdavUsername: data['username'] as String,
+          webdavUrl: (data['url'] as String).trim(),
+          webdavUsername: (data['username'] as String).trim(),
           webdavPassword: data['password'] as String,
-          webdavRemotePath: data['path'] as String,
+          webdavRemotePath: (data['path'] as String).trim(),
         );
       } else if (type == CloudBackendType.s3) {
         cfg = CloudServiceConfig(
           type: CloudBackendType.s3,
           name: 'S3',
           customName: customName,
-          s3Endpoint: data['endpoint'] as String,
-          s3Region: data['region'] as String,
-          s3AccessKey: data['accessKey'] as String,
-          s3SecretKey: data['secretKey'] as String,
-          s3Bucket: data['bucket'] as String,
+          s3Endpoint: (data['endpoint'] as String).trim(),
+          s3Region: (data['region'] as String).trim(),
+          s3AccessKey: (data['accessKey'] as String).trim(),
+          s3SecretKey: (data['secretKey'] as String).trim(),
+          s3Bucket: (data['bucket'] as String).trim(),
           s3UseSSL: data['useSSL'] as bool,
           s3Port: data['port'] as int?,
         );
@@ -586,9 +662,26 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
             ),
           );
         }
-        // Step 17(云同步 V2):Supabase 保存且测试通过 → 询问首次全量拉取。
+        // Step 17(云同步 V2):Supabase 保存且测试通过 → 启动首次同步引导。
+        // 关键：`store.saveOnly` 只保存配置不激活；若用户当前 active 仍是 local，
+        // syncServiceProvider 会返回 LocalOnlySyncService，_handleInitialSync
+        // 会因 `service is! IncrementalSyncService` 直接 return，导致 seeder
+        // 默认数据永远没机会入队推送（forcePushAll 是从全表枚举入队的）。
+        // 因此首次配置 Supabase（active==local 时）自动 activate 一次。
         if (testError == null && cfg.type == CloudBackendType.supabase) {
-          await _maybePromptFullPull();
+          final activeCfg = await ref.read(activeCloudConfigProvider.future);
+          if (activeCfg.type == CloudBackendType.local) {
+            final activated =
+                await store.activate(CloudBackendType.supabase);
+            if (activated) {
+              ref.invalidate(activeCloudConfigProvider);
+              ref.invalidate(authServiceProvider);
+              ref.invalidate(syncServiceProvider);
+            }
+          }
+          if (mounted) {
+            await _handleInitialSync();
+          }
         }
       } else {
         throw Exception(context.l10n.syncConfigInvalid);
@@ -624,20 +717,119 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
     }
   }
 
-  /// Step 17(云同步 V2):Supabase 配置保存且连接测试通过后,询问用户是否
-  /// 立即从云端拉取全部账本与流水到本机。
+  /// Step 17（云同步 V2）：Supabase 配置保存且连接测试通过后的首次同步引导。
   ///
-  /// 典型场景:用户在新设备装好 App 后填写已有 Supabase 凭据,这一弹窗
-  /// 让"换设备 → 全恢复"成为可发现的一步操作,而不必等下一次同步触发。
-  /// 用户点「否」也可以——首次自动同步(cursor=0)会把云端全部行一次拉下来。
-  Future<void> _maybePromptFullPull() async {
+  /// 按"本地 × 云端"是否各有数据四象限分支：
+  /// - 都空：不弹（边界情况，seeder 至少会建一个账本）；
+  /// - 本地有 / 云端空：静默 `forcePushAll`，把本地（含 seeder 默认数据）全量推上去；
+  /// - 本地空 / 云端有：弹"恢复云端"对话框，确定 → `forcePullAll`；取消 → 关闭云同步；
+  /// - 都有：弹三选一（本地覆盖云端 / 云端覆盖本地 / 合并）；取消 → 关闭云同步。
+  ///
+  /// 跳过条件：`user_pref.last_sync_at != null`——已经同步过则不再弹引导，避免
+  /// 用户只改了 customName 等小调整就被引导骚扰。
+  Future<void> _handleInitialSync() async {
     if (!mounted) return;
     final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
+    final db = ref.read(local.appDatabaseProvider);
+
+    // 跳过条件：之前已成功同步过。
+    final pref = await (db.select(db.userPrefTable)
+          ..where((t) => t.id.equals(1)))
+        .getSingleOrNull();
+    if (pref?.lastSyncAt != null) return;
+
+    final service = await ref.read(syncServiceProvider.future);
+    if (service is! IncrementalSyncService) return;
+
+    final localHas = await _localHasAnyData();
+    final bool cloudHas;
+    try {
+      cloudHas = await service.hasAnyCloudData();
+    } catch (_) {
+      // 网络 / 权限失败：无法判断云端，保守不弹窗，让后续触发路径自然处理。
+      return;
+    }
+
+    if (!localHas && !cloudHas) return;
+
+    if (localHas && !cloudHas) {
+      await _runInitialAction(
+        action: () => service.forcePushAll(),
+        runningMessage: l10n.syncInitialPushing,
+        successMessage: l10n.syncInitialPushDone,
+      );
+      return;
+    }
+
+    if (!localHas && cloudHas) {
+      if (!mounted) return;
+      final ok = await _showRestoreFromCloudDialog();
+      if (ok != true) {
+        await _disableCloudSyncOnCancel();
+        return;
+      }
+      await _runInitialAction(
+        action: () => service.forcePullAll(),
+        runningMessage: l10n.syncFullPullRunning,
+        successMessage: l10n.syncFullPullDone,
+      );
+      return;
+    }
+
+    // 都有：三选一。
+    if (!mounted) return;
+    final choice = await _showInitialChoiceDialog();
+    if (choice == null) {
+      await _disableCloudSyncOnCancel();
+      return;
+    }
+    switch (choice) {
+      case InitialSyncChoice.merge:
+        await _runInitialAction(
+          action: () => service.pullThenPush(),
+          runningMessage: l10n.syncInitialMerging,
+          successMessage: l10n.syncInitialMergeDone,
+        );
+        break;
+      case InitialSyncChoice.localOverwriteCloud:
+        await _runInitialAction(
+          action: () => service.forcePushAll(),
+          runningMessage: l10n.syncInitialPushing,
+          successMessage: l10n.syncForcePushDone,
+        );
+        break;
+      case InitialSyncChoice.cloudOverwriteLocal:
+        await _runInitialAction(
+          action: () => service.forcePullAll(),
+          runningMessage: l10n.syncFullPullRunning,
+          successMessage: l10n.syncForcePullDone,
+        );
+        break;
+    }
+  }
+
+  /// 本地任意一张同步表存在 row（含软删）即视为"本地有数据"。
+  /// 用户偏好：含 seeder 默认账本/分类也算有数据——用户可能改过名称/图标，保守不丢。
+  Future<bool> _localHasAnyData() async {
+    final db = ref.read(local.appDatabaseProvider);
+    final l = await (db.select(db.ledgerTable)..limit(1)).get();
+    if (l.isNotEmpty) return true;
+    final c = await (db.select(db.categoryTable)..limit(1)).get();
+    if (c.isNotEmpty) return true;
+    final a = await (db.select(db.accountTable)..limit(1)).get();
+    if (a.isNotEmpty) return true;
+    final t = await (db.select(db.transactionEntryTable)..limit(1)).get();
+    return t.isNotEmpty;
+  }
+
+  Future<bool?> _showRestoreFromCloudDialog() {
+    final l10n = context.l10n;
+    return showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.syncFullPullTitle),
-        content: Text(l10n.syncFullPullPrompt),
+        title: Text(l10n.syncInitialRestoreTitle),
+        content: Text(l10n.syncInitialRestorePrompt),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -645,16 +837,79 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(l10n.confirm),
+            child: Text(l10n.syncInitialRestoreConfirm),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+  }
 
-    // 弹 loading dialog,期间执行 fullPull。barrierDismissible: false,
-    // 避免用户误点关闭后操作还在跑;rootNavigator 兜底以便在嵌套
-    // navigator 场景里也能正确 pop。
+  Future<InitialSyncChoice?> _showInitialChoiceDialog() {
+    final l10n = context.l10n;
+    return showDialog<InitialSyncChoice>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => SimpleDialog(
+        title: Text(l10n.syncInitialChoiceTitle),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text(
+              l10n.syncInitialChoicePrompt,
+              style: Theme.of(ctx).textTheme.bodyMedium,
+            ),
+          ),
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () =>
+                Navigator.of(ctx).pop(InitialSyncChoice.merge),
+            child: _InitialChoiceTile(
+              title: l10n.syncInitialMerge,
+              subtitle: l10n.syncInitialMergeSub,
+            ),
+          ),
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () =>
+                Navigator.of(ctx).pop(InitialSyncChoice.localOverwriteCloud),
+            child: _InitialChoiceTile(
+              title: l10n.syncInitialLocalOverwrite,
+              subtitle: l10n.syncInitialLocalOverwriteSub,
+            ),
+          ),
+          SimpleDialogOption(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            onPressed: () =>
+                Navigator.of(ctx).pop(InitialSyncChoice.cloudOverwriteLocal),
+            child: _InitialChoiceTile(
+              title: l10n.syncInitialCloudOverwrite,
+              subtitle: l10n.syncInitialCloudOverwriteSub,
+            ),
+          ),
+          const Divider(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(l10n.cancel),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runInitialAction({
+    required Future<void> Function() action,
+    required String runningMessage,
+    required String successMessage,
+  }) async {
+    if (!mounted) return;
+    final l10n = context.l10n;
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -664,7 +919,7 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
           children: [
             const CircularProgressIndicator(),
             const SizedBox(width: 16),
-            Expanded(child: Text(l10n.syncFullPullRunning)),
+            Expanded(child: Text(runningMessage)),
           ],
         ),
       ),
@@ -672,29 +927,106 @@ class _CloudServicePageState extends ConsumerState<CloudServicePage> {
 
     String? errorMsg;
     try {
-      final service = await ref.read(syncServiceProvider.future);
-      if (service is! IncrementalSyncService) {
-        throw StateError(
-          'Expected IncrementalSyncService after Supabase config saved, '
-          'got ${service.runtimeType}',
-        );
-      }
-      await service.fullPull();
+      await action();
     } catch (e) {
       errorMsg = e.toString();
     }
 
+    // 同步动作完成后必须 invalidate:
+    // 1. 数据 provider:账本/流水/分类/账户/预算/统计——否则首次拉取后
+    //    用户得新建账本或杀进程才能看到云端数据;
+    // 2. syncServiceProvider:让 _SyncStatusBody 重建并重读 SyncStatus,
+    //    否则状态卡片停留在 initState 时拿到的"未配置/暂无备份"。
+    if (errorMsg == null) {
+      _invalidateDataProviders(ref);
+      ref.invalidate(syncServiceProvider);
+    }
+
     if (!mounted) return;
-    // 关闭 loading dialog。
     Navigator.of(context, rootNavigator: true).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           errorMsg == null
-              ? l10n.syncFullPullDone
-              : l10n.saveFailedWithError(errorMsg),
+              ? successMessage
+              : l10n.syncInitialFailed(errorMsg),
         ),
       ),
+    );
+  }
+
+  Future<void> _disableCloudSyncOnCancel() async {
+    final store = ref.read(cloudServiceStoreProvider);
+    await store.disableCloudSync();
+    ref.invalidate(activeCloudConfigProvider);
+    ref.invalidate(authServiceProvider);
+    ref.invalidate(syncServiceProvider);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(context.l10n.syncInitialDisabledOnCancel)),
+    );
+  }
+}
+
+// --- 首次同步引导 ---
+
+/// 强制 push/pull/合并后,所有依赖 5 张同步表的 provider 都可能变化——批量
+/// invalidate 让各页面(账本列表 / 流水汇总 / 统计 / 账户 / 预算)立刻拿到
+/// 最新数据,而不是等用户重新切页或杀进程。
+///
+/// 与 `backup_list_page._invalidateDataProviders` 保持一致——两边都是
+/// "云端覆盖本地"的入口。
+void _invalidateDataProviders(WidgetRef ref) {
+  ref.invalidate(recordMonthSummaryProvider);
+  ref.invalidate(statsLinePointsProvider);
+  ref.invalidate(statsPieSlicesProvider);
+  ref.invalidate(statsRankItemsProvider);
+  ref.invalidate(statsHeatmapCellsProvider);
+  ref.invalidate(accountsListProvider);
+  ref.invalidate(accountBalancesProvider);
+  ref.invalidate(totalAssetsProvider);
+  ref.invalidate(activeBudgetsProvider);
+  ref.invalidate(budgetableCategoriesProvider);
+  ref.invalidate(budgetProgressForProvider);
+  ref.invalidate(ledgerTxCountsProvider);
+  ref.invalidate(categoriesListProvider);
+  ref.invalidate(ledgerGroupsProvider);
+  ref.invalidate(currentLedgerIdProvider);
+}
+
+/// 首次同步引导对话框的三选一结果。`null` 表示取消（关闭云同步）。
+enum InitialSyncChoice {
+  /// 合并：双向 LWW（updated_at 较新者胜出）。
+  merge,
+
+  /// 本地覆盖云端：上传本地全部，删除云端独有行。
+  localOverwriteCloud,
+
+  /// 云端覆盖本地：下载云端全部，清空本地。
+  cloudOverwriteLocal,
+}
+
+/// 三选一对话框的单个选项 tile：粗体标题 + 描述副本。
+class _InitialChoiceTile extends StatelessWidget {
+  const _InitialChoiceTile({required this.title, required this.subtitle});
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1104,11 +1436,25 @@ class _SyncStatusBody extends ConsumerStatefulWidget {
 class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
   Future<SyncStatus>? _statusFuture;
   bool _busy = false;
+  bool _wasBackgroundSyncing = false;
 
   @override
   void initState() {
     super.initState();
     _refresh(force: false);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SyncStatusBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // service 引用变化(比如 syncServiceProvider 被 invalidate 后重新 build,
+    // 但 Flutter 复用了同位置的 State)→ 必须重读 SyncStatus,否则状态卡
+    // 停留在旧 service 给出的状态。invalidate 路径在 _saveConfig /
+    // _handleInitialSync / _runWithBusy 都可能触发。
+    if (oldWidget.service != widget.service ||
+        oldWidget.ledgerId != widget.ledgerId) {
+      _refresh(force: false);
+    }
   }
 
   void _refresh({required bool force}) {
@@ -1133,6 +1479,10 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
         context,
       ).showSnackBar(SnackBar(content: Text(successMessage)));
       widget.service.clearCache();
+      // 强制 push/pull 改了 5 张同步表,必须 invalidate 数据 provider,
+      // 否则账本列表 / 流水汇总 / 统计 / 账户 / 预算停留在旧数据,
+      // 用户得新建账本或杀进程才能看到云端数据。
+      _invalidateDataProviders(ref);
       _refresh(force: true);
     } catch (e) {
       if (!mounted) return;
@@ -1202,6 +1552,12 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
   Widget build(BuildContext context) {
     final syncTriggerState = ref.watch(syncTriggerProvider);
     final isBackgroundSyncing = syncTriggerState.isRunning;
+    if (_wasBackgroundSyncing && !isBackgroundSyncing && !_busy) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh(force: true);
+      });
+    }
+    _wasBackgroundSyncing = isBackgroundSyncing;
     final isAnyBusy = _busy || isBackgroundSyncing;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1217,15 +1573,6 @@ class _SyncStatusBodyState extends ConsumerState<_SyncStatusBody> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (isAnyBusy)
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
             IconButton(
               icon: isAnyBusy
                   ? const SizedBox(
@@ -1417,15 +1764,6 @@ class _StatusLine extends StatelessWidget {
         if (status.message != null && status.state == SyncState.error) ...[
           const SizedBox(height: 4),
           Text(status.message!, style: Theme.of(context).textTheme.bodySmall),
-        ],
-        // 非鉴权后端（S3/WebDAV/iCloud）：localOnly 时提示用户浏览备份找回旧数据。
-        // 鉴权后端（Supabase）：只能看自己的目录，浏览备份无意义，不显示此提示。
-        if (status.state == SyncState.localOnly && !isRealAuth) ...[
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.syncNoBackupHintBrowse,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
         ],
       ],
     );

@@ -312,6 +312,54 @@ class SupabaseDatabaseService implements CloudDatabaseService {
     }
   }
 
+  /// 稳定分页查询。在 [query] 基础上额外接受 [secondaryOrderBy]，让分页结果
+  /// 在主排序列出现并列值时仍然全局有序——典型场景：增量同步按
+  /// `(updated_at ASC, id ASC)` 排序，配合 offset 翻页。
+  ///
+  /// 单 `orderBy` 翻页在「同 updated_at 行数 > limit」时会卡死(下一页用
+  /// `updated_at > cursor` 过滤,但 cursor 等于这一批的 updated_at,所以
+  /// 后续同时间戳行被永久跳过)。CSV 批量导入是典型触发场景：4000+ 行共用
+  /// 同一个 `_clock()` 毫秒。
+  Future<List<Map<String, dynamic>>> queryStablePaginated({
+    required String table,
+    List<QueryFilter>? filters,
+    required String primaryOrderBy,
+    String secondaryOrderBy = 'id',
+    bool descending = false,
+    required int offset,
+    required int limit,
+    bool autoFilterByUser = true,
+  }) async {
+    try {
+      final user = _client.auth.currentUser;
+      if (user == null) {
+        throw CloudNotAuthenticatedException('User not authenticated');
+      }
+
+      dynamic query = _client.from(table).select();
+
+      if (autoFilterByUser) {
+        query = query.eq('user_id', user.id);
+      }
+      if (filters != null) {
+        for (final filter in filters) {
+          query = _applyFilter(query, filter);
+        }
+      }
+      query = query.order(primaryOrderBy, ascending: !descending);
+      query = query.order(secondaryOrderBy, ascending: !descending);
+      query = query.range(offset, offset + limit - 1);
+
+      final response = await query;
+      return List<Map<String, dynamic>>.from(response as List);
+    } on supabase.PostgrestException catch (e) {
+      throw CloudStorageException('Stable query failed: ${e.message}', e);
+    } catch (e) {
+      if (e is CloudNotAuthenticatedException) rethrow;
+      throw CloudStorageException('Stable query failed: $e', e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> upsertBatch({
     required String table,
     required List<Map<String, dynamic>> data,

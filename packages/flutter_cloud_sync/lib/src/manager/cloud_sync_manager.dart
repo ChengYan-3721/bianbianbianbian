@@ -292,12 +292,11 @@ class CloudSyncManager<T> {
               cloudCount = (cloudJson['count'] as num?)?.toInt();
             }
 
-            // Extract exportedAt timestamp
-            if (cloudJson.containsKey('exportedAt')) {
-              final exportedAtStr = cloudJson['exportedAt'] as String?;
-              if (exportedAtStr != null) {
-                cloudUpdatedAt = DateTime.tryParse(exportedAtStr);
-              }
+            // Extract exportedAt timestamp (supports both camelCase and snake_case)
+            final exportedAtStr =
+                (cloudJson['exportedAt'] ?? cloudJson['exported_at']) as String?;
+            if (exportedAtStr != null) {
+              cloudUpdatedAt = DateTime.tryParse(exportedAtStr);
             }
           }
         } catch (_) {

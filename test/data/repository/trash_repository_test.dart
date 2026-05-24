@@ -19,14 +19,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// 2. restoreById 清 deleted_at + 刷新 updated_at；不存在静默；
 ///    Step 17（云同步 V2）后还要入队一条 `op='upsert'` 的 sync_op,
 ///    payload `deleted_at = null`,让云端 LWW 把对应行恢复成活跃态;
-/// 3. purgeById 物理删除；**不**写 sync_op——硬删不需要远端传播,云端的
-///    对应行靠"30 天后软删 cron 清理"独立维护;
+/// 3. purgeById 物理删除；同时入队一条 `op='hardDelete'` 的 sync_op,让
+///    下一次推送把云端对应行真删——本地与云端保持完全一致;
 /// 4. purgeAllDeleted 不影响活跃行；
 /// 5. listExpired(cutoff) 仅返回 deleted_at <= cutoff；
 /// 6. **Ledger 级联恢复**：restoreById 同步把同一时间戳软删的子流水/预算
 ///    一并恢复，但不误恢复 deletedAt 不同的单独软删项;级联恢复的子项
 ///    各自入队 sync_op upsert(Step 17 增补)。
-/// 7. **Ledger 级联硬删**：purgeById 把该 ledger 下全部流水/预算物理删除。
+/// 7. **Ledger 级联硬删**：purgeById 把该 ledger 下全部流水/预算物理删除,
+///    同时为账本 + 全部级联子项各入队一条 `op='hardDelete'` sync_op。
 void main() {
   late AppDatabase db;
   late TransactionRepository txRepo;

@@ -291,16 +291,11 @@ class _CountingGateway implements IncrementalCloudGateway {
   }) async {}
 
   @override
-  Future<void> deleteExcept({
-    required String table,
-    required Set<String> keepIds,
-  }) async {}
-
-  @override
   Future<List<Map<String, dynamic>>> queryUpdatedSince({
     required String table,
     required int updatedAtGt,
     required int limit,
+    int offset = 0,
   }) async {
     queryCalls.add(table);
     return const [];

@@ -39,7 +39,10 @@
       "Bash(unix2dos /tmp/append_content.txt)",
       "Bash(sed -i 's/$/\\\\r/' /tmp/append_content.txt)",
       "Bash(xxd)",
-      "Bash(dd if=D:/Projects/bianbianbianbian/lib/features/sync/incremental_sync_service.dart)"
+      "Bash(dd if=D:/Projects/bianbianbianbian/lib/features/sync/incremental_sync_service.dart)",
+      "Bash(xxd \"D:/Projects/bianbianbianbian/lib/l10n/app_localizations.dart\")",
+      "Bash(/tmp/fix_acct.py:*)",
+      "Bash(/tmp/add_clear_config.py:*)"
     ]
   }
 }

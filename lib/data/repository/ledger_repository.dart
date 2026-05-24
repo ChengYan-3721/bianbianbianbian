@@ -317,49 +317,45 @@ class LocalLedgerRepository implements LedgerRepository {
 
   @override
   Future<int> purgeById(String id) async {
-    final now = _clock();
-    final nowMs = now.millisecondsSinceEpoch;
-
-    // 硬删前先 SELECT 全部级联行，逐条入队 delete sync_op。
-    final cascadeTxRows = await (_db.select(_db.transactionEntryTable)
-          ..where((t) => t.ledgerId.equals(id)))
-        .get();
-    final cascadeBudgetRows = await (_db.select(_db.budgetTable)
-          ..where((t) => t.ledgerId.equals(id)))
-        .get();
-    final ledgerRow = await (_db.select(_db.ledgerTable)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
-    if (ledgerRow == null) return 0;
-
-    for (final tx in cascadeTxRows) {
-      await _syncOp.enqueue(
-        entity: 'transaction',
-        entityId: tx.id,
-        op: 'delete',
-        payload: jsonEncode(rowToTransactionEntry(tx).toJson()),
-        enqueuedAt: nowMs,
-      );
-    }
-    for (final b in cascadeBudgetRows) {
-      await _syncOp.enqueue(
-        entity: 'budget',
-        entityId: b.id,
-        op: 'delete',
-        payload: jsonEncode(rowToBudget(b).toJson()),
-        enqueuedAt: nowMs,
-      );
-    }
-    await _syncOp.enqueue(
-      entity: 'ledger',
-      entityId: id,
-      op: 'delete',
-      payload: jsonEncode(rowToLedger(ledgerRow).toJson()),
-      enqueuedAt: nowMs,
-    );
-
-    // 硬删（事务内级联删除）。
+    final nowMs = _clock().millisecondsSinceEpoch;
     return _db.transaction(() async {
+      final cascadeTxRows = await (_db.select(_db.transactionEntryTable)
+            ..where((t) => t.ledgerId.equals(id)))
+          .get();
+      final cascadeBudgetRows = await (_db.select(_db.budgetTable)
+            ..where((t) => t.ledgerId.equals(id)))
+          .get();
+      final ledgerRow = await (_db.select(_db.ledgerTable)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (ledgerRow == null) return 0;
+
+      for (final tx in cascadeTxRows) {
+        await _syncOp.enqueue(
+          entity: 'transaction',
+          entityId: tx.id,
+          op: 'hardDelete',
+          payload: jsonEncode(rowToTransactionEntry(tx).toJson()),
+          enqueuedAt: nowMs,
+        );
+      }
+      for (final b in cascadeBudgetRows) {
+        await _syncOp.enqueue(
+          entity: 'budget',
+          entityId: b.id,
+          op: 'hardDelete',
+          payload: jsonEncode(rowToBudget(b).toJson()),
+          enqueuedAt: nowMs,
+        );
+      }
+      await _syncOp.enqueue(
+        entity: 'ledger',
+        entityId: id,
+        op: 'hardDelete',
+        payload: jsonEncode(rowToLedger(ledgerRow).toJson()),
+        enqueuedAt: nowMs,
+      );
+
       await (_db.delete(_db.transactionEntryTable)
             ..where((t) => t.ledgerId.equals(id)))
           .go();
@@ -371,20 +367,22 @@ class LocalLedgerRepository implements LedgerRepository {
 
   @override
   Future<int> purgeAllDeleted() async {
-    final rows = await _dao.listDeleted();
-    final now = _clock();
-    for (final row in rows) {
-      await _syncOp.enqueue(
-        entity: 'ledger',
-        entityId: row.id,
-        op: 'delete',
-        payload: jsonEncode(rowToLedger(row).toJson()),
-        enqueuedAt: now.millisecondsSinceEpoch,
-      );
-    }
-    return (_db.delete(_db.ledgerTable)
-          ..where((t) => t.deletedAt.isNotNull()))
-        .go();
+    final nowMs = _clock().millisecondsSinceEpoch;
+    return _db.transaction(() async {
+      final rows = await _dao.listDeleted();
+      for (final row in rows) {
+        await _syncOp.enqueue(
+          entity: 'ledger',
+          entityId: row.id,
+          op: 'hardDelete',
+          payload: jsonEncode(rowToLedger(row).toJson()),
+          enqueuedAt: nowMs,
+        );
+      }
+      return (_db.delete(_db.ledgerTable)
+            ..where((t) => t.deletedAt.isNotNull()))
+          .go();
+    });
   }
 
   @override

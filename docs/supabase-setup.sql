@@ -63,9 +63,9 @@
 --   - allowed_mime_types 不限制——客户端可上传 image/* + application/pdf 等
 --     原始格式；服务端不重复约束便于未来调整。
 
-insert into storage.buckets (id, name, public)
-values ('bbbb-backups', 'bbbb-backups', false)
-on conflict (id) do update set public = excluded.public;
+-- insert into storage.buckets (id, name, public)
+-- values ('bbbb-backups', 'bbbb-backups', false)
+-- on conflict (id) do update set public = excluded.public;
 
 insert into storage.buckets (id, name, public)
 values ('attachments', 'attachments', false)
@@ -75,7 +75,7 @@ on conflict (id) do update set public = excluded.public;
 -- -----------------------------------------------------------------------------
 -- 2. RLS 启用（storage.objects 默认已启用，此处显式声明便于审计）
 -- -----------------------------------------------------------------------------
-alter table storage.objects enable row level security;
+-- alter table storage.objects enable row level security;
 
 
 -- -----------------------------------------------------------------------------
@@ -88,57 +88,57 @@ alter table storage.objects enable row level security;
 --   - DELETE 只能删自己的。
 
 -- 3.1 SELECT
-drop policy if exists "backups: owner can read" on storage.objects;
-create policy "backups: owner can read"
-  on storage.objects
-  for select
-  to authenticated
-  using (
-    bucket_id = 'bbbb-backups'
-    and (storage.foldername(name))[1] = 'users'
-    and (storage.foldername(name))[2] = (auth.uid())::text
-  );
+-- drop policy if exists "backups: owner can read" on storage.objects;
+-- create policy "backups: owner can read"
+--   on storage.objects
+--   for select
+--   to authenticated
+--   using (
+--     bucket_id = 'bbbb-backups'
+--     and (storage.foldername(name))[1] = 'users'
+--     and (storage.foldername(name))[2] = (auth.uid())::text
+--   );
 
 -- 3.2 INSERT
-drop policy if exists "backups: owner can insert" on storage.objects;
-create policy "backups: owner can insert"
-  on storage.objects
-  for insert
-  to authenticated
-  with check (
-    bucket_id = 'bbbb-backups'
-    and (storage.foldername(name))[1] = 'users'
-    and (storage.foldername(name))[2] = (auth.uid())::text
+-- drop policy if exists "backups: owner can insert" on storage.objects;
+-- create policy "backups: owner can insert"
+--   on storage.objects
+--   for insert
+--   to authenticated
+--   with check (
+--     bucket_id = 'bbbb-backups'
+--     and (storage.foldername(name))[1] = 'users'
+--     and (storage.foldername(name))[2] = (auth.uid())::text
   );
 
 -- 3.3 UPDATE
-drop policy if exists "backups: owner can update" on storage.objects;
-create policy "backups: owner can update"
-  on storage.objects
-  for update
-  to authenticated
-  using (
-    bucket_id = 'bbbb-backups'
-    and (storage.foldername(name))[1] = 'users'
-    and (storage.foldername(name))[2] = (auth.uid())::text
-  )
-  with check (
-    bucket_id = 'bbbb-backups'
-    and (storage.foldername(name))[1] = 'users'
-    and (storage.foldername(name))[2] = (auth.uid())::text
+-- drop policy if exists "backups: owner can update" on storage.objects;
+-- create policy "backups: owner can update"
+--   on storage.objects
+--   for update
+--   to authenticated
+--   using (
+--     bucket_id = 'bbbb-backups'
+--     and (storage.foldername(name))[1] = 'users'
+--     and (storage.foldername(name))[2] = (auth.uid())::text
+--   )
+--   with check (
+--     bucket_id = 'bbbb-backups'
+--     and (storage.foldername(name))[1] = 'users'
+--     and (storage.foldername(name))[2] = (auth.uid())::text
   );
 
 -- 3.4 DELETE
-drop policy if exists "backups: owner can delete" on storage.objects;
-create policy "backups: owner can delete"
-  on storage.objects
-  for delete
-  to authenticated
-  using (
-    bucket_id = 'bbbb-backups'
-    and (storage.foldername(name))[1] = 'users'
-    and (storage.foldername(name))[2] = (auth.uid())::text
-  );
+-- drop policy if exists "backups: owner can delete" on storage.objects;
+-- create policy "backups: owner can delete"
+--   on storage.objects
+--   for delete
+--   to authenticated
+--   using (
+--     bucket_id = 'bbbb-backups'
+--     and (storage.foldername(name))[1] = 'users'
+--     and (storage.foldername(name))[2] = (auth.uid())::text
+--   );
 
 
 -- -----------------------------------------------------------------------------
@@ -220,10 +220,12 @@ create policy "attachments: owner can delete"
 --   - note_encrypted / attachments_encrypted = text 存 base64 字符串
 --     （本地 BLOB 通过 toJson 已经 base64 化，roundtrip 不需要 PostgREST bytea
 --     编码，简化数倍）。
---   - bool 字段（archived / is_favorite / include_in_total / carry_over）= boolean
---     而非 int 0/1，因为 PostgREST 自动 bool ↔ JSON bool，与本地 entity 层
---     的 Dart bool 直接对接，避免增量同步路径里多一层 int↔bool 归一化。
---     本地 drift 仍用 IntColumn 0/1，由 entity_mappers 在 row↔entity 时做转换。
+--   - bool 字段（archived / is_favorite / include_in_total / carry_over）= integer
+--     0/1，与本地 drift IntColumn 0/1 对齐；客户端推送时由 entity_mappers 把
+--     Dart bool 在 entity↔row 层归一化，再由 _entityJsonToCloudRow 把 entity
+--     bool 转成 int 0/1 上推。**不**用 boolean 列——PostgREST 不会自动 bool↔int
+--     归一化，列类型若是 boolean 而客户端发 int 0/1 会报 22P02。统一用
+--     integer 让 client 不需要切换发送类型。
 --   - 5 张表均无外键 references，仅靠应用层维护引用一致性。理由：多设备同步时
 --     pull 顺序无法保证（先拉到 transaction，后才拉到 ledger），FK CASCADE 会
 --     导致 INSERT 失败或意外清空数据。
@@ -240,7 +242,7 @@ create table if not exists public.ledger (
   cover_emoji text,
   cover_svg text,
   default_currency text default 'CNY',
-  archived boolean default false,
+  archived integer default 0,
   created_at bigint not null,
   updated_at bigint not null,
   deleted_at bigint,
@@ -258,7 +260,7 @@ create table if not exists public.category (
   color text,
   parent_key text not null,
   sort_order int default 0,
-  is_favorite boolean default false,
+  is_favorite integer default 0,
   updated_at bigint not null,
   deleted_at bigint,
   device_id text not null
@@ -275,7 +277,7 @@ create table if not exists public.account (
   icon_svg text,
   color text,
   initial_balance double precision default 0,
-  include_in_total boolean default true,
+  include_in_total integer default 1,
   currency text default 'CNY',
   billing_day int,
   repayment_day int,
@@ -317,7 +319,7 @@ create table if not exists public.budget (
   period text not null,
   category_id text,
   amount double precision not null,
-  carry_over boolean default false,
+  carry_over integer default 0,
   carry_balance double precision default 0,
   last_settled_at bigint,
   start_date bigint not null,
@@ -326,6 +328,53 @@ create table if not exists public.budget (
   device_id text not null
 );
 create index if not exists budget_user_updated_idx on public.budget(user_id, updated_at);
+
+-- 5.6 历史 schema 修复：已经按更早版本 docs 把 bool 字段建成 boolean 列的
+-- 用户，跑下面这段把它们转回 integer 0/1，与最新代码对齐。
+-- 幂等：列已是 integer 时跳过；列是 boolean 时转换并保留旧值。
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'ledger'
+      and column_name = 'archived' and data_type = 'boolean'
+  ) then
+    alter table public.ledger
+      alter column archived drop default,
+      alter column archived type integer using (case when archived then 1 else 0 end),
+      alter column archived set default 0;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'category'
+      and column_name = 'is_favorite' and data_type = 'boolean'
+  ) then
+    alter table public.category
+      alter column is_favorite drop default,
+      alter column is_favorite type integer using (case when is_favorite then 1 else 0 end),
+      alter column is_favorite set default 0;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'account'
+      and column_name = 'include_in_total' and data_type = 'boolean'
+  ) then
+    alter table public.account
+      alter column include_in_total drop default,
+      alter column include_in_total type integer using (case when include_in_total then 1 else 0 end),
+      alter column include_in_total set default 1;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'budget'
+      and column_name = 'carry_over' and data_type = 'boolean'
+  ) then
+    alter table public.budget
+      alter column carry_over drop default,
+      alter column carry_over type integer using (case when carry_over then 1 else 0 end),
+      alter column carry_over set default 0;
+  end if;
+end $$;
 
 
 -- -----------------------------------------------------------------------------

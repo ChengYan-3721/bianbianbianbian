@@ -203,37 +203,41 @@ class LocalTransactionRepository implements TransactionRepository {
 
   @override
   Future<int> purgeById(String id) async {
-    final now = _clock();
-    final row = await (_db.select(_db.transactionEntryTable)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
-    if (row == null) return 0;
-    await _syncOp.enqueue(
-      entity: 'transaction',
-      entityId: id,
-      op: 'delete',
-      payload: jsonEncode(rowToTransactionEntry(row).toJson()),
-      enqueuedAt: now.millisecondsSinceEpoch,
-    );
-    return _dao.hardDeleteById(id);
+    final nowMs = _clock().millisecondsSinceEpoch;
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.transactionEntryTable)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (row == null) return 0;
+      await _syncOp.enqueue(
+        entity: 'transaction',
+        entityId: id,
+        op: 'hardDelete',
+        payload: jsonEncode(rowToTransactionEntry(row).toJson()),
+        enqueuedAt: nowMs,
+      );
+      return _dao.hardDeleteById(id);
+    });
   }
 
   @override
   Future<int> purgeAllDeleted() async {
-    final rows = await _dao.listDeleted();
-    final now = _clock();
-    for (final row in rows) {
-      await _syncOp.enqueue(
-        entity: 'transaction',
-        entityId: row.id,
-        op: 'delete',
-        payload: jsonEncode(rowToTransactionEntry(row).toJson()),
-        enqueuedAt: now.millisecondsSinceEpoch,
-      );
-    }
-    return (_db.delete(_db.transactionEntryTable)
-          ..where((t) => t.deletedAt.isNotNull()))
-        .go();
+    final nowMs = _clock().millisecondsSinceEpoch;
+    return _db.transaction(() async {
+      final rows = await _dao.listDeleted();
+      for (final row in rows) {
+        await _syncOp.enqueue(
+          entity: 'transaction',
+          entityId: row.id,
+          op: 'hardDelete',
+          payload: jsonEncode(rowToTransactionEntry(row).toJson()),
+          enqueuedAt: nowMs,
+        );
+      }
+      return (_db.delete(_db.transactionEntryTable)
+            ..where((t) => t.deletedAt.isNotNull()))
+          .go();
+    });
   }
 
   @override
