@@ -6,8 +6,9 @@ import 'package:flutter/services.dart';
 /// 与 native 端约定：MethodChannel `bianbian/privacy`，唯一方法 `setEnabled(bool)`。
 /// 实现细节：
 /// - Android：MainActivity.kt 调 `window.setFlags(FLAG_SECURE)` /
-///   `clearFlags(FLAG_SECURE)`。FLAG_SECURE 是持久 flag，App 进程存活期间一直生效；
-///   多任务预览自动黑屏，截屏 / 录屏被系统级阻止。
+///   `clearFlags(FLAG_SECURE)`。前台常态开启 FLAG_SECURE 以阻止截屏 / 录屏；
+///   BianBianApp 生命周期里会在多任务快照前短暂盖模糊遮罩并临时清 flag，
+///   让 task snapshot 尽量捕获遮罩而不是系统空白占位。
 /// - iOS：AppDelegate.swift 把 `enabled` 写入 `PrivacyMode.shared`，由 SceneDelegate
 ///   在 `sceneWillResignActive` 时按需挂全屏遮盖 UIView，`sceneDidBecomeActive` 时
 ///   移除。iOS 系统不允许 App 阻止截屏，但能挡住多任务缩略图。

@@ -109,6 +109,41 @@ void main() {
       });
     });
 
+    test(
+      'uncategorized keyword includes dangling categories and excludes transfers',
+      () {
+        final cat = _cat('c1', '餐饮');
+        final txs = [
+          _tx(id: 'category-null-expense'),
+          _tx(id: 'dangling-category-expense', categoryId: 'deleted-cat'),
+          _tx(id: 'categorized-expense', categoryId: 'c1'),
+          _tx(
+            id: 'category-null-transfer',
+            type: 'transfer',
+            accountId: 'a1',
+            toAccountId: 'a2',
+          ),
+          _tx(
+            id: 'dangling-category-transfer',
+            type: 'transfer',
+            categoryId: 'deleted-cat',
+            accountId: 'a1',
+            toAccountId: 'a2',
+          ),
+        ];
+        final result = searchTransactions(
+          transactions: txs,
+          categories: [cat],
+          accounts: const [],
+          query: const SearchQuery(keyword: 'uncategorized'),
+        );
+        expect(result.map((e) => e.id).toSet(), {
+          'category-null-expense',
+          'dangling-category-expense',
+        });
+      },
+    );
+
     test('未分类关键词与类型筛选取交集', () {
       final txs = [
         _tx(id: 'expense', type: 'expense'),

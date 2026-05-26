@@ -56,15 +56,13 @@ final appLockEnabledProvider = FutureProvider<bool>((ref) async {
 /// **不**缓存：每次 watch / read 重跑探测。理由：用户可能在 App 运行过程中去系统
 /// 设置里录入新指纹（或删掉所有指纹），探测结果会变。代价只是两次 method channel
 /// 调用，可以接受。如果未来观察到性能问题，再加 short-lived cache。
-final biometricCapabilityProvider =
-    FutureProvider<BiometricCapability>((ref) async {
+final biometricCapabilityProvider = FutureProvider<BiometricCapability>((
+  ref,
+) async {
   final auth = ref.watch(biometricAuthenticatorProvider);
   final supported = await auth.isDeviceSupported();
   if (!supported) {
-    return const BiometricCapability(
-      supported: false,
-      hasEnrolled: false,
-    );
+    return const BiometricCapability(supported: false, hasEnrolled: false);
   }
   final enrolled = await auth.hasEnrolledBiometrics();
   return BiometricCapability(supported: true, hasEnrolled: enrolled);
@@ -160,16 +158,15 @@ class BiometricCapability {
 /// 是设计接受的范围；阻止重启绕过需要把冷却时间也写进 secure storage，14.1 不
 /// 做，留给后续若有"暴力破解告警"再加）。
 class PinAttemptState {
-  const PinAttemptState({
-    required this.failures,
-    required this.cooldownUntil,
-  });
+  const PinAttemptState({required this.failures, required this.cooldownUntil});
 
   final int failures;
   final DateTime? cooldownUntil;
 
-  static const PinAttemptState initial =
-      PinAttemptState(failures: 0, cooldownUntil: null);
+  static const PinAttemptState initial = PinAttemptState(
+    failures: 0,
+    cooldownUntil: null,
+  );
 
   PinAttemptState copyWith({
     int? failures,
@@ -178,7 +175,9 @@ class PinAttemptState {
   }) {
     return PinAttemptState(
       failures: failures ?? this.failures,
-      cooldownUntil: clearCooldown ? null : (cooldownUntil ?? this.cooldownUntil),
+      cooldownUntil: clearCooldown
+          ? null
+          : (cooldownUntil ?? this.cooldownUntil),
     );
   }
 
@@ -197,10 +196,8 @@ class PinAttemptState {
 }
 
 class PinAttemptSession extends StateNotifier<PinAttemptState> {
-  PinAttemptSession({
-    required this.store,
-    required this.clock,
-  }) : super(PinAttemptState.initial);
+  PinAttemptSession({required this.store, required this.clock})
+    : super(PinAttemptState.initial);
 
   final PinCredentialStore store;
   final AppLockClock clock;
@@ -265,10 +262,10 @@ class PinAttemptSession extends StateNotifier<PinAttemptState> {
 
 final pinAttemptSessionProvider =
     StateNotifierProvider<PinAttemptSession, PinAttemptState>((ref) {
-  final store = ref.watch(pinCredentialStoreProvider);
-  final clock = ref.watch(appLockClockProvider);
-  return PinAttemptSession(store: store, clock: clock);
-});
+      final store = ref.watch(pinCredentialStoreProvider);
+      final clock = ref.watch(appLockClockProvider);
+      return PinAttemptSession(store: store, clock: clock);
+    });
 
 /// 命令式控制器——负责 setup/change/disable PIN 三类写入。
 ///
@@ -414,11 +411,15 @@ class AppLockGuardState {
   final bool isLocked;
   final DateTime? lastBackgroundedAt;
 
-  static const AppLockGuardState unlocked =
-      AppLockGuardState(isLocked: false, lastBackgroundedAt: null);
+  static const AppLockGuardState unlocked = AppLockGuardState(
+    isLocked: false,
+    lastBackgroundedAt: null,
+  );
 
-  static const AppLockGuardState locked =
-      AppLockGuardState(isLocked: true, lastBackgroundedAt: null);
+  static const AppLockGuardState locked = AppLockGuardState(
+    isLocked: true,
+    lastBackgroundedAt: null,
+  );
 
   AppLockGuardState copyWith({
     bool? isLocked,
@@ -466,17 +467,24 @@ class AppLockGuard extends StateNotifier<AppLockGuardState> {
   AppLockGuard({
     required this.clock,
     int initialTimeoutSeconds = kDefaultBackgroundLockTimeoutSeconds,
-  })  : _timeoutSeconds = initialTimeoutSeconds < 0
-            ? kDefaultBackgroundLockTimeoutSeconds
-            : initialTimeoutSeconds,
-        super(AppLockGuardState.unlocked);
+    bool initialEnabled = false,
+  }) : _timeoutSeconds = initialTimeoutSeconds < 0
+           ? kDefaultBackgroundLockTimeoutSeconds
+           : initialTimeoutSeconds,
+       _enabled = initialEnabled,
+       super(AppLockGuardState.unlocked);
 
   final AppLockClock clock;
   int _timeoutSeconds;
+  bool _enabled;
 
   /// 当前生效的后台超时阈值（秒）；UI 不直接消费——只用于日志/调试。
   @visibleForTesting
   int get timeoutSeconds => _timeoutSeconds;
+
+  /// 当前应用锁开关状态。生命周期触发的后台超时锁定只在开启时生效。
+  @visibleForTesting
+  bool get enabled => _enabled;
 
   /// 由 [appLockGuardProvider] 的 listen 在 [backgroundLockTimeoutProvider]
   /// 变化时调用，同步新阈值。**不重建 Notifier**——保留 lastBackgroundedAt
@@ -484,6 +492,15 @@ class AppLockGuard extends StateNotifier<AppLockGuardState> {
   void setTimeoutSeconds(int seconds) {
     if (seconds < 0) return;
     _timeoutSeconds = seconds;
+  }
+
+  /// 同步应用锁总开关。关闭时必须立刻解锁并清空后台时间戳，避免关闭后
+  /// 生命周期恢复路径重新弹出锁屏。
+  void setEnabled(bool enabled) {
+    _enabled = enabled;
+    if (!enabled) {
+      forceUnlock();
+    }
   }
 
   /// 立即锁屏——main 冷启动 / 测试可手动调。
@@ -510,9 +527,16 @@ class AppLockGuard extends StateNotifier<AppLockGuardState> {
   /// App 进入后台——记录 lastBackgroundedAt 时间戳。**不**直接锁屏，等
   /// [onResumed] 时按超时阈值判定。
   ///
-  /// 已锁屏（isLocked == true）时本方法依然记录 lastBackgroundedAt，
-  /// 但不会改变锁屏状态——避免用户在锁屏页面快速切换前后台时丢失"已锁"语义。
+  /// 已锁屏（isLocked == true）时不记录 lastBackgroundedAt。锁屏页可能弹出
+  /// 生物识别 / 系统面板并触发 Android inactive；如果此时记录后台时间，成功
+  /// 解锁后紧接着收到 resumed 会再次锁屏，形成解锁循环。
+  ///
+  /// 已有 lastBackgroundedAt 时也不覆盖。Android 回前台前可能先发 inactive
+  /// 再发 resumed；若此时刷新时间戳，非 0 超时阈值会被重置为"刚刚进入后台"，
+  /// 只剩"立即锁定"看起来有效。
   void onPaused() {
+    if (!_enabled || state.isLocked) return;
+    if (state.lastBackgroundedAt != null) return;
     state = state.copyWith(lastBackgroundedAt: clock());
   }
 
@@ -525,6 +549,14 @@ class AppLockGuard extends StateNotifier<AppLockGuardState> {
   ///   后台会话已处理"）；
   /// - elapsed >= timeoutSeconds → 锁。
   void onResumed() {
+    if (!_enabled) {
+      state = state.copyWith(clearLastBackgroundedAt: true);
+      return;
+    }
+    if (state.isLocked) {
+      state = state.copyWith(clearLastBackgroundedAt: true);
+      return;
+    }
     final last = state.lastBackgroundedAt;
     if (last == null) return;
     final now = clock();
@@ -551,24 +583,28 @@ class AppLockGuard extends StateNotifier<AppLockGuardState> {
 /// 与 enabled async 状态的 race。
 final appLockGuardProvider =
     StateNotifierProvider<AppLockGuard, AppLockGuardState>((ref) {
-  final clock = ref.watch(appLockClockProvider);
-  // 用 `read` 拿一次同步初值——provider 已被 main bootstrap 预热到 AsyncData。
-  // 取不到（极少见的 race，例如测试场景）就用 default。
-  final initialTimeout = ref.read(backgroundLockTimeoutProvider).maybeWhen(
-        data: (s) => s,
-        orElse: () => kDefaultBackgroundLockTimeoutSeconds,
+      final clock = ref.watch(appLockClockProvider);
+      // 用 `read` 拿一次同步初值——provider 已被 main bootstrap 预热到 AsyncData。
+      // 取不到（极少见的 race，例如测试场景）就用 default。
+      final initialTimeout = ref
+          .read(backgroundLockTimeoutProvider)
+          .maybeWhen(
+            data: (s) => s,
+            orElse: () => kDefaultBackgroundLockTimeoutSeconds,
+          );
+      final initialEnabled = ref
+          .read(appLockEnabledProvider)
+          .maybeWhen(data: (enabled) => enabled, orElse: () => false);
+      final guard = AppLockGuard(
+        clock: clock,
+        initialTimeoutSeconds: initialTimeout,
+        initialEnabled: initialEnabled,
       );
-  final guard = AppLockGuard(
-    clock: clock,
-    initialTimeoutSeconds: initialTimeout,
-  );
-  ref.listen<AsyncValue<int>>(backgroundLockTimeoutProvider, (prev, next) {
-    next.whenData(guard.setTimeoutSeconds);
-  });
-  ref.listen<AsyncValue<bool>>(appLockEnabledProvider, (prev, next) {
-    next.whenData((enabled) {
-      if (!enabled) guard.forceUnlock();
+      ref.listen<AsyncValue<int>>(backgroundLockTimeoutProvider, (prev, next) {
+        next.whenData(guard.setTimeoutSeconds);
+      });
+      ref.listen<AsyncValue<bool>>(appLockEnabledProvider, (prev, next) {
+        next.whenData(guard.setEnabled);
+      });
+      return guard;
     });
-  });
-  return guard;
-});

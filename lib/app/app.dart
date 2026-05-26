@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:bianbianbianbian/l10n/app_localizations.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,11 +12,16 @@ import '../features/compliance/privacy_consent_gate.dart';
 import '../features/lock/app_lock_overlay.dart';
 import '../features/lock/app_lock_providers.dart';
 import '../data/repository/providers.dart'
-    show currentLedgerIdProvider, ledgerRepositoryProvider, transactionRepositoryProvider;
+    show
+        currentLedgerIdProvider,
+        ledgerRepositoryProvider,
+        transactionRepositoryProvider;
 import '../features/settings/widget_data_service.dart';
 import '../features/sync/sync_trigger.dart';
 import 'app_router.dart';
-import '../features/settings/settings_providers.dart';/// 应用根组件。
+import '../features/settings/settings_providers.dart';
+
+/// 应用根组件。
 ///
 /// Step 10.7：升级为 [ConsumerStatefulWidget] + [WidgetsBindingObserver]，
 /// 在 App 启动 / 前台恢复 / 后台 三个生命周期点上调度同步任务：
@@ -64,15 +71,16 @@ class BianBianApp extends ConsumerStatefulWidget {
 class _BianBianAppState extends ConsumerState<BianBianApp>
     with WidgetsBindingObserver {
   bool _observerRegistered = false;
+  bool _privacySnapshotShieldVisible = false;
+  bool _androidSecureFlagRelaxedForSnapshot = false;
+  bool _androidSecureFlagRelaxScheduled = false;
   StreamSubscription<Uri?>? _widgetClickSub;
 
   @override
   void initState() {
     super.initState();
-    if (widget.enableSyncLifecycle || widget.enableAppLockGuard) {
-      WidgetsBinding.instance.addObserver(this);
-      _observerRegistered = true;
-    }
+    WidgetsBinding.instance.addObserver(this);
+    _observerRegistered = true;
     // 不能在 initState 同步阶段读 provider（未 mount 完成前读会被 Riverpod
     // 警告）。延迟到首帧后再启动。
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -110,6 +118,7 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _handleAndroidPrivacySnapshotLifecycle(state);
     if (widget.enableSyncLifecycle) {
       final trigger = ref.read(syncTriggerProvider.notifier);
       switch (state) {
@@ -138,11 +147,99 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
         case AppLifecycleState.hidden:
           guard.onPaused();
         case AppLifecycleState.inactive:
-          // inactive 是 iOS 的"短暂打断"（来电覆盖、控制中心下拉等）——不算真正
-          // 的后台进入，不更新 lastBackgroundedAt 避免误锁。Android 没有 inactive
-          // 态，paused 直接打头。
+          // Android 在多任务/失焦场景可能只短暂进入 inactive；把它作为后台计时
+          // 起点，才能覆盖从多任务界面停留超过阈值后切回的路径。iOS 的 inactive
+          // 仍按短暂打断处理，避免来电/控制中心下拉造成误锁。
+          if (defaultTargetPlatform == TargetPlatform.android) {
+            guard.onPaused();
+          }
           break;
       }
+    }
+  }
+
+  /// Android 隐私模式折中方案：
+  /// - 前台常态保持 FLAG_SECURE，阻止直接截屏 / 录屏；
+  /// - 进入多任务 / 后台前先盖 Flutter 模糊遮罩，下一帧临时清掉 FLAG_SECURE，
+  ///   让系统 task snapshot 尽量捕获"模糊后的画面"；
+  /// - 回前台时先恢复 FLAG_SECURE，再撤遮罩。
+  ///
+  /// 这是 best-effort：系统抓取 task snapshot 的时机由 Android / 厂商 ROM 决定，
+  /// 无法做到与 FLAG_SECURE 一样的强一致保证。
+  void _handleAndroidPrivacySnapshotLifecycle(AppLifecycleState state) {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _restoreAndroidSecureFlagAfterSnapshot();
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _prepareAndroidPrivacySnapshot();
+    }
+  }
+
+  bool _privacyModeEnabledSync() {
+    return ref
+        .read(privacyModeProvider)
+        .maybeWhen(data: (enabled) => enabled, orElse: () => false);
+  }
+
+  bool _appLockCurrentlyLocked() {
+    return widget.enableAppLockGuard && ref.read(appLockGuardProvider).isLocked;
+  }
+
+  void _prepareAndroidPrivacySnapshot() {
+    if (!_privacyModeEnabledSync()) return;
+    if (_appLockCurrentlyLocked()) return;
+    if (!_privacySnapshotShieldVisible && mounted) {
+      setState(() => _privacySnapshotShieldVisible = true);
+    }
+    if (_androidSecureFlagRelaxedForSnapshot ||
+        _androidSecureFlagRelaxScheduled) {
+      return;
+    }
+
+    _androidSecureFlagRelaxScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_androidSecureFlagRelaxScheduled ||
+          !mounted ||
+          !_privacySnapshotShieldVisible ||
+          !_privacyModeEnabledSync()) {
+        return;
+      }
+      _androidSecureFlagRelaxScheduled = false;
+      _androidSecureFlagRelaxedForSnapshot = true;
+      unawaited(ref.read(privacyModeServiceProvider).setEnabled(false));
+    });
+  }
+
+  void _restoreAndroidSecureFlagAfterSnapshot() {
+    if (!_privacySnapshotShieldVisible &&
+        !_androidSecureFlagRelaxedForSnapshot &&
+        !_androidSecureFlagRelaxScheduled) {
+      return;
+    }
+
+    _androidSecureFlagRelaxScheduled = false;
+    final shouldRestoreSecureFlag =
+        _androidSecureFlagRelaxedForSnapshot && _privacyModeEnabledSync();
+    _androidSecureFlagRelaxedForSnapshot = false;
+
+    void hideShield() {
+      if (!mounted || !_privacySnapshotShieldVisible) return;
+      setState(() => _privacySnapshotShieldVisible = false);
+    }
+
+    if (shouldRestoreSecureFlag) {
+      unawaited(
+        ref
+            .read(privacyModeServiceProvider)
+            .setEnabled(true)
+            .whenComplete(hideShield),
+      );
+    } else {
+      hideShield();
     }
   }
 
@@ -217,9 +314,10 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
     // Step 15.1：主题由 provider 驱动，切换后即时变色。
     final theme = ref.watch(currentThemeProvider);
     return MaterialApp.router(
-      title: '边边记账', // i18n-exempt: app title used before localization is available
+      title:
+          '边边记账', // i18n-exempt: app title used before localization is available
       theme: theme,
-        routerConfig: ref.watch(goRouterProvider),
+      routerConfig: ref.watch(goRouterProvider),
       debugShowCheckedModeBanner: false,
       locale: const Locale('zh'),
       supportedLocales: AppLocalizations.supportedLocales,
@@ -249,8 +347,46 @@ class _BianBianAppState extends ConsumerState<BianBianApp>
           // 否则首次启动的新用户会被 PIN/解锁页卡死而看不到政策。
           child = PrivacyConsentGate(child: child);
         }
+        child = _PrivacySnapshotGate(
+          visible: _privacySnapshotShieldVisible,
+          child: child,
+        );
         return child;
       },
+    );
+  }
+}
+
+/// Android 隐私模式的多任务快照遮罩。
+///
+/// 外层 gate 常驻，避免切换遮罩时重建 / 迁移锁屏页；真正的模糊层只在 App
+/// 失焦 / 进入后台时短暂挂上，让 task snapshot 捕获模糊后的画面。
+class _PrivacySnapshotGate extends StatelessWidget {
+  const _PrivacySnapshotGate({required this.visible, required this.child});
+
+  final bool visible;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.surface.withValues(alpha: 0.72);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        if (visible)
+          Positioned.fill(
+            child: IgnorePointer(
+              key: const ValueKey('privacy_snapshot_shield'),
+              child: ClipRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: ColoredBox(color: color),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -267,14 +403,10 @@ class _AppLockGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isLocked =
-        ref.watch(appLockGuardProvider.select((s) => s.isLocked));
+    final isLocked = ref.watch(appLockGuardProvider.select((s) => s.isLocked));
     return Stack(
       fit: StackFit.expand,
-      children: [
-        child,
-        if (isLocked) const AppLockOverlay(),
-      ],
+      children: [child, if (isLocked) const AppLockOverlay()],
     );
   }
 }

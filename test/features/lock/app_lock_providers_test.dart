@@ -26,13 +26,15 @@ ProviderContainer _container({
   BiometricAuthenticator? auth,
   PrivacyModeService? privacyService,
 }) {
-  return ProviderContainer(overrides: [
-    pinCredentialStoreProvider.overrideWithValue(store),
-    appLockClockProvider.overrideWithValue(clock.call),
-    if (auth != null) biometricAuthenticatorProvider.overrideWithValue(auth),
-    if (privacyService != null)
-      privacyModeServiceProvider.overrideWithValue(privacyService),
-  ]);
+  return ProviderContainer(
+    overrides: [
+      pinCredentialStoreProvider.overrideWithValue(store),
+      appLockClockProvider.overrideWithValue(clock.call),
+      if (auth != null) biometricAuthenticatorProvider.overrideWithValue(auth),
+      if (privacyService != null)
+        privacyModeServiceProvider.overrideWithValue(privacyService),
+    ],
+  );
 }
 
 Future<void> _seedPin(InMemoryPinCredentialStore store, String pin) async {
@@ -53,8 +55,10 @@ void main() {
       final session = container.read(pinAttemptSessionProvider.notifier);
       final ok = await session.tryVerify('1234');
       expect(ok, isFalse);
-      expect(container.read(pinAttemptSessionProvider),
-          PinAttemptState.initial);
+      expect(
+        container.read(pinAttemptSessionProvider),
+        PinAttemptState.initial,
+      );
     });
 
     test('成功路径：state 重置为 initial', () async {
@@ -102,14 +106,12 @@ void main() {
       await session.tryVerify('0000');
 
       final state = container.read(pinAttemptSessionProvider);
-      expect(state.failures, 0,
-          reason: '触发冷却后 failures 应重置为 0，避免下一轮叠加更长冷却');
+      expect(state.failures, 0, reason: '触发冷却后 failures 应重置为 0，避免下一轮叠加更长冷却');
       expect(state.cooldownUntil, t0.add(kPinCooldownDuration));
       expect(session.isCoolingDown(), isTrue);
     });
 
-    test('冷却中调用 tryVerify：返回 false，不消耗 attempt（不重置 cooldownUntil）',
-        () async {
+    test('冷却中调用 tryVerify：返回 false，不消耗 attempt（不重置 cooldownUntil）', () async {
       final store = InMemoryPinCredentialStore();
       await _seedPin(store, '1234');
       final t0 = DateTime(2026, 5, 7, 12, 0, 0);
@@ -121,16 +123,19 @@ void main() {
       await session.tryVerify('0000');
       await session.tryVerify('0000');
       await session.tryVerify('0000');
-      final cooldownUntilAfterTrigger =
-          container.read(pinAttemptSessionProvider).cooldownUntil;
+      final cooldownUntilAfterTrigger = container
+          .read(pinAttemptSessionProvider)
+          .cooldownUntil;
 
       // 冷却窗口内时间推进了 5 秒，但还没到点。
       clock.current = t0.add(const Duration(seconds: 5));
       // 即使输入正确，冷却中也直接拒绝。
       expect(await session.tryVerify('1234'), isFalse);
       // cooldownUntil 不应被刷新。
-      expect(container.read(pinAttemptSessionProvider).cooldownUntil,
-          cooldownUntilAfterTrigger);
+      expect(
+        container.read(pinAttemptSessionProvider).cooldownUntil,
+        cooldownUntilAfterTrigger,
+      );
     });
 
     test('冷却结束后可继续输入；输错继续累计 failures（从 0 重新计）', () async {
@@ -174,8 +179,11 @@ void main() {
       expect(session.cooldownRemainingSeconds(), 20);
 
       clock.current = t0.add(const Duration(seconds: 29, milliseconds: 999));
-      expect(session.cooldownRemainingSeconds(), 1,
-          reason: '向上取整，剩 1 秒应展示 1 秒');
+      expect(
+        session.cooldownRemainingSeconds(),
+        1,
+        reason: '向上取整，剩 1 秒应展示 1 秒',
+      );
 
       clock.current = t0.add(kPinCooldownDuration);
       expect(session.cooldownRemainingSeconds(), 0);
@@ -196,8 +204,10 @@ void main() {
       expect(session.isCoolingDown(), isTrue);
 
       session.reset();
-      expect(container.read(pinAttemptSessionProvider),
-          PinAttemptState.initial);
+      expect(
+        container.read(pinAttemptSessionProvider),
+        PinAttemptState.initial,
+      );
     });
   });
 
@@ -221,8 +231,11 @@ void main() {
       await controller.setupPin('1234');
       expect(await store.readEnabled(), isTrue);
       expect(await store.load(), isNotNull);
-      expect(container.read(pinAttemptSessionProvider).failures, 0,
-          reason: 'setupPin 后失败计数应重置');
+      expect(
+        container.read(pinAttemptSessionProvider).failures,
+        0,
+        reason: 'setupPin 后失败计数应重置',
+      );
     });
 
     test('setupPin 拒绝非法 PIN 格式（throws ArgumentError）', () async {
@@ -232,12 +245,12 @@ void main() {
       addTearDown(container.dispose);
 
       final controller = container.read(appLockControllerProvider);
-      expect(() => controller.setupPin('abc'),
-          throwsA(isA<ArgumentError>()));
-      expect(() => controller.setupPin('123'),
-          throwsA(isA<ArgumentError>()));
-      expect(() => controller.setupPin('1234567'),
-          throwsA(isA<ArgumentError>()));
+      expect(() => controller.setupPin('abc'), throwsA(isA<ArgumentError>()));
+      expect(() => controller.setupPin('123'), throwsA(isA<ArgumentError>()));
+      expect(
+        () => controller.setupPin('1234567'),
+        throwsA(isA<ArgumentError>()),
+      );
       // 写入应未发生。
       expect(await store.load(), isNull);
       expect(await store.readEnabled(), isFalse);
@@ -340,8 +353,7 @@ void main() {
       addTearDown(container.dispose);
       final cap = await container.read(biometricCapabilityProvider.future);
       expect(cap.supported, isFalse);
-      expect(cap.hasEnrolled, isFalse,
-          reason: '设备不支持时短路返回，不应再调 enrolled 探测');
+      expect(cap.hasEnrolled, isFalse, reason: '设备不支持时短路返回，不应再调 enrolled 探测');
       expect(cap.isUsable, isFalse);
     });
 
@@ -361,12 +373,9 @@ void main() {
     });
 
     test('BiometricCapability == 与 hashCode 双字段', () {
-      const a =
-          BiometricCapability(supported: true, hasEnrolled: true);
-      const b =
-          BiometricCapability(supported: true, hasEnrolled: true);
-      const c =
-          BiometricCapability(supported: true, hasEnrolled: false);
+      const a = BiometricCapability(supported: true, hasEnrolled: true);
+      const b = BiometricCapability(supported: true, hasEnrolled: true);
+      const c = BiometricCapability(supported: true, hasEnrolled: false);
       expect(a, b);
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(c));
@@ -412,8 +421,11 @@ void main() {
       await controller.disable();
       expect(await store.load(), isNull);
       expect(await store.readEnabled(), isFalse);
-      expect(await store.readBiometricEnabled(), isFalse,
-          reason: 'disable 必须同步清生物识别开关——避免下次重新设 PIN 后旧 enabled=true 残留');
+      expect(
+        await store.readBiometricEnabled(),
+        isFalse,
+        reason: 'disable 必须同步清生物识别开关——避免下次重新设 PIN 后旧 enabled=true 残留',
+      );
     });
 
     test('forgetPinAndDisable 同样清生物识别开关', () async {
@@ -455,19 +467,21 @@ void main() {
       expect(await container.read(backgroundLockTimeoutProvider.future), 0);
     });
 
-    test('setBackgroundLockTimeoutSeconds 拒绝负值（throws ArgumentError）',
-        () async {
-      final store = InMemoryPinCredentialStore();
-      final clock = _Clock(DateTime(2026, 5, 7, 12));
-      final container = _container(store: store, clock: clock);
-      addTearDown(container.dispose);
+    test(
+      'setBackgroundLockTimeoutSeconds 拒绝负值（throws ArgumentError）',
+      () async {
+        final store = InMemoryPinCredentialStore();
+        final clock = _Clock(DateTime(2026, 5, 7, 12));
+        final container = _container(store: store, clock: clock);
+        addTearDown(container.dispose);
 
-      final controller = container.read(appLockControllerProvider);
-      expect(
-        () => controller.setBackgroundLockTimeoutSeconds(-1),
-        throwsA(isA<ArgumentError>()),
-      );
-    });
+        final controller = container.read(appLockControllerProvider);
+        expect(
+          () => controller.setBackgroundLockTimeoutSeconds(-1),
+          throwsA(isA<ArgumentError>()),
+        );
+      },
+    );
   });
 
   group('AppLockGuard 状态机', () {
@@ -505,6 +519,7 @@ void main() {
       addTearDown(container.dispose);
 
       final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
       guard.onPaused();
       final state = container.read(appLockGuardProvider);
       expect(state.isLocked, isFalse);
@@ -519,6 +534,7 @@ void main() {
       addTearDown(container.dispose);
 
       final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
       guard.setTimeoutSeconds(60);
 
       guard.onPaused();
@@ -528,8 +544,11 @@ void main() {
 
       final state = container.read(appLockGuardProvider);
       expect(state.isLocked, isFalse);
-      expect(state.lastBackgroundedAt, isNull,
-          reason: '已"消化"本次后台会话，避免后续重复触发判定');
+      expect(
+        state.lastBackgroundedAt,
+        isNull,
+        reason: '已"消化"本次后台会话，避免后续重复触发判定',
+      );
     });
 
     test('onResumed elapsed >= timeout：锁屏', () {
@@ -540,6 +559,7 @@ void main() {
       addTearDown(container.dispose);
 
       final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
       guard.setTimeoutSeconds(60);
 
       guard.onPaused();
@@ -547,6 +567,29 @@ void main() {
       clock.current = t0.add(const Duration(seconds: 60));
       guard.onResumed();
 
+      expect(container.read(appLockGuardProvider).isLocked, isTrue);
+    });
+
+    test('重复 inactive/paused 不覆盖首次后台时间，避免非 0 超时失效', () {
+      final store = InMemoryPinCredentialStore();
+      final t0 = DateTime(2026, 5, 7, 12, 0, 0);
+      final clock = _Clock(t0);
+      final container = _container(store: store, clock: clock);
+      addTearDown(container.dispose);
+
+      final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
+      guard.setTimeoutSeconds(60);
+
+      guard.onPaused();
+      expect(container.read(appLockGuardProvider).lastBackgroundedAt, t0);
+
+      // 模拟 Android 回前台前又发一次 inactive；不能把后台起点刷新到现在。
+      clock.current = t0.add(const Duration(seconds: 70));
+      guard.onPaused();
+      expect(container.read(appLockGuardProvider).lastBackgroundedAt, t0);
+
+      guard.onResumed();
       expect(container.read(appLockGuardProvider).isLocked, isTrue);
     });
 
@@ -558,6 +601,7 @@ void main() {
       addTearDown(container.dispose);
 
       final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
       guard.setTimeoutSeconds(0);
 
       guard.onPaused();
@@ -566,6 +610,28 @@ void main() {
       guard.onResumed();
 
       expect(container.read(appLockGuardProvider).isLocked, isTrue);
+    });
+
+    test('已锁屏时 inactive/paused 不记录后台时间，避免解锁后 resumed 再次锁屏', () {
+      final store = InMemoryPinCredentialStore();
+      final t0 = DateTime(2026, 5, 7, 12, 0, 0);
+      final clock = _Clock(t0);
+      final container = _container(store: store, clock: clock);
+      addTearDown(container.dispose);
+
+      final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
+      guard.setTimeoutSeconds(0);
+      guard.lock();
+
+      // 模拟锁屏 overlay 上弹出生物识别 / 系统面板造成 Android inactive。
+      guard.onPaused();
+      expect(container.read(appLockGuardProvider).lastBackgroundedAt, isNull);
+
+      // 若 onPaused 误记了时间，解锁后紧接着的 resumed 会因 timeout=0 再次锁屏。
+      guard.unlock();
+      guard.onResumed();
+      expect(container.read(appLockGuardProvider).isLocked, isFalse);
     });
 
     test('onResumed lastBackgroundedAt == null：不动', () {
@@ -581,8 +647,7 @@ void main() {
       expect(container.read(appLockGuardProvider), AppLockGuardState.unlocked);
     });
 
-    test('setTimeoutSeconds 即时生效，不重建 Notifier 也不丢失 lastBackgroundedAt',
-        () {
+    test('setTimeoutSeconds 即时生效，不重建 Notifier 也不丢失 lastBackgroundedAt', () {
       final store = InMemoryPinCredentialStore();
       final t0 = DateTime(2026, 5, 7, 12, 0, 0);
       final clock = _Clock(t0);
@@ -590,6 +655,7 @@ void main() {
       addTearDown(container.dispose);
 
       final guard = container.read(appLockGuardProvider.notifier);
+      guard.setEnabled(true);
       guard.setTimeoutSeconds(60);
       guard.onPaused();
       final pausedAt = container.read(appLockGuardProvider).lastBackgroundedAt;
@@ -606,6 +672,25 @@ void main() {
       expect(container.read(appLockGuardProvider).isLocked, isTrue);
     });
 
+    test('应用锁关闭时生命周期恢复不记录后台时间也不触发锁屏', () {
+      final store = InMemoryPinCredentialStore();
+      final t0 = DateTime(2026, 5, 7, 12, 0, 0);
+      final clock = _Clock(t0);
+      final container = _container(store: store, clock: clock);
+      addTearDown(container.dispose);
+
+      final guard = container.read(appLockGuardProvider.notifier);
+      guard.setTimeoutSeconds(60);
+
+      guard.onPaused();
+      clock.current = t0.add(const Duration(minutes: 2));
+      guard.onResumed();
+
+      final state = container.read(appLockGuardProvider);
+      expect(state.isLocked, isFalse);
+      expect(state.lastBackgroundedAt, isNull);
+    });
+
     test('setTimeoutSeconds 拒绝负值（保留旧值）', () {
       final store = InMemoryPinCredentialStore();
       final clock = _Clock(DateTime(2026, 5, 7, 12, 0, 0));
@@ -615,8 +700,7 @@ void main() {
       final guard = container.read(appLockGuardProvider.notifier);
       guard.setTimeoutSeconds(60);
       guard.setTimeoutSeconds(-1);
-      expect(guard.timeoutSeconds, 60,
-          reason: '负值视为非法输入；保留上一次写入');
+      expect(guard.timeoutSeconds, 60, reason: '负值视为非法输入；保留上一次写入');
     });
 
     test('appLockEnabled true→false：guard 自动 forceUnlock', () async {
@@ -645,27 +729,29 @@ void main() {
       expect(container.read(appLockGuardProvider).isLocked, isFalse);
     });
 
-    test('backgroundLockTimeoutProvider invalidate 后 guard 同步新 timeout',
-        () async {
-      final store = InMemoryPinCredentialStore();
-      final clock = _Clock(DateTime(2026, 5, 7, 12, 0, 0));
-      final container = _container(store: store, clock: clock);
-      addTearDown(container.dispose);
+    test(
+      'backgroundLockTimeoutProvider invalidate 后 guard 同步新 timeout',
+      () async {
+        final store = InMemoryPinCredentialStore();
+        final clock = _Clock(DateTime(2026, 5, 7, 12, 0, 0));
+        final container = _container(store: store, clock: clock);
+        addTearDown(container.dispose);
 
-      // 先 read provider 让其 build；guard 通过 ref.read maybeWhen 拿默认 60。
-      await container.read(backgroundLockTimeoutProvider.future);
-      final guard = container.read(appLockGuardProvider.notifier);
-      expect(guard.timeoutSeconds, kDefaultBackgroundLockTimeoutSeconds);
+        // 先 read provider 让其 build；guard 通过 ref.read maybeWhen 拿默认 60。
+        await container.read(backgroundLockTimeoutProvider.future);
+        final guard = container.read(appLockGuardProvider.notifier);
+        expect(guard.timeoutSeconds, kDefaultBackgroundLockTimeoutSeconds);
 
-      // 用户改成 0。
-      await container
-          .read(appLockControllerProvider)
-          .setBackgroundLockTimeoutSeconds(0);
-      container.invalidate(backgroundLockTimeoutProvider);
-      await container.read(backgroundLockTimeoutProvider.future);
+        // 用户改成 0。
+        await container
+            .read(appLockControllerProvider)
+            .setBackgroundLockTimeoutSeconds(0);
+        container.invalidate(backgroundLockTimeoutProvider);
+        await container.read(backgroundLockTimeoutProvider.future);
 
-      expect(guard.timeoutSeconds, 0);
-    });
+        expect(guard.timeoutSeconds, 0);
+      },
+    );
   });
 
   group('AppLockGuardState', () {

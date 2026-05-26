@@ -149,6 +149,11 @@ List<TransactionEntry> searchTransactions({
 
   bool matchKeyword(TransactionEntry tx) {
     if (keyword.isEmpty) return true;
+    final cat = tx.categoryId == null ? null : categoryById[tx.categoryId!];
+    if (matchesUncategorizedKeyword) {
+      if (tx.type == 'transfer') return false;
+      if (cat == null) return true;
+    }
     // 备注（drift `tags` 列）。
     final note = tx.tags;
     if (note != null && note.toLowerCase().contains(keyword)) return true;
@@ -156,8 +161,6 @@ List<TransactionEntry> searchTransactions({
     // 一级分类不落库，仅以 [parentKey] 字符串关联——所以通过 [parentKeyLabels]
     // 反查中文展示名。同时保留对 parent key 字面量的匹配，确保用户输入
     // "food" 也能命中"餐饮"下的所有流水（开发自用 / 英文搜索场景）。
-    final cat = tx.categoryId == null ? null : categoryById[tx.categoryId!];
-    if (tx.categoryId == null && matchesUncategorizedKeyword) return true;
     if (cat != null) {
       if (cat.name.toLowerCase().contains(keyword)) return true;
       final parentLabel = parentKeyLabels[cat.parentKey];

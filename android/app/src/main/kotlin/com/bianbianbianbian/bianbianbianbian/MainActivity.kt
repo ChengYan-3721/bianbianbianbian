@@ -9,10 +9,10 @@ import io.flutter.plugin.common.MethodChannel
  * Step 14.4 隐私模式：通过 MethodChannel `bianbian/privacy` 接收 Dart 侧的
  * setEnabled(bool) 调用，开启时给 Window 打 FLAG_SECURE。
  *
- * FLAG_SECURE 是系统级 flag —— 同时实现：
- *   1. 多任务（Recent apps）预览中本 App 显示纯黑（Android 自动处理）；
- *   2. 系统截屏 / 录屏被阻止；
- *   3. 部分设备的"无障碍服务截屏"也被拦截。
+ * FLAG_SECURE 是系统级 flag —— 前台常态用于阻止系统截屏 / 录屏，部分设备的
+ * "无障碍服务截屏"也会被拦截。Dart 层在进入多任务快照前会先盖模糊遮罩，并短暂
+ * 调 setEnabled(false) 清掉 flag，让 Android 尽量捕获遮罩而不是安全窗口空白占位；
+ * 回前台后再调 setEnabled(true) 恢复前台截屏保护。
  *
  * setFlags / clearFlags 必须在 UI 线程调用 —— MethodChannel 默认在 UI 线程派发，
  * 直接调即可。

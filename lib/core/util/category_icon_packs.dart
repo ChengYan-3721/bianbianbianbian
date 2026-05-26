@@ -242,12 +242,12 @@ String? packDefaultIcon(BianBianIconPack pack, String parentKey, String name) {
 ///    返回当前 pack 的默认值（切换 pack 后自动更新）。
 /// 3. `storedIcon` 不匹配任何 pack 默认 → 视为用户自定义，原样返回。
 String resolveCategoryIcon(
-  String? storedIcon,
-  String parentKey,
-  String name,
-  BianBianIconPack pack, [
-  String fallback = '📁',
-]) {
+    String? storedIcon,
+    String parentKey,
+    String name,
+    BianBianIconPack pack, [
+      String fallback = '📁',
+    ]) {
   if (storedIcon == null) {
     return packDefaultIcon(pack, parentKey, name) ?? fallback;
   }

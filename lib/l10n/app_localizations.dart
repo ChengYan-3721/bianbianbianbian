@@ -2461,7 +2461,7 @@ abstract class AppLocalizations {
   /// No description provided for @lockPrivacyEnabledDesc.
   ///
   /// In zh, this message translates to:
-  /// **'已开启 · 多任务预览模糊 + Android 阻止截屏'**
+  /// **'已开启 · 多任务预览模糊 + Android 前台阻止截屏'**
   String get lockPrivacyEnabledDesc;
 
   /// No description provided for @lockPrivacyDisabledDesc.

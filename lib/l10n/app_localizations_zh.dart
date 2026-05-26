@@ -1293,7 +1293,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lockPrivacyMode => '隐私模式';
 
   @override
-  String get lockPrivacyEnabledDesc => '已开启 · 多任务预览模糊 + Android 阻止截屏';
+  String get lockPrivacyEnabledDesc => '已开启 · 多任务预览模糊 + Android 前台阻止截屏';
 
   @override
   String get lockPrivacyDisabledDesc => '关闭中 · 多任务切换器可见 App 当前画面';

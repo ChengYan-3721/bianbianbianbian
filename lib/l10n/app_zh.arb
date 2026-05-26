@@ -762,7 +762,7 @@
     }
   },
   "lockPrivacyMode": "隐私模式",
-  "lockPrivacyEnabledDesc": "已开启 · 多任务预览模糊 + Android 阻止截屏",
+  "lockPrivacyEnabledDesc": "已开启 · 多任务预览模糊 + Android 前台阻止截屏",
   "lockPrivacyDisabledDesc": "关闭中 · 多任务切换器可见 App 当前画面",
   "pinSetupNew": "设置应用锁 PIN",
   "pinSetupChange": "修改应用锁 PIN",
