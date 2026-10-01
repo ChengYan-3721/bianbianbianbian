@@ -79,3 +79,11 @@ const Map<String, double> kFxRateSnapshot = {
   'CAD': 5.30,
   'AUD': 4.80,
 };
+
+/// 根据币种代码返回对应的符号，未找到时返回默认的 `¥`。
+String currencySymbolOf(String code) {
+  return kBuiltInCurrencies
+      .where((c) => c.code == code)
+      .firstOrNull
+      ?.symbol ?? '¥';
+}

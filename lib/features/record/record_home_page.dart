@@ -276,6 +276,15 @@ class _TopBar extends ConsumerWidget {
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
               ),
               IconButton(
+                tooltip: context.l10n.a11yRecordHomeCalendar,
+                icon: const Icon(Icons.calendar_month_outlined, size: 22),
+                onPressed: () {
+                  context.push('/record/calendar');
+                },
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              ),
+              IconButton(
                 tooltip: context.l10n.a11yRecordHomeSearch,
                 icon: const Icon(Icons.search, size: 22),
                 onPressed: () {

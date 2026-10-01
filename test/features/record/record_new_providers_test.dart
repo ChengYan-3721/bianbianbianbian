@@ -4,14 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:bianbianbianbian/data/repository/account_repository.dart';
 import 'package:bianbianbianbian/data/repository/ledger_repository.dart';
 import 'package:bianbianbianbian/data/repository/providers.dart'
     show
         CurrentLedgerId,
+        accountRepositoryProvider,
         currentLedgerIdProvider,
         ledgerRepositoryProvider,
         transactionRepositoryProvider;
 import 'package:bianbianbianbian/data/repository/transaction_repository.dart';
+import 'package:bianbianbianbian/domain/entity/account.dart';
 import 'package:bianbianbianbian/domain/entity/attachment_meta.dart';
 import 'package:bianbianbianbian/domain/entity/ledger.dart';
 import 'package:bianbianbianbian/domain/entity/transaction_entry.dart';
@@ -90,6 +93,37 @@ class _FakeLedgerRepository implements LedgerRepository {
   Future<List<Ledger>> listExpired(DateTime cutoff) async => const [];
 }
 
+/// 假 AccountRepository —— 用于多币种转账测试。
+class _FakeAccountRepository implements AccountRepository {
+  _FakeAccountRepository({this.accounts = const {}});
+
+  /// id → Account 映射
+  final Map<String, Account> accounts;
+
+  @override
+  Future<Account?> getById(String id) async => accounts[id];
+
+  @override
+  Future<List<Account>> listActive() async => accounts.values.toList();
+
+  @override
+  Future<Account> save(Account entity) => fail('unexpected save');
+
+  @override
+  Future<void> softDeleteById(String id) => fail('unexpected delete');
+
+  @override
+  Future<List<Account>> listDeleted() async => const [];
+  @override
+  Future<void> restoreById(String id) => fail('unexpected restore');
+  @override
+  Future<int> purgeById(String id) => fail('unexpected purge');
+  @override
+  Future<int> purgeAllDeleted() => fail('unexpected purgeAll');
+  @override
+  Future<List<Account>> listExpired(DateTime cutoff) async => const [];
+}
+
 Ledger _testLedger({String defaultCurrency = 'CNY'}) => Ledger(
       id: 'test-ledger',
       name: '测试账本',
@@ -102,15 +136,18 @@ Ledger _testLedger({String defaultCurrency = 'CNY'}) => Ledger(
 void main() {
   ProviderContainer makeContainer({
     TransactionRepository? txRepo,
+    AccountRepository? accRepo,
     String ledgerId = 'test-ledger',
     String ledgerCurrency = 'CNY',
     Map<String, double>? fxRates,
   }) {
     final repo = txRepo ?? _FakeTransactionRepository();
     final ledger = _testLedger(defaultCurrency: ledgerCurrency);
+    final accountRepo = accRepo ?? _FakeAccountRepository();
     return ProviderContainer(overrides: [
       currentLedgerIdProvider.overrideWith(() => _TestCurrentLedgerId(ledgerId)),
       transactionRepositoryProvider.overrideWith((ref) async => repo),
+      accountRepositoryProvider.overrideWith((ref) async => accountRepo),
       ledgerRepositoryProvider.overrideWith(
         (ref) async => _FakeLedgerRepository(ledger: ledger),
       ),
@@ -412,7 +449,28 @@ void main() {
       TestWidgetsFlutterBinding.ensureInitialized();
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final repo = _FakeTransactionRepository();
-      final container = makeContainer(txRepo: repo);
+      // 多币种优化：转账时需要校验币种，提供两个同币种账户
+      final accRepo = _FakeAccountRepository(
+        accounts: {
+          'acc-out': Account(
+            id: 'acc-out',
+            name: '转出账户',
+            type: 'cash',
+            currency: 'CNY',
+            updatedAt: DateTime(2026, 1),
+            deviceId: 'dev',
+          ),
+          'acc-in': Account(
+            id: 'acc-in',
+            name: '转入账户',
+            type: 'debit',
+            currency: 'CNY',
+            updatedAt: DateTime(2026, 1),
+            deviceId: 'dev',
+          ),
+        },
+      );
+      final container = makeContainer(txRepo: repo, accRepo: accRepo);
       final notifier = container.read(recordFormProvider.notifier);
 
       notifier.setTransferMode(true);
@@ -463,6 +521,7 @@ void main() {
       container.updateOverrides([
         currentLedgerIdProvider.overrideWith(() => _TestCurrentLedgerId('test-ledger')),
         transactionRepositoryProvider.overrideWith((ref) async => repo),
+        accountRepositoryProvider.overrideWith((ref) async => _FakeAccountRepository()),
         ledgerRepositoryProvider.overrideWith(
           (ref) async => _FakeLedgerRepository(ledger: _testLedger()),
         ),

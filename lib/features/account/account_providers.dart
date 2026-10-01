@@ -46,8 +46,10 @@ Future<List<Account>> accountsList(Ref ref) async {
     final txs = await txRepo.listActiveByLedger(ledgerId);
     final nets = aggregateNetAmountsByAccount(txs);
     final sorted = [...accounts]..sort((a, b) {
-        final ba = nets[a.id] ?? 0;
-        final bb = nets[b.id] ?? 0;
+        final netA = nets[a.id];
+        final netB = nets[b.id];
+        final ba = netA != null ? netA.converted : 0.0;
+        final bb = netB != null ? netB.converted : 0.0;
         return bb.compareTo(ba);
       });
     return sorted;

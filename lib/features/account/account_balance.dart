@@ -4,67 +4,118 @@ import '../../domain/entity/transaction_entry.dart';
 /// 单个账户在某条时间线上的当前余额。
 ///
 /// 字段语义：
-/// - [netAmount]：流水净额（参与计算的全部 income/expense/transfer 给该账户
-///   带来的净增减）。
-/// - [currentBalance] = [netAmount]。账户不再保存余额字段，当前余额完全由
-///   未删除流水计算得出。
+/// - [netAmount]：流水净额（账户原始币种），用于卡片展示和详情页。
+/// - [netAmountConverted]：换算为账本默认币种后的净额，用于汇总计算总资产。
+/// - [currency]：账户币种。
+/// - [currentBalance] = [netAmount]（原始币种）。
+/// - [currentBalanceConverted] = [netAmountConverted]（换算后）。
 class AccountBalance {
-  const AccountBalance({required this.accountId, required this.netAmount});
+  const AccountBalance({
+    required this.accountId,
+    required this.netAmount,
+    required this.netAmountConverted,
+    required this.currency,
+  });
 
   final String accountId;
-  final double netAmount;
+  final double netAmount; // 原始币种金额
+  final double netAmountConverted; // 换算为账本默认币种
+  final String currency; // 账户币种
 
   double get currentBalance => netAmount;
+  double get currentBalanceConverted => netAmountConverted;
+
+  /// 根据账户币种返回对应的货币符号
+  String get currencySymbol {
+    switch (currency) {
+      case 'CNY':
+        return '¥';
+      case 'USD':
+        return '\$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      case 'JPY':
+        return '¥';
+      case 'HKD':
+        return 'HK\$';
+      default:
+        return '¥';
+    }
+  }
 
   @override
   bool operator ==(Object other) =>
       other is AccountBalance &&
       other.accountId == accountId &&
-      other.netAmount == netAmount;
+      other.netAmount == netAmount &&
+      other.netAmountConverted == netAmountConverted &&
+      other.currency == currency;
 
   @override
-  int get hashCode => Object.hash(accountId, netAmount);
+  int get hashCode =>
+      Object.hash(accountId, netAmount, netAmountConverted, currency);
 
   @override
   String toString() =>
       'AccountBalance(accountId: $accountId, '
-      'netAmount: $netAmount, currentBalance: $currentBalance)';
+      'netAmount: $netAmount, netAmountConverted: $netAmountConverted, '
+      'currency: $currency, currentBalance: $currentBalance)';
 }
 
-/// 给定一组流水，按账户聚合净流入金额。
+/// 给定一组流水，按账户聚合净流入金额，返回原始币种金额和换算后金额。
 ///
 /// 规则（与 design-document §5.6 + §7.1 transaction_entry 一致）：
-/// - `type == 'expense'`：从 `accountId` 扣除 `amount`。
-/// - `type == 'income'`：向 `accountId` 增加 `amount`。
-/// - `type == 'transfer'`：从 `accountId` 扣除 `amount`，向 `toAccountId`
-///   增加 `amount`。
-/// - 已软删流水（`deletedAt != null`）会被过滤掉——调用方传入的列表通常已经
-///   是 `listActiveByLedger` 的结果，但保留过滤防御未来可能直接传 raw row。
-/// - `accountId` / `toAccountId` 为 null 的流水（例如还没绑定账户的旧数据）
-///   会被静默忽略——不计入任何账户净额。
-Map<String, double> aggregateNetAmountsByAccount(
+/// - `type == 'expense'`：从 `accountId` 扣除 `amount`（原始）和 `amount * fxRate`（换算）。
+/// - `type == 'income'`：向 `accountId` 增加 `amount`（原始）和 `amount * fxRate`（换算）。
+/// - `type == 'transfer'`：从 `accountId` 扣除，向 `toAccountId` 增加。
+/// - **多币种优化**：同时计算原始币种金额（用于卡片展示）和换算后金额（用于总资产汇总）。
+/// - 已软删流水（`deletedAt != null`）会被过滤掉。
+/// - `accountId` / `toAccountId` 为 null 的流水会被静默忽略。
+///
+/// 返回值：Map 的 key 为 accountId，value 为 (original: 原始币种金额, converted: 换算后金额)
+Map<String, ({double original, double converted})> aggregateNetAmountsByAccount(
   Iterable<TransactionEntry> transactions,
 ) {
-  final result = <String, double>{};
+  final result = <String, ({double original, double converted})>{};
   for (final tx in transactions) {
     if (tx.deletedAt != null) continue;
+    final originalAmount = tx.amount;
+    final convertedAmount = tx.amount * tx.fxRate;
     switch (tx.type) {
       case 'expense':
         final id = tx.accountId;
         if (id == null) continue;
-        result[id] = (result[id] ?? 0) - tx.amount;
+        final prev = result[id] ?? (original: 0.0, converted: 0.0);
+        result[id] = (
+          original: prev.original - originalAmount,
+          converted: prev.converted - convertedAmount,
+        );
       case 'income':
         final id = tx.accountId;
         if (id == null) continue;
-        result[id] = (result[id] ?? 0) + tx.amount;
+        final prev = result[id] ?? (original: 0.0, converted: 0.0);
+        result[id] = (
+          original: prev.original + originalAmount,
+          converted: prev.converted + convertedAmount,
+        );
       case 'transfer':
         final from = tx.accountId;
         final to = tx.toAccountId;
         if (from != null && from.isNotEmpty) {
-          result[from] = (result[from] ?? 0) - tx.amount;
+          final prev = result[from] ?? (original: 0.0, converted: 0.0);
+          result[from] = (
+            original: prev.original - originalAmount,
+            converted: prev.converted - convertedAmount,
+          );
         }
         if (to != null && to.isNotEmpty) {
-          result[to] = (result[to] ?? 0) + tx.amount;
+          final prev = result[to] ?? (original: 0.0, converted: 0.0);
+          result[to] = (
+            original: prev.original + originalAmount,
+            converted: prev.converted + convertedAmount,
+          );
         }
       default:
         // 未来若引入新 type（如 'refund'），保持向前兼容：默认忽略。
@@ -85,11 +136,19 @@ List<AccountBalance> computeAccountBalances({
   final nets = aggregateNetAmountsByAccount(transactions);
   return [
     for (final acc in accounts)
-      AccountBalance(accountId: acc.id, netAmount: nets[acc.id] ?? 0),
+      AccountBalance(
+        accountId: acc.id,
+        netAmount: nets[acc.id]?.original ?? 0,
+        netAmountConverted: nets[acc.id]?.converted ?? 0,
+        currency: acc.currency,
+      ),
   ];
 }
 
 /// 计算"总资产"——只把 [Account.includeInTotal] = true 的账户当前余额相加。
+///
+/// **多币种优化**：使用换算后的金额（netAmountConverted）进行汇总，确保不同币种
+/// 账户可以正确求和。
 ///
 /// 实施计划 Step 7.1 验收：切换 `includeInTotal` 时数值跟随变化；信用卡账户
 /// 当前余额可为负（计入即为减项）。
@@ -101,15 +160,17 @@ double computeTotalAssets({
   var total = 0.0;
   for (final acc in accounts) {
     if (!acc.includeInTotal) continue;
-    total += nets[acc.id] ?? 0;
+    total += nets[acc.id]?.converted ?? 0;
   }
   return total;
 }
 
 /// 资产/负债二分：按 `includeInTotal` 账户当前余额的正负拆分。
 ///
-/// - `assets`：Σ max(0, currentBalance)——仅取正余额。
-/// - `liabilities`：Σ |min(0, currentBalance)|——欠款绝对值之和。
+/// **多币种优化**：使用换算后的金额（netAmountConverted）进行汇总。
+///
+/// - `assets`：Σ max(0, currentBalanceConverted)——仅取正余额。
+/// - `liabilities`：Σ |min(0, currentBalanceConverted)|——欠款绝对值之和。
 ///
 /// 性质：`assets - liabilities == computeTotalAssets(...)`（净资产即总资产）。
 /// 资产页顶部卡片在「余额按正负拆分」口径下消费本结果。
@@ -122,7 +183,7 @@ double computeTotalAssets({
   var liabilities = 0.0;
   for (final acc in accounts) {
     if (!acc.includeInTotal) continue;
-    final balance = nets[acc.id] ?? 0;
+    final balance = nets[acc.id]?.converted ?? 0;
     if (balance >= 0) {
       assets += balance;
     } else {

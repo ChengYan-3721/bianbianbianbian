@@ -494,6 +494,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordNewTransferSameError => '转出账户和转入账户不能相同';
 
   @override
+  String get recordNewTransferCurrencyMismatch => '转账仅支持相同币种的账户';
+
+  @override
   String get recordNewErrorNoAmount => '请输入大于 0 的金额';
 
   @override
@@ -578,6 +581,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordSearchNoResult => '没有找到相关流水';
+
+  @override
+  String get recordCalendarUnderBudget => '未超出预算';
+
+  @override
+  String get recordCalendarHasRecords => '有流水';
+
+  @override
+  String get recordCalendarOverBudget => '超出预算';
+
+  @override
+  String get recordCalendarSetBudget => '设置预算';
+
+  @override
+  String get recordCalendarEmptyDay => '嘿，今天什么都没有~';
 
   @override
   String get recordMonthPrevYear => '上一年';
@@ -2490,6 +2508,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get a11yRecordHomeSearch => '搜索流水';
+
+  @override
+  String get a11yRecordHomeCalendar => '月历视图';
 
   @override
   String get a11yRecordHomeSwapCurrency => '切换主副币种';

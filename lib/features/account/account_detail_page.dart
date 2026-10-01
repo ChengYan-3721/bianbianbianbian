@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../app/app_theme.dart';
 import '../../core/l10n/l10n_ext.dart';
 import '../../core/util/category_icon_packs.dart';
+import '../../core/util/currencies.dart';
 import '../../core/util/svg_or_emoji_icon.dart';
 import '../../domain/entity/account.dart';
 import '../../domain/entity/category.dart';
@@ -16,6 +17,13 @@ import '../record/record_tile_actions.dart'
 import '../settings/settings_providers.dart' show currentIconPackProvider;
 import 'account_balance.dart';
 import 'account_providers.dart';
+
+/// 根据币种代码返回符号（例如 'CNY' → '¥', 'USD' → '$'）。
+String _getCurrencySymbol(String code) {
+  return kBuiltInCurrencies
+      .firstWhere((c) => c.code == code, orElse: () => const Currency(code: '', symbol: '¥', name: ''))
+      .symbol;
+}
 
 /// 账户详情页（资产页重构 · 2026-05）：
 ///
@@ -133,9 +141,11 @@ class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
                 transactions: txs,
               );
               final balance = _currentBalance(account, txs);
+              final currencySymbol = _getCurrencySymbol(account.currency);
               return _DetailBody(
                 account: account,
                 balance: balance,
+                currencySymbol: currencySymbol,
                 year: _year,
                 detail: detail,
                 expandedMonths: _expandedMonths,
@@ -162,7 +172,7 @@ class _AccountDetailPageState extends ConsumerState<AccountDetailPage> {
 
   double _currentBalance(Account account, List<TransactionEntry> txs) {
     final nets = aggregateNetAmountsByAccount(txs);
-    return nets[account.id] ?? 0;
+    return nets[account.id]?.original ?? 0.0;
   }
 }
 
@@ -170,6 +180,7 @@ class _DetailBody extends ConsumerWidget {
   const _DetailBody({
     required this.account,
     required this.balance,
+    required this.currencySymbol,
     required this.year,
     required this.detail,
     required this.expandedMonths,
@@ -181,6 +192,7 @@ class _DetailBody extends ConsumerWidget {
 
   final Account account;
   final double balance;
+  final String currencySymbol;
   final int year;
   final AccountYearDetail detail;
   final Set<int> expandedMonths;
@@ -204,6 +216,7 @@ class _DetailBody extends ConsumerWidget {
       children: [
         _HeaderCard(
           balance: balance,
+          currencySymbol: currencySymbol,
           year: year,
           yearInflow: detail.yearInflow,
           yearOutflow: detail.yearOutflow,
@@ -219,6 +232,7 @@ class _DetailBody extends ConsumerWidget {
               padding: const EdgeInsets.only(bottom: 10),
               child: _MonthCard(
                 account: account,
+                currencySymbol: currencySymbol,
                 group: group,
                 year: year,
                 expanded: expandedMonths.contains(group.month),
@@ -233,6 +247,7 @@ class _DetailBody extends ConsumerWidget {
 class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
     required this.balance,
+    required this.currencySymbol,
     required this.year,
     required this.yearInflow,
     required this.yearOutflow,
@@ -241,6 +256,7 @@ class _HeaderCard extends StatelessWidget {
   });
 
   final double balance;
+  final String currencySymbol;
   final int year;
   final double yearInflow;
   final double yearOutflow;
@@ -268,7 +284,7 @@ class _HeaderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '¥${_fmt.format(balance)}',
+            '$currencySymbol${_fmt.format(balance)}',
             key: const Key('account_detail_balance'),
             style: theme.textTheme.headlineMedium?.copyWith(
               color: fg,
@@ -297,6 +313,7 @@ class _HeaderCard extends StatelessWidget {
               Expanded(
                 child: _HeaderStat(
                   amount: yearOutflow,
+                  currencySymbol: currencySymbol,
                   label: context.l10n.accountDetailOutflow,
                   fg: fg,
                   amountKey: const Key('account_detail_year_outflow'),
@@ -305,6 +322,7 @@ class _HeaderCard extends StatelessWidget {
               Expanded(
                 child: _HeaderStat(
                   amount: yearInflow,
+                  currencySymbol: currencySymbol,
                   label: context.l10n.accountDetailInflow,
                   fg: fg,
                   amountKey: const Key('account_detail_year_inflow'),
@@ -383,12 +401,14 @@ class _YearSwitcher extends StatelessWidget {
 class _HeaderStat extends StatelessWidget {
   const _HeaderStat({
     required this.amount,
+    required this.currencySymbol,
     required this.label,
     required this.fg,
     required this.amountKey,
   });
 
   final double amount;
+  final String currencySymbol;
   final String label;
   final Color fg;
   final Key amountKey;
@@ -402,7 +422,7 @@ class _HeaderStat extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '¥${_fmt.format(amount)}',
+          '$currencySymbol${_fmt.format(amount)}',
           key: amountKey,
           style: theme.textTheme.titleMedium?.copyWith(
             color: fg,
@@ -452,6 +472,7 @@ class _EmptyYearWidget extends StatelessWidget {
 class _MonthCard extends ConsumerWidget {
   const _MonthCard({
     required this.account,
+    required this.currencySymbol,
     required this.group,
     required this.year,
     required this.expanded,
@@ -459,6 +480,7 @@ class _MonthCard extends ConsumerWidget {
   });
 
   final Account account;
+  final String currencySymbol;
   final AccountMonthGroup group;
   final int year;
   final bool expanded;
@@ -483,10 +505,10 @@ class _MonthCard extends ConsumerWidget {
       group.month.toString().padLeft(2, '0'),
     );
     final inflowLine = context.l10n.accountDetailInflowLine(
-      _fmt.format(group.inflow),
+      '$currencySymbol${_fmt.format(group.inflow)}',
     );
     final outflowLine = context.l10n.accountDetailOutflowLine(
-      _fmt.format(group.outflow),
+      '$currencySymbol${_fmt.format(group.outflow)}',
     );
 
     return Card(
@@ -559,7 +581,11 @@ class _MonthCard extends ConsumerWidget {
             ),
           ),
           if (expanded)
-            _MonthBody(account: account, transactions: group.transactions),
+            _MonthBody(
+              account: account,
+              currencySymbol: currencySymbol,
+              transactions: group.transactions,
+            ),
         ],
       ),
     );
@@ -567,9 +593,14 @@ class _MonthCard extends ConsumerWidget {
 }
 
 class _MonthBody extends ConsumerWidget {
-  const _MonthBody({required this.account, required this.transactions});
+  const _MonthBody({
+    required this.account,
+    required this.currencySymbol,
+    required this.transactions,
+  });
 
   final Account account;
+  final String currencySymbol;
   final List<TransactionEntry> transactions;
 
   @override
@@ -622,6 +653,7 @@ class _MonthBody extends ConsumerWidget {
         _TxRow(
           tx: tx,
           account: account,
+          currencySymbol: currencySymbol,
           accounts: accounts,
           categories: categories,
           iconPack: iconPack,
@@ -652,6 +684,7 @@ class _TxRow extends ConsumerWidget {
   const _TxRow({
     required this.tx,
     required this.account,
+    required this.currencySymbol,
     required this.accounts,
     required this.categories,
     required this.iconPack,
@@ -660,6 +693,7 @@ class _TxRow extends ConsumerWidget {
 
   final TransactionEntry tx;
   final Account account;
+  final String currencySymbol;
   final List<Account> accounts;
   final List<Category> categories;
   final BianBianIconPack iconPack;
@@ -794,7 +828,7 @@ class _TxRow extends ConsumerWidget {
               ),
             ),
             Text(
-              '$sign¥${_fmt.format(tx.amount)}',
+              '$sign$currencySymbol${_fmt.format(tx.amount)}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: amountColor,
                 fontWeight: FontWeight.w600,

@@ -205,12 +205,14 @@ Category _testCategory({
 Account _testAccount({
   String id = 'acc-cash',
   String name = '现金',
+  String currency = 'CNY',
 }) =>
     Account(
       id: id,
       name: name,
       type: 'cash',
       icon: '💵',
+      currency: currency,
       updatedAt: DateTime(2026, 4),
       deviceId: 'test-device',
     );
@@ -594,53 +596,93 @@ void main() {
     });
   });
 
-  // ---- Step 8.2：币种选择器 + fxRate 持久化 ----
+  // ---- Step 8.2：币种由账户决定 + fxRate 持久化 ----
 
-  group('Step 8.2 币种选择', () {
-    testWidgets('点击键盘 CNY 键打开下拉、选择 USD 后金额前缀变 \$', (tester) async {
+  group('Step 8.2 币种由账户决定', () {
+    testWidgets('选择 USD 账户后金额前缀自动变为 \$', (tester) async {
+      // 创建 CNY 和 USD 两个账户
+      final accounts = [
+        _testAccount(id: 'acc-cash-cny', name: '现金 CNY', currency: 'CNY'),
+        _testAccount(id: 'acc-cash-usd', name: '现金 USD', currency: 'USD'),
+      ];
+
       await tester.pumpWidget(_wrapApp(
         const RecordNewPage(),
-        overrides: _formOverrides(multiCurrencyEnabled: true),
+        overrides: _formOverrides(
+          accounts: accounts,
+          multiCurrencyEnabled: true,
+        ),
       ));
       await tester.pumpAndSettle();
 
-      await _enterKeyboardStage(tester);
+      // 选择分类进入键盘阶段
+      await tester.tap(find.text('食').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('🍔').first);
+      await tester.pumpAndSettle();
+
+      // 手动设置第一个账户（CNY）
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RecordNewPage)),
+      );
+      container.read(recordFormProvider.notifier).setAccount('acc-cash-cny');
+      await tester.pumpAndSettle();
+
       await tapKeys(tester, ['1', '0']);
 
-      // 默认 CNY 币种 → 金额前缀 ¥
+      // 默认选中第一个账户（CNY）→ 金额前缀 ¥
       expect(find.text('¥ 10'), findsWidgets);
 
-      // 点击键盘左下角 CNY 键 → 打开 _CurrencyPicker
-      await tester.tap(find.text('CNY').first);
-      await tester.pumpAndSettle();
-      expect(find.text('选择币种'), findsOneWidget);
-
-      // 选择 USD（lookup by Key 比 textContaining 稳）
-      await tester.tap(find.byKey(const Key('currency_picker_USD')));
+      // 点击账户字段
+      await tester.tap(find.text('现金 CNY'));
       await tester.pumpAndSettle();
 
-      // 关闭后金额前缀变 $（form.currency 已切换）
+      // 选择 USD 账户
+      await tester.tap(find.text('现金 USD'));
+      await tester.pumpAndSettle();
+
+      // 选择账户后金额前缀自动变 $（form.currency 跟随账户变化）
       expect(find.text('\$ 10'), findsWidgets);
       // 键盘标签也跟着变
       expect(find.text('USD'), findsWidgets);
     });
 
-    testWidgets('保存 USD 10：写入 currency=USD、fxRate=7.2 → 折合 72 CNY', (tester) async {
+    testWidgets('保存到 USD 账户：写入 currency=USD、fxRate=7.2 → 折合 72 CNY', (tester) async {
       final txRepo = _FakeTransactionRepository();
+      final accounts = [
+        _testAccount(id: 'acc-cash-cny', name: '现金 CNY', currency: 'CNY'),
+        _testAccount(id: 'acc-cash-usd', name: '现金 USD', currency: 'USD'),
+      ];
+
       await tester.pumpWidget(_wrapApp(
         const RecordNewPage(),
         overrides: _saveOverrides(
+          accounts: accounts,
           txRepo: txRepo,
           multiCurrencyEnabled: true,
         ),
       ));
       await tester.pumpAndSettle();
 
-      await _enterKeyboardStage(tester);
-      // 切换到 USD
-      await tester.tap(find.text('CNY').first);
+      // 选择分类进入键盘阶段
+      await tester.tap(find.text('食').first);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('currency_picker_USD')));
+      await tester.tap(find.text('🍔').first);
+      await tester.pumpAndSettle();
+
+      // 手动设置第一个账户（CNY）
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RecordNewPage)),
+      );
+      container.read(recordFormProvider.notifier).setAccount('acc-cash-cny');
+      await tester.pumpAndSettle();
+
+      // 点击账户字段
+      await tester.tap(find.text('现金 CNY'));
+      await tester.pumpAndSettle();
+
+      // 选择 USD 账户
+      await tester.tap(find.text('现金 USD'));
       await tester.pumpAndSettle();
 
       await tapKeys(tester, ['1', '0']);

@@ -5,13 +5,22 @@ import 'package:intl/intl.dart';
 
 import '../../app/app_theme.dart';
 import '../../core/l10n/l10n_ext.dart';
+import '../../core/util/currencies.dart';
 import '../../data/repository/providers.dart';
 import '../../core/util/svg_or_emoji_icon.dart';
 import '../../domain/entity/account.dart';
 import '../record/record_new_page.dart';
 import '../record/record_new_providers.dart';
+import '../settings/settings_providers.dart';
 import 'account_balance.dart';
 import 'account_providers.dart';
+
+/// 根据币种代码返回符号（例如 'CNY' → '¥', 'USD' → '$'）。
+String _getCurrencySymbol(String code) {
+  return kBuiltInCurrencies
+      .firstWhere((c) => c.code == code, orElse: () => const Currency(code: '', symbol: '¥', name: ''))
+      .symbol;
+}
 
 /// 资产 Tab（Step 7.1 列表 / Step 7.2 CRUD / 重构版）：顶部"资产"卡片
 /// （资产 / 净资产 / 负债 三值） + 下方账户卡片列表。
@@ -233,7 +242,7 @@ class AccountListPage extends ConsumerWidget {
   }
 }
 
-class _AssetsOverviewCard extends StatelessWidget {
+class _AssetsOverviewCard extends ConsumerWidget {
   const _AssetsOverviewCard({
     required this.assetLiabilityAsync,
     required this.onTransfer,
@@ -245,16 +254,23 @@ class _AssetsOverviewCard extends StatelessWidget {
   static final _fmt = NumberFormat('#,##0.00');
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final loadFailed = context.l10n.loadFailed;
+    final defaultCurrencyAsync = ref.watch(currentLedgerDefaultCurrencyProvider);
+    final currencySymbol = defaultCurrencyAsync.when(
+      data: (code) => _getCurrencySymbol(code),
+      loading: () => '¥',
+      error: (Object error, StackTrace stackTrace) => '¥',
+    );
+
     final (assetsText, netText, liabilitiesText) = assetLiabilityAsync.when(
       loading: () => ('--', '--', '--'),
       error: (e, _) => (loadFailed, loadFailed, loadFailed),
       data: (v) => (
-        '¥${_fmt.format(v.assets)}',
-        '¥${_fmt.format(v.assets - v.liabilities)}',
-        '¥${_fmt.format(v.liabilities)}',
+        '$currencySymbol${_fmt.format(v.assets)}',
+        '$currencySymbol${_fmt.format(v.assets - v.liabilities)}',
+        '$currencySymbol${_fmt.format(v.liabilities)}',
       ),
     );
 
@@ -504,7 +520,7 @@ class _AccountCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${isNegative ? '-' : ''}¥${_fmt.format(amount.abs())}',
+                '${isNegative ? '-' : ''}${balance?.currencySymbol ?? '¥'}${_fmt.format(amount.abs())}',
                 key: Key('account_balance_${account.id}'),
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: amountColor,

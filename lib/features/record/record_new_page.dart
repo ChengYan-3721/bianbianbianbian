@@ -29,10 +29,12 @@ class RecordNewPage extends ConsumerStatefulWidget {
     super.key,
     this.isTransfer = false,
     this.startAtKeyboard = false,
+    this.initialOccurredAt,
   });
 
   final bool isTransfer;
   final bool startAtKeyboard;
+  final DateTime? initialOccurredAt;
 
   /// 一级分类 tab 列表：短标签 + key。因短标签依赖 l10n，需在 build 时从
   /// [BuildContext] 取值。'☆' 固定不变（收藏 tab 不走 l10n）。
@@ -83,6 +85,9 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
       if (!hasPreload) {
         notifier.reset();
         notifier.initDefaultCurrency();
+        if (widget.initialOccurredAt != null) {
+          notifier.setOccurredAt(widget.initialOccurredAt);
+        }
         if (widget.isTransfer) {
           notifier.setTransferMode(true);
         }
@@ -160,17 +165,7 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
               onKeyTap: notifier.onKeyTap,
               currencyLabel: form.currency,
               showEquals: notifier.hasOperator,
-              onCurrencyTap: () async {
-                // Step 8.2：CNY 键改为打开 11 内置币种下拉。
-                final picked = await showModalBottomSheet<String>(
-                  context: context,
-                  builder: (sheetContext) =>
-                      _CurrencyPicker(selectedCode: form.currency),
-                );
-                if (picked != null && picked != form.currency) {
-                  notifier.setCurrency(picked);
-                }
-              },
+              onCurrencyTap: null, // 多币种优化：禁用币种切换，币种由账户决定
               showCurrencyKey: showCurrencyKey,
               onActionTap: () async {
                 if (notifier.hasOperator) {
@@ -182,18 +177,30 @@ class _RecordNewPageState extends ConsumerState<RecordNewPage> {
                 if (validationKey != null) {
                   final l10n = context.l10n;
                   final msg = _validationMessage(l10n, validationKey);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(msg)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(msg)));
                   return;
                 }
                 final navigator = Navigator.of(context);
                 final canPop = navigator.canPop();
                 final goRouter = GoRouter.of(context);
                 final modalRoute = ModalRoute.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                final l10n = context.l10n;
                 final ok = await notifier.save();
                 if (!mounted) return;
-                if (!ok) return;
+                if (!ok) {
+                  // 多币种优化：保存失败可能是币种不匹配（转账时异步校验）
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        l10n.recordNewTransferCurrencyMismatch,
+                      ),
+                    ),
+                  );
+                  return;
+                }
                 // canPop=true：当前在 modal sheet 内（FAB / 转账 / 编辑 / 复制
                 // 入口），关闭 sheet 即可。canPop=false：当前是路由栈顶
                 // （小组件深链 go('/record/new') 替换栈），跳回首页。
@@ -317,6 +324,7 @@ class _KeyboardStage extends ConsumerWidget {
                   onBackToCategory: onBackToCategory,
                   onTimeChanged: notifier.setOccurredAt,
                   onAccountSelected: notifier.setAccount,
+                  onAccountSelectedAndSyncCurrency: notifier.setAccountAndSyncCurrency,
                   onToAccountSelected: notifier.setToAccount,
                   onNoteChanged: notifier.setNote,
                   isTransfer: isTransfer,
@@ -593,6 +601,7 @@ class _MetaToolbar extends StatelessWidget {
     required this.onBackToCategory,
     required this.onTimeChanged,
     required this.onAccountSelected,
+    required this.onAccountSelectedAndSyncCurrency,
     required this.onToAccountSelected,
     required this.onNoteChanged,
     required this.isTransfer,
@@ -603,6 +612,7 @@ class _MetaToolbar extends StatelessWidget {
   final VoidCallback onBackToCategory;
   final ValueChanged<DateTime?> onTimeChanged;
   final ValueChanged<String?> onAccountSelected;
+  final Future<void> Function(String?) onAccountSelectedAndSyncCurrency;
   final ValueChanged<String?> onToAccountSelected;
   final ValueChanged<String> onNoteChanged;
   final bool isTransfer;
@@ -624,7 +634,10 @@ class _MetaToolbar extends StatelessWidget {
                 child: isTransfer
                     ? _WalletPillButton(
                         selectedId: form.accountId,
-                        onSelected: onAccountSelected,
+                        onSelected: (id) async {
+                          // 多币种优化：选择账户后同步币种
+                          await onAccountSelectedAndSyncCurrency(id);
+                        },
                         emptyText: context.l10n.recordNewFromAccount,
                         icon: Icons.call_made,
                         excludeId: form.toAccountId,
@@ -730,10 +743,14 @@ class _MetaToolbar extends StatelessWidget {
                         emptyText: context.l10n.recordNewToAccount,
                         icon: Icons.call_received,
                         excludeId: form.accountId,
+                        filterCurrency: form.currency,
                       )
                     : _WalletPillButton(
                         selectedId: form.accountId,
-                        onSelected: onAccountSelected,
+                        onSelected: (id) async {
+                          // 多币种优化：选择账户后同步币种
+                          await onAccountSelectedAndSyncCurrency(id);
+                        },
                         emptyText: context.l10n.recordNewWallet,
                       ),
               ),
@@ -805,6 +822,7 @@ class _WalletPillButton extends ConsumerWidget {
     required this.emptyText,
     this.icon = Icons.account_balance_wallet_outlined,
     this.excludeId,
+    this.filterCurrency,
   });
 
   final String? selectedId;
@@ -812,6 +830,8 @@ class _WalletPillButton extends ConsumerWidget {
   final String emptyText;
   final IconData icon;
   final String? excludeId;
+  /// 多币种优化：转账时过滤出与指定币种相同的账户
+  final String? filterCurrency;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -832,9 +852,15 @@ class _WalletPillButton extends ConsumerWidget {
         onTap: _noop,
       ),
       data: (allAccounts) {
-        final accounts = excludeId == null
+        // 多币种优化：转账时过滤出与指定币种相同的账户
+        var accounts = excludeId == null
             ? allAccounts
             : allAccounts.where((a) => a.id != excludeId).toList();
+
+        if (filterCurrency != null) {
+          accounts = accounts.where((a) => a.currency == filterCurrency).toList();
+        }
+
         final selected = selectedId == null
             ? null
             : allAccounts.where((a) => a.id == selectedId).firstOrNull;
@@ -895,7 +921,8 @@ class _AccountBalanceText extends StatelessWidget {
   Widget build(BuildContext context) {
     final amount = balance?.currentBalance ?? 0;
     final isNegative = amount < 0;
-    final text = '${isNegative ? '-' : ''}¥${_fmt.format(amount.abs())}';
+    final currencySymbol = currencySymbolOf(account.currency);
+    final text = '${isNegative ? '-' : ''}$currencySymbol${_fmt.format(amount.abs())}';
     return Text(
       text,
       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -916,6 +943,8 @@ String _validationMessage(AppLocalizations l10n, String key) {
       return l10n.recordNewErrorNoAccount;
     case 'recordNewTransferSameError':
       return l10n.recordNewTransferSameError;
+    case 'recordNewTransferCurrencyMismatch':
+      return l10n.recordNewTransferCurrencyMismatch;
     default:
       return l10n.tip;
   }
@@ -1142,6 +1171,7 @@ class _TransferEntryStage extends ConsumerWidget {
             onBackToCategory: _noop,
             onTimeChanged: ref.read(recordFormProvider.notifier).setOccurredAt,
             onAccountSelected: ref.read(recordFormProvider.notifier).setAccount,
+            onAccountSelectedAndSyncCurrency: ref.read(recordFormProvider.notifier).setAccountAndSyncCurrency,
             onToAccountSelected: ref
                 .read(recordFormProvider.notifier)
                 .setToAccount,
@@ -1196,80 +1226,6 @@ class _NotePillButton extends ConsumerWidget {
   }
 }
 
-/// Step 8.2：币种选择器底部抽屉。
-///
-/// 罗列 [kBuiltInCurrencies] 11 种内置币种；当前选中项尾部带 ✓。点击某行
-/// `Navigator.pop(context, code)` 把 ISO 码回传给调用方。
-class _CurrencyPicker extends StatelessWidget {
-  const _CurrencyPicker({required this.selectedCode});
-
-  final String selectedCode;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(top: 6, bottom: 8),
-              decoration: BoxDecoration(
-                color: colors.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  context.l10n.recordNewSelectCurrency,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: kBuiltInCurrencies.length,
-                itemBuilder: (context, index) {
-                  final c = kBuiltInCurrencies[index];
-                  final selected = c.code == selectedCode;
-                  return ListTile(
-                    key: Key('currency_picker_${c.code}'),
-                    leading: SizedBox(
-                      width: 68,
-                      child: Text(
-                        c.symbol,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    title: Text('${c.code}  ·  ${c.name}'),
-                    trailing: selected
-                        ? Icon(Icons.check, color: colors.primary)
-                        : null,
-                    onTap: () => Navigator.pop(context, c.code),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // Step 11.2 的 `_AttachmentBrokenTile` 在 Step 11.3 重构后被
 // `widgets/attachment_thumbnail.dart::AttachmentThumbnail` 完全替代——后者

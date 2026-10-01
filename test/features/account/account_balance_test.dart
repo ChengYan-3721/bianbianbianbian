@@ -50,14 +50,16 @@ void main() {
       final nets = aggregateNetAmountsByAccount([
         _tx(id: 't1', type: 'expense', amount: 30, accountId: 'A'),
       ]);
-      expect(nets, {'A': -30});
+      expect(nets['A']?.original, -30);
+      expect(nets['A']?.converted, -30);
     });
 
     test('income adds to accountId', () {
       final nets = aggregateNetAmountsByAccount([
         _tx(id: 't1', type: 'income', amount: 100, accountId: 'A'),
       ]);
-      expect(nets, {'A': 100});
+      expect(nets['A']?.original, 100);
+      expect(nets['A']?.converted, 100);
     });
 
     test('transfer subtracts from source and adds to target', () {
@@ -70,7 +72,10 @@ void main() {
           toAccountId: 'B',
         ),
       ]);
-      expect(nets, {'A': -200, 'B': 200});
+      expect(nets['A']?.original, -200);
+      expect(nets['A']?.converted, -200);
+      expect(nets['B']?.original, 200);
+      expect(nets['B']?.converted, 200);
     });
 
     test('deleted transactions and empty account ids are ignored', () {
@@ -85,7 +90,8 @@ void main() {
         ),
         _tx(id: 't3', type: 'income', amount: 50),
       ]);
-      expect(nets, {'A': -30});
+      expect(nets['A']?.original, -30);
+      expect(nets['A']?.converted, -30);
     });
   });
 

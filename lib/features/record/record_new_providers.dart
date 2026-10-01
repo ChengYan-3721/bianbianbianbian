@@ -77,6 +77,7 @@ class RecordFormData {
   /// 保存校验不通过时返回原因文本 key（对应 l10n），可保存时返回 null。
   ///
   /// 仅校验金额 > 0、账户已选、日期已设；分类可选（未分类流水视为支出）。
+  /// 多币种优化：转账时的币种校验推迟到保存时（需要异步查询账户信息）。
   String? get saveValidationError {
     if (amount == null || amount! <= 0) return 'recordNewErrorNoAmount';
     if (isTransfer) {
@@ -84,6 +85,7 @@ class RecordFormData {
         return 'recordNewErrorNoAccount';
       }
       if (accountId == toAccountId) return 'recordNewTransferSameError';
+      // 币种不同的校验在 save() 里异步执行
       return null;
     }
     if (accountId == null) return 'recordNewErrorNoAccount';
@@ -253,6 +255,35 @@ class RecordForm extends _$RecordForm {
 
   void setToAccount(String? id) => state = state.copyWith(toAccountId: () => id);
 
+  /// 多币种优化：选择账户后，自动将流水币种设为该账户的币种。
+  /// 同时更新表单的 currency 字段，确保流水币种跟随账户。
+  /// 如果是转账模式且切换了币种，清空不匹配的转入账户。
+  Future<void> setAccountAndSyncCurrency(String? id) async {
+    state = state.copyWith(accountId: () => id);
+    if (id != null) {
+      final accRepo = await ref.read(accountRepositoryProvider.future);
+      final acc = await accRepo.getById(id);
+      if (acc != null) {
+        final oldCurrency = state.currency;
+        final newCurrency = acc.currency;
+
+        // 更新币种
+        state = state.copyWith(currency: newCurrency);
+
+        // 转账模式下，如果币种变化且已选择转入账户，检查转入账户币种是否匹配
+        if (state.isTransfer &&
+            oldCurrency != newCurrency &&
+            state.toAccountId != null) {
+          final toAcc = await accRepo.getById(state.toAccountId!);
+          if (toAcc != null && toAcc.currency != newCurrency) {
+            // 转入账户币种不匹配，自动清空
+            state = state.copyWith(toAccountId: () => null);
+          }
+        }
+      }
+    }
+  }
+
   /// 自动填入默认账户：上次使用的 → 第一个活跃账户（现金）。
   Future<void> initDefaultAccount() async {
     if (state.accountId != null) return;
@@ -397,9 +428,21 @@ class RecordForm extends _$RecordForm {
   /// [AttachmentMeta]，encode 端永远输出 v9 形态。
 
   /// 保存流水。返回 `true` 表示成功。
+  /// 多币种优化：转账时校验两个账户币种必须相同。
   Future<bool> save() async {
     if (!state.canSave) return false;
     final d = state;
+
+    // 多币种优化：转账时校验币种一致性
+    if (d.isTransfer && d.accountId != null && d.toAccountId != null) {
+      final accRepo = await ref.read(accountRepositoryProvider.future);
+      final fromAcc = await accRepo.getById(d.accountId!);
+      final toAcc = await accRepo.getById(d.toAccountId!);
+      if (fromAcc != null && toAcc != null && fromAcc.currency != toAcc.currency) {
+        // 币种不同，阻止保存
+        return false;
+      }
+    }
 
     final txRepo = await ref.read(transactionRepositoryProvider.future);
     final ledgerId = await ref.read(currentLedgerIdProvider.future);

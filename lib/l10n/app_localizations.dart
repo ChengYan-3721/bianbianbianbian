@@ -1000,6 +1000,12 @@ abstract class AppLocalizations {
   /// **'转出账户和转入账户不能相同'**
   String get recordNewTransferSameError;
 
+  /// No description provided for @recordNewTransferCurrencyMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'转账仅支持相同币种的账户'**
+  String get recordNewTransferCurrencyMismatch;
+
   /// No description provided for @recordNewErrorNoAmount.
   ///
   /// In zh, this message translates to:
@@ -1167,6 +1173,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'没有找到相关流水'**
   String get recordSearchNoResult;
+
+  /// No description provided for @recordCalendarUnderBudget.
+  ///
+  /// In zh, this message translates to:
+  /// **'未超出预算'**
+  String get recordCalendarUnderBudget;
+
+  /// No description provided for @recordCalendarHasRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'有流水'**
+  String get recordCalendarHasRecords;
+
+  /// No description provided for @recordCalendarOverBudget.
+  ///
+  /// In zh, this message translates to:
+  /// **'超出预算'**
+  String get recordCalendarOverBudget;
+
+  /// No description provided for @recordCalendarSetBudget.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置预算'**
+  String get recordCalendarSetBudget;
+
+  /// No description provided for @recordCalendarEmptyDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'嘿，今天什么都没有~'**
+  String get recordCalendarEmptyDay;
 
   /// No description provided for @recordMonthPrevYear.
   ///
@@ -4513,6 +4549,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'搜索流水'**
   String get a11yRecordHomeSearch;
+
+  /// No description provided for @a11yRecordHomeCalendar.
+  ///
+  /// In zh, this message translates to:
+  /// **'月历视图'**
+  String get a11yRecordHomeCalendar;
 
   /// No description provided for @a11yRecordHomeSwapCurrency.
   ///
