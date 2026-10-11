@@ -1,5 +1,6 @@
 import '../../domain/entity/account.dart';
 import '../../domain/entity/transaction_entry.dart';
+import '../../core/util/currencies.dart';
 
 /// 单个账户在某条时间线上的当前余额。
 ///
@@ -26,24 +27,7 @@ class AccountBalance {
   double get currentBalanceConverted => netAmountConverted;
 
   /// 根据账户币种返回对应的货币符号
-  String get currencySymbol {
-    switch (currency) {
-      case 'CNY':
-        return '¥';
-      case 'USD':
-        return '\$';
-      case 'EUR':
-        return '€';
-      case 'GBP':
-        return '£';
-      case 'JPY':
-        return '¥';
-      case 'HKD':
-        return 'HK\$';
-      default:
-        return '¥';
-    }
-  }
+  String get currencySymbol => currencySymbolOf(currency);
 
   @override
   bool operator ==(Object other) =>

@@ -96,6 +96,16 @@ void main() {
   });
 
   group('computeAccountBalances', () {
+    test('uses the account currency symbol for SGD', () {
+      const balance = AccountBalance(
+        accountId: 'sgd',
+        netAmount: 12,
+        netAmountConverted: 64.8,
+        currency: 'SGD',
+      );
+      expect(balance.currencySymbol, r'S$');
+    });
+
     test('accounts without transactions have zero balance', () {
       final balances = computeAccountBalances(
         accounts: [

@@ -117,10 +117,14 @@ class RecordFormData {
       occurredAt: occurredAt != null ? occurredAt() : this.occurredAt,
       note: note ?? this.note,
       currency: currency ?? this.currency,
-      editingEntryId: editingEntryId != null ? editingEntryId() : this.editingEntryId,
+      editingEntryId: editingEntryId != null
+          ? editingEntryId()
+          : this.editingEntryId,
       isTransfer: isTransfer ?? this.isTransfer,
       attachmentMetas: attachmentMetas ?? this.attachmentMetas,
-      categoryParentKey: categoryParentKey != null ? categoryParentKey() : this.categoryParentKey,
+      categoryParentKey: categoryParentKey != null
+          ? categoryParentKey()
+          : this.categoryParentKey,
     );
   }
 
@@ -176,7 +180,10 @@ class RecordForm extends _$RecordForm {
         if (expr.isNotEmpty) {
           final next = expr.substring(0, max(0, expr.length - 1));
           final parsed = _parseExpr(next);
-          state = state.copyWith(expression: next, amount: next.isEmpty ? 0 : parsed);
+          state = state.copyWith(
+            expression: next,
+            amount: next.isEmpty ? 0 : parsed,
+          );
         }
         return;
       default:
@@ -209,7 +216,9 @@ class RecordForm extends _$RecordForm {
     if (hasOperator) {
       final v = _parseExpr(state.expression);
       if (v == null) return;
-      final normalized = v.toStringAsFixed(2).replaceFirst(RegExp(r'\.00$'), '');
+      final normalized = v
+          .toStringAsFixed(2)
+          .replaceFirst(RegExp(r'\.00$'), '');
       state = state.copyWith(expression: normalized, amount: v);
       return;
     }
@@ -231,16 +240,16 @@ class RecordForm extends _$RecordForm {
   /// 已设置非 'CNY' 时不再覆盖（避免 reset 后的中途覆写争用）。
   Future<void> initDefaultCurrency() async {
     if (state.currency != 'CNY') return;
-    final ledgerCurrency =
-        await ref.read(currentLedgerDefaultCurrencyProvider.future);
+    final ledgerCurrency = await ref.read(
+      currentLedgerDefaultCurrencyProvider.future,
+    );
     state = state.copyWith(currency: ledgerCurrency);
   }
 
-  void setCategory(String? id, {String? parentKey}) =>
-      state = state.copyWith(
-        categoryId: () => id,
-        categoryParentKey: () => id != null ? parentKey : null,
-      );
+  void setCategory(String? id, {String? parentKey}) => state = state.copyWith(
+    categoryId: () => id,
+    categoryParentKey: () => id != null ? parentKey : null,
+  );
 
   void setTransferMode(bool isTransfer) {
     state = state.copyWith(
@@ -253,7 +262,8 @@ class RecordForm extends _$RecordForm {
 
   void setAccount(String? id) => state = state.copyWith(accountId: () => id);
 
-  void setToAccount(String? id) => state = state.copyWith(toAccountId: () => id);
+  void setToAccount(String? id) =>
+      state = state.copyWith(toAccountId: () => id);
 
   /// 多币种优化：选择账户后，自动将流水币种设为该账户的币种。
   /// 同时更新表单的 currency 字段，确保流水币种跟随账户。
@@ -290,13 +300,15 @@ class RecordForm extends _$RecordForm {
     final prefs = await SharedPreferences.getInstance();
     final lastId = prefs.getString(_lastAccountKey);
     if (lastId != null) {
-      setAccount(lastId);
+      // Restore the account and its currency together so the amount display
+      // and keyboard are correct on the first frame after reopening.
+      await setAccountAndSyncCurrency(lastId);
       return;
     }
     final accRepo = await ref.read(accountRepositoryProvider.future);
     final accounts = await accRepo.listActive();
     if (accounts.isNotEmpty) {
-      setAccount(accounts.first.id);
+      await setAccountAndSyncCurrency(accounts.first.id);
     }
   }
 
@@ -308,7 +320,9 @@ class RecordForm extends _$RecordForm {
   bool get canAddAttachment => state.attachmentMetas.length < _maxAttachments;
 
   Future<String?> pickAndAttachFromGallery() async {
-    if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片'; // i18n-exempt: provider error message (needs refactoring for l10n)
+    if (!canAddAttachment) {
+      return '最多只能选择$_maxAttachments张图片'; // i18n-exempt: provider error message (needs refactoring for l10n)
+    }
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
     if (picked == null) return null;
@@ -316,7 +330,9 @@ class RecordForm extends _$RecordForm {
   }
 
   Future<String?> pickAndAttachFromCamera() async {
-    if (!canAddAttachment) return '最多只能选择$_maxAttachments张图片'; // i18n-exempt: provider error message (needs refactoring for l10n)
+    if (!canAddAttachment) {
+      return '最多只能选择$_maxAttachments张图片'; // i18n-exempt: provider error message (needs refactoring for l10n)
+    }
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.camera);
     if (picked == null) return null;
@@ -371,17 +387,14 @@ class RecordForm extends _$RecordForm {
     final targetPath = p.join(dir.path, filename);
     await src.copy(targetPath);
 
-    final mime =
-        lookupMimeType(targetPath) ?? 'application/octet-stream';
+    final mime = lookupMimeType(targetPath) ?? 'application/octet-stream';
     final meta = AttachmentMeta(
       size: srcBytes.length,
       originalName: originalName.isEmpty ? filename : originalName,
       mime: mime,
       localPath: targetPath,
     );
-    state = state.copyWith(
-      attachmentMetas: [...state.attachmentMetas, meta],
-    );
+    state = state.copyWith(attachmentMetas: [...state.attachmentMetas, meta]);
     return null;
   }
 
@@ -391,13 +404,18 @@ class RecordForm extends _$RecordForm {
     bool asEdit = true,
   }) async {
     final amount = entry.amount;
-    final normalized = amount.toStringAsFixed(2).replaceFirst(RegExp(r'\.00$'), '');
+    final normalized = amount
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'\.00$'), '');
 
     String? categoryParentKey;
     if (entry.categoryId != null) {
       final catRepo = await ref.read(categoryRepositoryProvider.future);
       final cats = await catRepo.listActiveAll();
-      categoryParentKey = cats.where((c) => c.id == entry.categoryId).firstOrNull?.parentKey;
+      categoryParentKey = cats
+          .where((c) => c.id == entry.categoryId)
+          .firstOrNull
+          ?.parentKey;
     }
 
     state = state.copyWith(
@@ -412,8 +430,7 @@ class RecordForm extends _$RecordForm {
       currency: entry.currency,
       editingEntryId: () => asEdit ? entry.id : const Uuid().v4(),
       isTransfer: entry.type == 'transfer',
-      attachmentMetas:
-          AttachmentMetaCodec.decode(entry.attachmentsEncrypted),
+      attachmentMetas: AttachmentMetaCodec.decode(entry.attachmentsEncrypted),
       categoryParentKey: () => categoryParentKey,
     );
     await initDefaultAccount();
@@ -438,7 +455,9 @@ class RecordForm extends _$RecordForm {
       final accRepo = await ref.read(accountRepositoryProvider.future);
       final fromAcc = await accRepo.getById(d.accountId!);
       final toAcc = await accRepo.getById(d.toAccountId!);
-      if (fromAcc != null && toAcc != null && fromAcc.currency != toAcc.currency) {
+      if (fromAcc != null &&
+          toAcc != null &&
+          fromAcc.currency != toAcc.currency) {
         // 币种不同，阻止保存
         return false;
       }
@@ -449,8 +468,9 @@ class RecordForm extends _$RecordForm {
     // Step 8.2：保存时计算"该币种 → 账本默认币种"的换算因子并连同 currency
     // 一起持久化到 transaction_entry.fx_rate。同币种 → 1.0，简化统计聚合
     // （`amount * fxRate` 始终是账本默认币种下的金额）。
-    final ledgerCurrency =
-        await ref.read(currentLedgerDefaultCurrencyProvider.future);
+    final ledgerCurrency = await ref.read(
+      currentLedgerDefaultCurrencyProvider.future,
+    );
     final rates = await ref.read(fxRatesProvider.future);
     final fxRate = computeFxRate(d.currency, ledgerCurrency, rates);
 
